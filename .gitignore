@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+*.lcov
+
+# Production builds
+dist/
+build/
+out/
+*.wgt
+*.apk
+*.exe
+*.dmg
+*.deb
+*.rpm
+
+# Misc
+.DS_Store
+*.pem
+.env
+.env.local
+.env.*.local
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Rust
+target/
+Cargo.lock
+*.rs.bk
+
+# WASM
+pkg/
+wasm-pack.log
+
+# Electron
+apps/desktop/electron-builder.yml
+apps/desktop/release/
+
+# Tizen
+.tizen-cli/
+apps/tizen/.sign/
+
+# Flutter
+apps/mobile/.dart_tool/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.packages
+apps/mobile/build/
+apps/mobile/pubspec.lock
+
+# OS
+Thumbs.db

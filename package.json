@@ -1,0 +1,33 @@
+{
+  "name": "zenith-tv",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Modern cross-platform IPTV player with peer-to-peer remote control",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/myniqx/zenith-tv.git"
+  },
+  "author": "myniqx",
+  "license": "MIT",
+  "scripts": {
+    "dev:desktop": "pnpm --filter @zenith-tv/desktop dev",
+    "dev:tizen": "pnpm --filter @zenith-tv/tizen dev",
+    "build:core": "pnpm --filter @zenith-tv/parser build && pnpm --filter @zenith-tv/db-native build",
+    "build:desktop": "pnpm --filter @zenith-tv/desktop build",
+    "build:tizen": "pnpm --filter @zenith-tv/tizen build",
+    "build:all": "pnpm build:core && pnpm build:desktop && pnpm build:tizen",
+    "clean": "pnpm -r exec rm -rf node_modules dist build .turbo",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "lint": "eslint \"**/*.{ts,tsx,js,jsx}\" --fix"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "prettier": "^3.2.4",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.1"
+}

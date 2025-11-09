@@ -1,0 +1,19 @@
+{
+  "name": "@zenith-tv/parser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "import": "./index.ts"
+    },
+    "./pkg/*": "./pkg/*"
+  },
+  "files": [
+    "index.ts",
+    "pkg/"
+  ]
+}

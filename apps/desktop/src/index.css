@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* High Contrast Mode */
+  .high-contrast {
+    background-color: #000000 !important;
+    color: #FFFFFF !important;
+  }
+
+  .high-contrast-header {
+    background-color: #000000 !important;
+    border-color: #FFFFFF !important;
+    color: #FFFFFF !important;
+  }
+
+  .high-contrast button {
+    background-color: #000000 !important;
+    color: #FFFF00 !important;
+    border: 2px solid #FFFF00 !important;
+  }
+
+  .high-contrast button:hover {
+    background-color: #FFFF00 !important;
+    color: #000000 !important;
+  }
+
+  .high-contrast input,
+  .high-contrast select {
+    background-color: #000000 !important;
+    color: #FFFFFF !important;
+    border: 2px solid #FFFFFF !important;
+  }
+
+  .high-contrast input:focus,
+  .high-contrast select:focus {
+    border-color: #FFFF00 !important;
+    outline: 2px solid #FFFF00 !important;
+  }
+
+  .high-contrast .bg-gray-800,
+  .high-contrast .bg-gray-700,
+  .high-contrast .bg-gray-600 {
+    background-color: #000000 !important;
+  }
+
+  .high-contrast .text-gray-400,
+  .high-contrast .text-gray-300,
+  .high-contrast .text-gray-500 {
+    color: #FFFFFF !important;
+  }
+
+  .high-contrast .border-gray-700,
+  .high-contrast .border-gray-600 {
+    border-color: #FFFFFF !important;
+  }
+
+  /* High contrast rings for selected items */
+  .high-contrast .ring-blue-400,
+  .high-contrast .ring-blue-500 {
+    --tw-ring-color: #FFFF00 !important;
+  }
+
+  /* High contrast card borders */
+  .high-contrast .rounded-lg {
+    border: 2px solid #FFFFFF;
+  }
+}
