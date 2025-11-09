@@ -5,6 +5,7 @@ interface ProfileManagerProps {
   profiles: Profile[];
   currentProfile: Profile | null;
   onAddProfile: (url: string, name: string) => void;
+  onAddProfileFromFile: () => void;
   onSelectProfile: (profile: Profile) => void;
   onDeleteProfile: (id: number) => void;
   onSyncProfile: (profile: Profile) => void;
@@ -17,6 +18,7 @@ export function ProfileManager({
   profiles,
   currentProfile,
   onAddProfile,
+  onAddProfileFromFile,
   onSelectProfile,
   onDeleteProfile,
   onSyncProfile,
@@ -56,19 +58,35 @@ export function ProfileManager({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {/* Add Profile Button */}
+          {/* Add Profile Buttons */}
           {!showAddForm && (
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="w-full p-4 border-2 border-dashed border-gray-700 rounded-lg
-                         hover:border-blue-500 hover:bg-blue-500/10 transition-colors
-                         flex items-center justify-center gap-2 text-gray-400 hover:text-blue-400"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-              </svg>
-              Add New Profile
-            </button>
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="p-4 border-2 border-dashed border-gray-700 rounded-lg
+                           hover:border-blue-500 hover:bg-blue-500/10 transition-colors
+                           flex items-center justify-center gap-2 text-gray-400 hover:text-blue-400"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                </svg>
+                Add from URL
+              </button>
+
+              <button
+                onClick={onAddProfileFromFile}
+                disabled={isSyncing}
+                className="p-4 border-2 border-dashed border-gray-700 rounded-lg
+                           hover:border-green-500 hover:bg-green-500/10 transition-colors
+                           flex items-center justify-center gap-2 text-gray-400 hover:text-green-400
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
+                </svg>
+                Import from File
+              </button>
+            </div>
           )}
 
           {/* Add Profile Form */}

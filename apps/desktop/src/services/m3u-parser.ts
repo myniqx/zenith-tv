@@ -83,6 +83,9 @@ export async function parseM3UContent(content: string): Promise<ParsedM3UItem[]>
   return await parseM3U(content);
 }
 
+// Re-export for convenience
+export { parseM3U };
+
 /**
  * Convert parsed M3U items to WatchableItem format
  */
@@ -91,7 +94,11 @@ export function convertToWatchableItems(
   profileId: number
 ): WatchableItem[] {
   return items.map((item) => ({
-    ...item,
+    title: item.title,
+    url: item.url,
+    group: item.group,
+    logo: item.logo,
+    category: item.category,
     profileId,
     addedDate: new Date(),
     isFavorite: false,

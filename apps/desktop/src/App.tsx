@@ -35,10 +35,11 @@ function App() {
     currentProfile,
     loadProfiles,
     addProfile,
+    addProfileFromFile,
     selectProfile,
     deleteProfile,
     syncProfile,
-    isSyncing,
+    isLoading: isSyncing,
     syncProgress,
   } = useProfilesStore();
 
@@ -362,6 +363,7 @@ function App() {
           profiles={profiles}
           currentProfile={currentProfile}
           onAddProfile={handleAddProfile}
+          onAddProfileFromFile={addProfileFromFile}
           onSelectProfile={(profile) => {
             selectProfile(profile);
             setShowProfileManager(false);

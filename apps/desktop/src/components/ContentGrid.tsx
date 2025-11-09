@@ -1,7 +1,13 @@
 import { memo, useState, useEffect, useRef } from 'react';
-import { FixedSizeGrid as Grid } from 'react-window';
 import type { WatchableItem } from '@zenith-tv/types';
 import { SkeletonGrid } from './SkeletonCard';
+
+// @ts-ignore - react-window has complex export structure
+import * as ReactWindowModule from 'react-window';
+
+// Handle different export patterns
+const ReactWindow = (ReactWindowModule as any).default || ReactWindowModule;
+const FixedSizeGrid = ReactWindow.FixedSizeGrid || (ReactWindowModule as any).FixedSizeGrid;
 
 interface ContentGridProps {
   items: WatchableItem[];
@@ -194,7 +200,7 @@ export function ContentGrid({ items, onItemClick, onToggleFavorite, isLoading }:
   return (
     <div ref={containerRef} className="h-full w-full">
       {width > 0 && height > 0 && (
-        <Grid
+        <FixedSizeGrid
           ref={gridRef}
           columnCount={columnCount}
           columnWidth={columnWidth}
@@ -231,7 +237,7 @@ export function ContentGrid({ items, onItemClick, onToggleFavorite, isLoading }:
               </div>
             );
           }}
-        </Grid>
+        </FixedSizeGrid>
       )}
     </div>
   );

@@ -16,6 +16,7 @@ interface ProfilesState {
 
   // Actions
   addProfile: (url: string, name: string) => Promise<void>;
+  addProfileFromFile: () => Promise<void>;
   selectProfile: (profile: Profile) => void;
   deleteProfile: (id: number) => Promise<void>;
   loadProfiles: () => Promise<void>;
@@ -52,6 +53,73 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
       throw error;
     } finally {
       set({ isLoading: false });
+    }
+  },
+
+  addProfileFromFile: async () => {
+    try {
+      const result = await window.electron.file.selectM3U();
+
+      if (!result) {
+        // User cancelled
+        return;
+      }
+
+      set({ isLoading: true, syncProgress: { stage: 'Parsing file...', percent: 0 } });
+
+      // Parse M3U content directly
+      const { parseM3U } = await import('../services/m3u-parser');
+      const items = await parseM3U(result.content);
+
+      if (items.length === 0) {
+        useToastStore.getState().warning('No valid items found in M3U file');
+        set({ isLoading: false, syncProgress: null });
+        return;
+      }
+
+      // Create profile with file:// URL
+      const profileName = result.name.replace(/\.m3u8?$/i, '');
+      const profileId = await db.addProfile(profileName, `file://${result.path}`);
+
+      // Save items to database
+      set({ syncProgress: { stage: 'Saving items...', percent: 50 } });
+      const convertedItems = items.map(item => ({
+        title: item.title,
+        url: item.url,
+        group: item.group,
+        logo: item.logo,
+        category: item.category,
+        profileId,
+        addedDate: new Date(),
+        isFavorite: false,
+      }));
+
+      const newItemUrls = await db.upsertItems(profileId, convertedItems);
+
+      // Add to recent
+      if (newItemUrls.length > 0) {
+        await db.addToRecent(newItemUrls);
+      }
+
+      // Update profile
+      await db.updateProfileSync(profileId, items.length);
+      await get().loadProfiles();
+
+      set({ syncProgress: { stage: 'Complete!', percent: 100 } });
+      useToastStore.getState().success(
+        `Imported "${profileName}" with ${items.length} items`
+      );
+
+      // Auto-select the new profile
+      const newProfile = (await db.getProfiles()).find(p => p.id === profileId);
+      if (newProfile) {
+        get().selectProfile(newProfile);
+      }
+    } catch (error) {
+      console.error('Failed to import from file:', error);
+      useToastStore.getState().error('Failed to import M3U file');
+    } finally {
+      set({ isLoading: false, syncProgress: null });
     }
   },
 

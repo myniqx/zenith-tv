@@ -55,4 +55,9 @@ contextBridge.exposeInMainWorld('electron', {
     onSeek: (callback) => ipcRenderer.on('p2p:seek', (_, position) => callback(position)),
     onSetVolume: (callback) => ipcRenderer.on('p2p:set-volume', (_, volume) => callback(volume)),
   },
+
+  // File operations
+  file: {
+    selectM3U: () => ipcRenderer.invoke('file:selectM3U'),
+  },
 });

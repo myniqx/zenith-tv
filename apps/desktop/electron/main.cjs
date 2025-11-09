@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const { getDatabase } = require('./database');
-const { P2PServer } = require('./p2p-server');
+const fs = require('fs');
+const { getDatabase } = require('./database.cjs');
+const { P2PServer } = require('./p2p-server.cjs');
 
 let mainWindow;
 let db;
@@ -17,7 +18,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 
@@ -161,5 +162,33 @@ function setupIPCHandlers() {
       name: p2pServer.deviceName,
       port: p2pServer.port,
     };
+  });
+
+  // File operations
+  ipcMain.handle('file:selectM3U', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'M3U Playlists', extensions: ['m3u', 'm3u8'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+
+    const filePath = result.filePaths[0];
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return {
+        path: filePath,
+        content: content,
+        name: path.basename(filePath)
+      };
+    } catch (error) {
+      console.error('Failed to read M3U file:', error);
+      throw error;
+    }
   });
 }

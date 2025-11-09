@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Zenith TV Desktop Application",
-  "main": "electron/main.js",
+  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,10 @@
     "build": "tsc && vite build",
     "build:electron": "electron-builder",
     "preview": "vite preview",
-    "start": "npm run dev"
+    "start": "npm run dev",
+    "lint": "eslint \"src/**/*.{ts,tsx,js,jsx}\" --fix",
+    "lint:check": "eslint \"src/**/*.{ts,tsx,js,jsx}\"",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@zenith-tv/parser": "workspace:*",

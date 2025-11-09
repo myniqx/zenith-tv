@@ -23,6 +23,12 @@ export interface ElectronAPI {
     // Watch History
     saveWatchProgress: (itemUrl: string, position: number, duration: number) => Promise<void>;
     getWatchHistory: (itemUrl: string) => Promise<DBWatchHistory | undefined>;
+
+    // M3U Cache
+    getM3UCache: (url: string) => Promise<DBM3UCache | null>;
+    saveM3UCache: (url: string, content: string, etag?: string, lastModified?: string, expiresInHours?: number) => Promise<void>;
+    invalidateM3UCache: (url: string) => Promise<void>;
+    cleanExpiredCache: () => Promise<void>;
   };
   p2p: {
     // Server control
@@ -43,6 +49,9 @@ export interface ElectronAPI {
     onPause: (callback: () => void) => void;
     onSeek: (callback: (position: number) => void) => void;
     onSetVolume: (callback: (volume: number) => void) => void;
+  };
+  file: {
+    selectM3U: () => Promise<M3UFileResult | null>;
   };
 }
 
@@ -87,6 +96,15 @@ export interface DBWatchHistory {
   completed: number;
 }
 
+export interface DBM3UCache {
+  url: string;
+  content: string;
+  etag?: string;
+  last_modified?: string;
+  cached_at: string;
+  expires_at: string;
+}
+
 export interface P2PDeviceInfo {
   deviceId: string;
   deviceName: string;
@@ -104,6 +122,12 @@ export interface P2PPlayerState {
   state: 'playing' | 'paused' | 'idle';
   position: number;
   volume: number;
+}
+
+export interface M3UFileResult {
+  path: string;
+  content: string;
+  name: string;
 }
 
 declare global {
