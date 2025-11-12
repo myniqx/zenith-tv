@@ -1,13 +1,15 @@
 import { create } from 'zustand';
-import type { Profile } from '@zenith-tv/types';
-import { db } from '../services/database';
-import { fetchAndParseM3U } from '../services/m3u-parser';
+import { profileService, type BackendProfile } from '../services/profile-service';
+import { m3uService, type M3UInfo } from '../services/m3u-service';
+import { parseM3U } from '../services/m3u-parser';
 import { useContentStore } from './content';
 import { useToastStore } from './toast';
 
 interface ProfilesState {
-  profiles: Profile[];
-  currentProfile: Profile | null;
+  profiles: BackendProfile[];
+  currentUsername: string | null;
+  currentM3U: M3UInfo | null;
+  m3uList: M3UInfo[]; // M3Us for current profile
   isLoading: boolean;
   syncProgress: {
     stage: string;
@@ -15,41 +17,74 @@ interface ProfilesState {
   } | null;
 
   // Actions
-  addProfile: (url: string, name: string) => Promise<void>;
-  addProfileFromFile: () => Promise<void>;
-  selectProfile: (profile: Profile) => void;
-  deleteProfile: (id: number) => Promise<void>;
   loadProfiles: () => Promise<void>;
-  syncProfile: (profile: Profile, force?: boolean) => Promise<void>;
+  addProfile: (username: string, m3uUrl: string) => Promise<void>;
+  addProfileFromFile: () => Promise<void>;
+  selectProfile: (username: string) => Promise<void>;
+  selectM3U: (m3uInfo: M3UInfo) => void;
+  deleteProfile: (username: string) => Promise<void>;
+  syncM3U: (m3uInfo: M3UInfo, force?: boolean) => Promise<void>;
+  addM3UToProfile: (username: string, m3uUrl: string) => Promise<void>;
+  removeM3UFromProfile: (username: string, uuid: string) => Promise<void>;
+  loadM3UsForProfile: (username: string) => Promise<void>;
 }
 
 export const useProfilesStore = create<ProfilesState>((set, get) => ({
   profiles: [],
-  currentProfile: null,
+  currentUsername: null,
+  currentM3U: null,
+  m3uList: [],
   isLoading: false,
   syncProgress: null,
 
   loadProfiles: async () => {
     set({ isLoading: true });
     try {
-      const profiles = await db.getProfiles();
+      const profiles = await profileService.getAll();
       set({ profiles });
     } catch (error) {
       console.error('Failed to load profiles:', error);
+      useToastStore.getState().error('Failed to load profiles');
     } finally {
       set({ isLoading: false });
     }
   },
 
-  addProfile: async (url, name) => {
-    set({ isLoading: true });
+  addProfile: async (username, m3uUrl) => {
+    set({ isLoading: true, syncProgress: { stage: 'Creating profile...', percent: 0 } });
+
     try {
-      await db.addProfile(name, url);
+      // Create profile
+      await profileService.create(username);
+
+      set({ syncProgress: { stage: 'Adding M3U...', percent: 33 } });
+
+      // Add M3U to profile
+      const { uuid } = await m3uService.addToProfile(username, m3uUrl);
+
+      set({ syncProgress: { stage: 'Fetching M3U...', percent: 50 } });
+
+      // Fetch and cache M3U content
+      await m3uService.fetchAndCache(uuid, m3uUrl);
+
+      set({ syncProgress: { stage: 'Complete!', percent: 100 } });
+
+      // Reload profiles
       await get().loadProfiles();
-      useToastStore.getState().success(`Profile "${name}" added successfully`);
+
+      useToastStore.getState().success(`Profile "${username}" created successfully`);
+
+      // Auto-select the new profile
+      await get().selectProfile(username);
+
+      // Clear progress after 1 second
+      setTimeout(() => {
+        set({ syncProgress: null });
+      }, 1000);
     } catch (error) {
       console.error('Failed to add profile:', error);
-      useToastStore.getState().error('Failed to add profile');
+      set({ syncProgress: null });
+      useToastStore.getState().error('Failed to create profile');
       throw error;
     } finally {
       set({ isLoading: false });
@@ -67,8 +102,7 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
 
       set({ isLoading: true, syncProgress: { stage: 'Parsing file...', percent: 0 } });
 
-      // Parse M3U content directly
-      const { parseM3U } = await import('../services/m3u-parser');
+      // Parse M3U content
       const items = await parseM3U(result.content);
 
       if (items.length === 0) {
@@ -77,73 +111,90 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
         return;
       }
 
-      // Create profile with file:// URL
-      const profileName = result.name.replace(/\.m3u8?$/i, '');
-      const profileId = await db.addProfile(profileName, `file://${result.path}`);
+      // Create profile with file name as username
+      const username = result.name.replace(/\.m3u8?$/i, '');
 
-      // Save items to database
-      set({ syncProgress: { stage: 'Saving items...', percent: 50 } });
-      const convertedItems = items.map(item => ({
-        title: item.title,
-        url: item.url,
-        group: item.group,
-        logo: item.logo,
-        category: item.category,
-        profileId,
-        addedDate: new Date(),
-        isFavorite: false,
-      }));
+      set({ syncProgress: { stage: 'Creating profile...', percent: 25 } });
+      await profileService.create(username);
 
-      const newItemUrls = await db.upsertItems(profileId, convertedItems);
+      // Add M3U with file:// URL
+      set({ syncProgress: { stage: 'Importing M3U...', percent: 50 } });
+      const { uuid } = await m3uService.addToProfile(username, `file://${result.path}`);
 
-      // Add to recent
-      if (newItemUrls.length > 0) {
-        await db.addToRecent(newItemUrls);
-      }
-
-      // Update profile
-      await db.updateProfileSync(profileId, items.length);
-      await get().loadProfiles();
+      // Cache the file content
+      set({ syncProgress: { stage: 'Caching content...', percent: 75 } });
+      await m3uService.fetchAndCache(uuid, `file://${result.path}`);
 
       set({ syncProgress: { stage: 'Complete!', percent: 100 } });
+
       useToastStore.getState().success(
-        `Imported "${profileName}" with ${items.length} items`
+        `Imported "${username}" with ${items.length} items`
       );
 
+      // Reload profiles
+      await get().loadProfiles();
+
       // Auto-select the new profile
-      const newProfile = (await db.getProfiles()).find(p => p.id === profileId);
-      if (newProfile) {
-        get().selectProfile(newProfile);
-      }
+      await get().selectProfile(username);
+
+      setTimeout(() => {
+        set({ syncProgress: null });
+      }, 1000);
     } catch (error) {
       console.error('Failed to import from file:', error);
       useToastStore.getState().error('Failed to import M3U file');
+      set({ syncProgress: null });
     } finally {
-      set({ isLoading: false, syncProgress: null });
+      set({ isLoading: false });
     }
   },
 
-  selectProfile: (profile) => {
-    set({ currentProfile: profile });
+  selectProfile: async (username) => {
+    set({ currentUsername: username, isLoading: true });
 
-    // Load items for this profile
-    useContentStore.getState().loadItemsForProfile(profile.id);
+    try {
+      // Load M3Us for this profile
+      const m3uList = await m3uService.getProfileM3Us(username);
+      set({ m3uList });
+
+      // Auto-select first M3U if available
+      if (m3uList.length > 0) {
+        get().selectM3U(m3uList[0]);
+      } else {
+        set({ currentM3U: null });
+        useContentStore.getState().clearItems();
+      }
+    } catch (error) {
+      console.error('Failed to load M3Us for profile:', error);
+      useToastStore.getState().error('Failed to load M3Us');
+    } finally {
+      set({ isLoading: false });
+    }
   },
 
-  deleteProfile: async (id) => {
+  selectM3U: (m3uInfo) => {
+    set({ currentM3U: m3uInfo });
+
+    const { currentUsername } = get();
+    if (currentUsername) {
+      // Load items for this M3U
+      useContentStore.getState().loadItems(currentUsername, m3uInfo.uuid);
+    }
+  },
+
+  deleteProfile: async (username) => {
     set({ isLoading: true });
     try {
-      const profile = get().profiles.find(p => p.id === id);
-      await db.deleteProfile(id);
+      await profileService.delete(username);
 
-      const { currentProfile } = get();
-      if (currentProfile?.id === id) {
-        set({ currentProfile: null });
+      const { currentUsername } = get();
+      if (currentUsername === username) {
+        set({ currentUsername: null, currentM3U: null, m3uList: [] });
         useContentStore.getState().clearItems();
       }
 
       await get().loadProfiles();
-      useToastStore.getState().success(`Profile "${profile?.name}" deleted`);
+      useToastStore.getState().success(`Profile "${username}" deleted`);
     } catch (error) {
       console.error('Failed to delete profile:', error);
       useToastStore.getState().error('Failed to delete profile');
@@ -153,61 +204,131 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
     }
   },
 
-  syncProfile: async (profile, force = false) => {
-    set({ isLoading: true, syncProgress: { stage: 'Starting...', percent: 0 } });
+  syncM3U: async (m3uInfo, force = false) => {
+    set({ isLoading: true, syncProgress: { stage: 'Starting sync...', percent: 0 } });
 
     try {
-      // Fetch and parse M3U
-      const items = await fetchAndParseM3U(
-        profile.m3uUrl,
-        profile.id,
-        (stage, percent) => {
-          set({ syncProgress: { stage, percent: percent || 0 } });
+      // Listen to progress events
+      m3uService.onUpdateProgress(({ uuid, progress }) => {
+        if (uuid === m3uInfo.uuid) {
+          set({ syncProgress: { stage: progress.stage || 'Syncing...', percent: progress.percent || 0 } });
         }
-      );
+      });
 
-      // Save to database
-      set({ syncProgress: { stage: 'Saving to database...', percent: 0 } });
-      const newItemUrls = await db.upsertItems(profile.id, items);
-
-      // Add new items to recent
-      if (newItemUrls.length > 0) {
-        await db.addToRecent(newItemUrls);
-      }
-
-      // Update profile sync time and item count
-      await db.updateProfileSync(profile.id, items.length);
-
-      // Reload profiles to update counts
-      await get().loadProfiles();
-
-      // Reload items if this is the current profile
-      if (get().currentProfile?.id === profile.id) {
-        await useContentStore.getState().loadItemsForProfile(profile.id);
-      }
+      // Fetch and cache M3U
+      set({ syncProgress: { stage: 'Downloading M3U...', percent: 25 } });
+      await m3uService.fetchAndCache(m3uInfo.uuid, m3uInfo.url);
 
       set({ syncProgress: { stage: 'Complete!', percent: 100 } });
 
-      // Show success toast
-      const newCount = newItemUrls.length;
-      if (newCount > 0) {
-        useToastStore.getState().success(`Sync complete! Added ${newCount} new items`);
-      } else {
-        useToastStore.getState().info('Sync complete! No new items found');
+      // Reload M3Us to get updated stats
+      const { currentUsername } = get();
+      if (currentUsername) {
+        await get().loadM3UsForProfile(currentUsername);
       }
+
+      // Reload items if this is the current M3U
+      if (get().currentM3U?.uuid === m3uInfo.uuid && currentUsername) {
+        await useContentStore.getState().loadItems(currentUsername, m3uInfo.uuid);
+      }
+
+      useToastStore.getState().success('Sync complete!');
 
       // Clear progress after 2 seconds
       setTimeout(() => {
         set({ syncProgress: null });
       }, 2000);
-
     } catch (error) {
-      console.error('Failed to sync profile:', error);
+      console.error('Failed to sync M3U:', error);
       set({ syncProgress: null });
-      useToastStore.getState().error('Failed to sync profile. Please check the M3U URL');
+      useToastStore.getState().error('Failed to sync M3U. Please check the URL');
       throw error;
     } finally {
       set({ isLoading: false });
+    }
+  },
+
+  addM3UToProfile: async (username, m3uUrl) => {
+    set({ isLoading: true, syncProgress: { stage: 'Adding M3U...', percent: 0 } });
+
+    try {
+      // Add M3U to profile
+      const { uuid, isNew } = await m3uService.addToProfile(username, m3uUrl);
+
+      if (!isNew) {
+        useToastStore.getState().info('M3U already exists in profile');
+        set({ isLoading: false, syncProgress: null });
+        return;
+      }
+
+      set({ syncProgress: { stage: 'Fetching M3U...', percent: 50 } });
+
+      // Fetch and cache M3U content
+      await m3uService.fetchAndCache(uuid, m3uUrl);
+
+      set({ syncProgress: { stage: 'Complete!', percent: 100 } });
+
+      // Reload M3Us for current profile
+      if (get().currentUsername === username) {
+        await get().loadM3UsForProfile(username);
+      }
+
+      useToastStore.getState().success('M3U added successfully');
+
+      setTimeout(() => {
+        set({ syncProgress: null });
+      }, 1000);
+    } catch (error) {
+      console.error('Failed to add M3U:', error);
+      set({ syncProgress: null });
+      useToastStore.getState().error('Failed to add M3U');
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  removeM3UFromProfile: async (username, uuid) => {
+    set({ isLoading: true });
+    try {
+      await m3uService.removeFromProfile(username, uuid);
+
+      // If this was the current M3U, clear it
+      if (get().currentM3U?.uuid === uuid) {
+        set({ currentM3U: null });
+        useContentStore.getState().clearItems();
+      }
+
+      // Reload M3Us for current profile
+      if (get().currentUsername === username) {
+        await get().loadM3UsForProfile(username);
+      }
+
+      useToastStore.getState().success('M3U removed successfully');
+    } catch (error) {
+      console.error('Failed to remove M3U:', error);
+      useToastStore.getState().error('Failed to remove M3U');
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  loadM3UsForProfile: async (username) => {
+    try {
+      const m3uList = await m3uService.getProfileM3Us(username);
+      set({ m3uList });
+
+      // Update current M3U stats if it's in the list
+      const { currentM3U } = get();
+      if (currentM3U) {
+        const updated = m3uList.find(m => m.uuid === currentM3U.uuid);
+        if (updated) {
+          set({ currentM3U: updated });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load M3Us:', error);
     }
   },
 }));

@@ -1,4 +1,10 @@
 packages:
-  - 'core/*'
-  - 'shared/*'
-  - 'apps/*'
+  - core/*
+  - shared/*
+  - apps/*
+
+onlyBuiltDependencies:
+  - better-sqlite3
+  - electron
+  - electron-winstaller
+  - esbuild

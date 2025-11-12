@@ -2,8 +2,7 @@ const { WebSocketServer } = require('ws');
 const crypto = require('crypto');
 
 class P2PServer {
-  constructor(db) {
-    this.db = db;
+  constructor() {
     this.wss = null;
     this.port = 8080;
     this.deviceId = this.generateDeviceId();

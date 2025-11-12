@@ -1,4 +1,4 @@
-import init, { parse_m3u, version } from './pkg/zenith_parser.js';
+import init, { parse_m3u, parse_m3u_with_tree, version, CategoryTree, CategoryNode } from './pkg/zenith_parser.js';
 
 export interface ParsedM3UItem {
   title: string;
@@ -48,4 +48,23 @@ export async function parseM3U(content: string): Promise<ParsedM3UItem[]> {
   }
 }
 
-export { version };
+/**
+ * Parse M3U content and return a category tree (WASM object with methods)
+ * @param content M3U file content as string
+ * @returns CategoryTree WASM object (use tree.getMovies(), tree.getSeries(), etc.)
+ */
+export async function parseM3UWithTree(content: string): Promise<CategoryTree> {
+  if (!wasmInitialized) {
+    await initParser();
+  }
+
+  try {
+    const tree = parse_m3u_with_tree(content);
+    return tree;
+  } catch (error) {
+    console.error('M3U parsing error:', error);
+    throw new Error(`Failed to parse M3U with tree: ${error}`);
+  }
+}
+
+export { version, CategoryTree, CategoryNode };

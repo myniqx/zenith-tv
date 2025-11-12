@@ -4,10 +4,12 @@ use wasm_bindgen::prelude::*;
 mod parser;
 mod categorizer;
 mod episode_detector;
+mod category_tree;
 
 pub use parser::M3UParser;
 pub use categorizer::{Category, categorize_item};
 pub use episode_detector::{Episode, detect_episode};
+pub use category_tree::{CategoryTree, CategoryNode};
 
 /// Represents a parsed M3U item
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +59,16 @@ pub fn parse_m3u(content: &str) -> Result<JsValue, JsValue> {
             serde_wasm_bindgen::to_value(&items)
                 .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))
         }
+        Err(e) => Err(JsValue::from_str(&e)),
+    }
+}
+
+/// Parse M3U content and return a category tree
+#[wasm_bindgen]
+pub fn parse_m3u_with_tree(content: &str) -> Result<CategoryTree, JsValue> {
+    let parser = M3UParser::new(content);
+    match parser.parse() {
+        Ok(items) => Ok(CategoryTree::build(items)),
         Err(e) => Err(JsValue::from_str(&e)),
     }
 }

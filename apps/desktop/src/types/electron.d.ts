@@ -1,34 +1,62 @@
 export interface ElectronAPI {
   platform: NodeJS.Platform;
   version: string;
-  db: {
-    // Profiles
-    getProfiles: () => Promise<DBProfile[]>;
-    addProfile: (name: string, url: string) => Promise<number>;
-    deleteProfile: (id: number) => Promise<void>;
 
-    // Items
-    getItemsByProfile: (profileId: number) => Promise<DBItem[]>;
-    upsertItems: (profileId: number, items: any[]) => Promise<string[]>;
-    updateProfileSync: (profileId: number, count: number) => Promise<void>;
+  // Profile Management API
+  profile: {
+    getAll: () => Promise<ProfileData[]>;
+    get: (username: string) => Promise<ProfileData | null>;
+    create: (username: string) => Promise<ProfileData>;
+    delete: (username: string) => Promise<void>;
+    hasProfile: (username: string) => Promise<boolean>;
+  };
 
-    // Recent
-    getRecentItems: (profileId: number) => Promise<DBItem[]>;
-    addToRecent: (itemUrls: string[]) => Promise<void>;
+  // M3U Management API
+  m3u: {
+    addToProfile: (username: string, m3uUrl: string) => Promise<M3UAddResult>;
+    removeFromProfile: (username: string, uuid: string) => Promise<void>;
+    getProfileM3Us: (username: string) => Promise<M3USource[]>;
+    fetchAndCache: (uuid: string, m3uUrl: string) => Promise<string>;
+    update: (uuid: string, m3uUrl: string, parseFunction: (content: string) => Promise<M3UParsedItem[]>) => Promise<M3UUpdateResult>;
+    loadSource: (uuid: string) => Promise<string | null>;
+    getRecentItems: (username: string, daysToKeep?: number) => Promise<RecentItem[]>;
+    getOutdated: (username: string, maxAgeHours?: number) => Promise<OutdatedM3U[]>;
+    getStats: (username: string) => Promise<M3UStats>;
+    onFetchProgress: (callback: (data: { uuid: string; progress: number }) => void) => void;
+    onUpdateProgress: (callback: (data: { uuid: string; progress: number }) => void) => void;
+  };
 
-    // Favorites
-    toggleFavorite: (itemUrl: string) => Promise<boolean>;
-    getFavorites: (profileId: number) => Promise<DBItem[]>;
+  // User Data API (per-user, per-M3U)
+  userData: {
+    get: (username: string, uuid: string) => Promise<UserData>;
+    getItem: (username: string, uuid: string, itemUrl: string) => Promise<UserItemData | null>;
+    updateItem: (username: string, uuid: string, itemUrl: string, updates: Partial<UserItemData>) => Promise<UserItemData>;
+    deleteItem: (username: string, uuid: string, itemUrl: string) => Promise<void>;
 
-    // Watch History
-    saveWatchProgress: (itemUrl: string, position: number, duration: number) => Promise<void>;
-    getWatchHistory: (itemUrl: string) => Promise<DBWatchHistory | undefined>;
+    toggleFavorite: (username: string, uuid: string, itemUrl: string) => Promise<boolean>;
+    toggleHidden: (username: string, uuid: string, itemUrl: string) => Promise<boolean>;
+    updateWatchProgress: (username: string, uuid: string, itemUrl: string, progress: number) => Promise<UserItemData>;
+    markAsWatched: (username: string, uuid: string, itemUrl: string) => Promise<UserItemData>;
+    saveTracks: (username: string, uuid: string, itemUrl: string, audioTrack?: number, subtitleTrack?: number) => Promise<UserItemData>;
 
-    // M3U Cache
-    getM3UCache: (url: string) => Promise<DBM3UCache | null>;
-    saveM3UCache: (url: string, content: string, etag?: string, lastModified?: string, expiresInHours?: number) => Promise<void>;
-    invalidateM3UCache: (url: string) => Promise<void>;
-    cleanExpiredCache: () => Promise<void>;
+    getAllFavorites: (username: string, uuids: string[]) => Promise<FavoriteItem[]>;
+    getAllRecentlyWatched: (username: string, uuids: string[], limit?: number) => Promise<RecentlyWatchedItem[]>;
+    getStats: (username: string, uuid: string) => Promise<UserDataStats>;
+    getCombinedStats: (username: string, uuids: string[]) => Promise<UserDataStats>;
+
+    clearOldHistory: (username: string, uuid: string, daysToKeep?: number) => Promise<number>;
+    deleteAll: (username: string, uuid: string) => Promise<void>;
+    deleteAllForUser: (username: string) => Promise<void>;
+    clearCache: (username?: string, uuid?: string) => void;
+  };
+
+  // Category Management API
+  category: {
+    getTree: (uuid: string, username: string) => Promise<CategoryTree | null>;
+    toggleSticky: (username: string, groupName: string) => Promise<boolean>;
+    toggleHidden: (username: string, groupName: string) => Promise<boolean>;
+    getStickyGroups: (username: string) => Promise<string[]>;
+    getHiddenGroups: (username: string) => Promise<string[]>;
   };
   p2p: {
     // Server control
@@ -55,54 +83,136 @@ export interface ElectronAPI {
   };
 }
 
-export interface DBProfile {
-  id: number;
+// Profile Data
+export interface ProfileData {
+  username: string;
+  createdAt: number;
+  m3uRefs: string[];
+  stickyGroups?: string[];
+  hiddenGroups?: string[];
+}
+
+// M3U Types
+export interface M3UAddResult {
+  uuid: string;
+  isNew: boolean;
+  hasCache: boolean;
+}
+
+export interface M3USource {
+  uuid: string;
+  url: string;
+  hasSource: boolean;
+  stats: M3UStats | null;
+}
+
+export interface M3UParsedItem {
   name: string;
-  m3u_url: string;
-  last_sync: string | null;
-  item_count: number;
-  created_at: string;
-}
-
-export interface DBItem {
   url: string;
-  title: string;
-  group_name: string | null;
-  logo: string | null;
-  category_type: 'movie' | 'series' | 'live_stream';
-  profile_id: number;
-  added_date: string;
-
-  // Series info (if applicable)
-  series_name?: string;
-  season?: number;
-  episode?: number;
-
-  // Favorite status
-  is_favorite: number; // SQLite boolean (0 or 1)
-
-  // Watch history (if exists)
-  position?: number;
-  duration?: number;
-  last_watched?: string;
-  completed?: number;
+  group: string;
+  logo?: string;
+  category: string;
+  episode?: {
+    seriesName: string;
+    season: number;
+    episode: number;
+  };
+  addedDate?: number;
 }
 
-export interface DBWatchHistory {
-  item_url: string;
-  position: number;
-  duration: number;
-  last_watched: string;
-  completed: number;
+export interface M3UUpdateResult {
+  diff: {
+    added: M3UParsedItem[];
+    removed: M3UParsedItem[];
+    unchanged: M3UParsedItem[];
+  };
+  stats: M3UStats;
+  parsedItems: M3UParsedItem[];
+  categoryTree: CategoryTree;
 }
 
-export interface DBM3UCache {
+export interface M3UStats {
+  totalItems: number;
+  movies: number;
+  series: number;
+  liveStreams: number;
+  seasons: number;
+  episodes: number;
+  groups: Record<string, number>;
+  categories: Record<string, number>;
+  lastUpdated?: number;
+}
+
+export interface RecentItem {
   url: string;
-  content: string;
-  etag?: string;
-  last_modified?: string;
-  cached_at: string;
-  expires_at: string;
+  name: string;
+  group: string;
+  addedAt: number;
+  sourceUUID: string;
+}
+
+export interface OutdatedM3U {
+  uuid: string;
+  url: string;
+  lastUpdated?: number;
+}
+
+// User Data Types
+export interface UserData {
+  [itemUrl: string]: UserItemData;
+}
+
+export interface UserItemData {
+  favorite?: boolean;
+  hidden?: boolean;
+  watchProgress?: number;
+  lastWatchedAt?: number;
+  watched?: boolean;
+  watchedAt?: number;
+  audioTrack?: number;
+  subtitleTrack?: number;
+}
+
+export interface FavoriteItem {
+  url: string;
+  favorite: boolean;
+  sourceUUID: string;
+  [key: string]: unknown;
+}
+
+export interface RecentlyWatchedItem {
+  url: string;
+  lastWatchedAt: number;
+  watchProgress?: number;
+  sourceUUID: string;
+  [key: string]: unknown;
+}
+
+export interface UserDataStats {
+  totalTracked: number;
+  favorites: number;
+  hidden: number;
+  watched: number;
+  inProgress: number;
+}
+
+// Category Tree Types
+export interface CategoryTree {
+  name: string;
+  type: 'root' | 'movies' | 'series' | 'liveStreams';
+  children: CategoryNode[];
+  items: M3UParsedItem[];
+  isSticky: boolean;
+  isHidden: boolean;
+}
+
+export interface CategoryNode {
+  name: string;
+  type: string;
+  children: CategoryNode[];
+  items: M3UParsedItem[];
+  isSticky: boolean;
+  isHidden: boolean;
 }
 
 export interface P2PDeviceInfo {

@@ -24,6 +24,15 @@ export type Category =
 
 // Profile & Storage
 export interface Profile {
+  username: string;
+  createdAt: number;
+  m3uRefs: string[]; // Array of M3U UUIDs
+  stickyGroups?: string[]; // Sticky group names
+  hiddenGroups?: string[]; // Hidden group names
+}
+
+// Legacy profile (old system)
+export interface LegacyProfile {
   id: number;
   name: string;
   m3uUrl: string;
@@ -142,4 +151,65 @@ export interface SyncFavoritesMessage {
 export interface ErrorMessage {
   type: 'error';
   message: string;
+}
+
+// Category Tree System
+export type CategoryType = 'root' | 'movies' | 'series' | 'liveStreams' | 'recent' | 'watchList' | 'watchedList';
+
+export interface CategoryNode {
+  name: string;
+  type: CategoryType;
+  isSticky: boolean;
+  isHidden: boolean;
+  itemCount: number;
+  children: CategoryNode[];
+}
+
+export interface CategoryTreeItem {
+  name: string;
+  url: string;
+  group: string;
+  logo?: string;
+  category: Category;
+  addedDate?: number;
+}
+
+// User Data (per-user, per-M3U)
+export interface UserItemData {
+  favorite?: boolean;
+  hidden?: boolean;
+  watchProgress?: number;
+  lastWatchedAt?: number;
+  watched?: boolean;
+  watchedAt?: number;
+  audioTrack?: number;
+  subtitleTrack?: number;
+}
+
+export interface UserData {
+  [itemUrl: string]: UserItemData;
+}
+
+// Category Statistics
+export interface CategoryStats {
+  totalItems: number;
+  movies: {
+    count: number;
+    groups: number;
+  };
+  series: {
+    count: number;
+    shows: number;
+  };
+  liveStreams: {
+    count: number;
+    groups: number;
+  };
+}
+
+// Search Result
+export interface SearchResult {
+  item: CategoryTreeItem;
+  category: CategoryNode;
+  path: string[];
 }

@@ -77,10 +77,10 @@ The project uses pnpm workspaces with the following packages:
 
 **Two-Process Model (Electron):**
 1. **Main Process** (`apps/desktop/electron/`):
-   - `main.js` - Window management, IPC setup, app lifecycle
-   - `database.js` - SQLite database layer using better-sqlite3
-   - `p2p-server.js` - WebSocket server for remote control
-   - `preload.js` - Secure IPC bridge to renderer
+   - `main.cjs` - Window management, IPC setup, app lifecycle
+   - `storage/` - JSON-based storage system (profiles, M3U cache, user data)
+   - `p2p-server.cjs` - WebSocket server for remote control
+   - `preload.cjs` - Secure IPC bridge to renderer
 
 2. **Renderer Process** (`apps/desktop/src/`):
    - React 19 app with TypeScript
@@ -95,21 +95,31 @@ The project uses pnpm workspaces with the following packages:
   - `settings.ts` - App settings (persisted to localStorage)
   - `toast.ts` - Toast notifications
 
-**Database Layer:**
-- SQLite via better-sqlite3 (native, synchronous)
-- Schema in `electron/schema.sql` (7 tables)
-- All DB operations go through `electron/database.js`
-- IPC handlers expose DB methods to renderer
-- Tables: profiles, items, series, favorites, watch_history, recent_items, m3u_cache
+**Storage Layer:**
+- JSON-based file storage (lightweight, no native dependencies)
+- Three main storage managers in `electron/storage/`:
+  - `profile-manager.cjs` - User profiles with M3U references
+  - `m3u-manager.cjs` - M3U content caching and metadata
+  - `user-data-manager.cjs` - Per-user, per-M3U preferences (favorites, watch progress, hidden items)
+- All storage operations go through IPC handlers in `main.cjs`
+- Storage path: `app.getPath('userData')/zenith-storage/`
 
 **M3U Processing Pipeline:**
 1. Fetch M3U from URL with progress tracking
-2. Check cache (`m3u_cache` table, 24-hour TTL)
+2. Check cache (JSON files with 24-hour TTL)
 3. Parse using Rust WASM parser (`@zenith-tv/parser`)
-4. Convert to WatchableItem format
-5. Upsert to database (preserves existing items)
+4. Build CategoryTree in Rust (group-based hierarchical structure)
+5. Cache M3U content and metadata as JSON
 6. Auto-detect categories (movie, series, live_stream)
 7. Extract episode info (S01E01, 1x01 patterns)
+
+**Category Tree System (NEW):**
+- Category tree built entirely in Rust (`core/parser/src/category_tree.rs`)
+- Hierarchical structure: Type (Movies/Series/Live) → Group → Items
+- WASM bindings expose methods: `tree.getMovies()`, `tree.getSeries()`, `tree.getLiveStreams()`
+- Sticky/Hidden group filtering happens in Rust (zero serialization overhead)
+- Cross-platform: Same Rust code works via WASM (Desktop/Tizen) and FFI (Android)
+- User preferences (sticky/hidden groups) stored in profile JSON
 
 **P2P Remote Control:**
 - WebSocket server on port 8080
@@ -157,44 +167,62 @@ The project uses pnpm workspaces with the following packages:
 ## Important Patterns
 
 ### IPC Communication
-All database operations use IPC:
-```typescript
-// Renderer process
-const items = await window.electronAPI.db.getItemsByProfile(profileId);
+All storage operations use IPC with three main APIs:
 
-// Defined in electron/preload.js
-contextBridge.exposeInMainWorld('electronAPI', {
-  db: {
-    getItemsByProfile: (profileId) => ipcRenderer.invoke('db:getItemsByProfile', profileId),
-    // ... other methods
-  }
+```typescript
+// Profile Management
+const profiles = await window.electron.profile.getAll();
+await window.electron.profile.create(username);
+await window.electron.profile.delete(username);
+
+// M3U Management
+const uuid = await window.electron.m3u.addToProfile(username, m3uUrl);
+await window.electron.m3u.fetchAndCache(uuid, m3uUrl);
+const items = await window.electron.m3u.loadSource(uuid);
+
+// User Data (favorites, watch progress, etc.)
+await window.electron.userData.toggleFavorite(username, uuid, itemUrl);
+await window.electron.userData.updateWatchProgress(username, uuid, itemUrl, progress);
+const favorites = await window.electron.userData.getAllFavorites(username, [uuid]);
+
+// Defined in electron/preload.cjs
+contextBridge.exposeInMainWorld('electron', {
+  profile: { /* ... */ },
+  m3u: { /* ... */ },
+  userData: { /* ... */ },
+  p2p: { /* ... */ },
+  file: { /* ... */ }
 });
 
-// Handler in electron/main.js
-ipcMain.handle('db:getItemsByProfile', (_, profileId) => db.getItemsByProfile(profileId));
+// Handlers in electron/main.cjs
+ipcMain.handle('profile:getAll', async () => {
+  return await profileManager.getAllProfiles();
+});
 ```
 
-### Database Service Pattern
-The database wrapper (`electron/database.js`) is a singleton that:
-- Initializes on app startup
-- Uses prepared statements for performance
-- Implements transactions for multi-row operations
-- Returns plain objects (not ORM instances)
-- Handles all SQL directly (no query builder)
+### Storage Manager Pattern
+Three singleton storage managers in `electron/storage/`:
+- **ProfileManager**: User profiles with M3U references (UUIDs)
+- **M3UManager**: M3U content caching, metadata, statistics
+- **UserDataManager**: Per-user, per-M3U preferences and state
+- All use FileSystemAdapter for JSON read/write operations
+- Data stored in `app.getPath('userData')/zenith-storage/`
 
 ### Series Episode Handling
 Series detection happens in the Rust parser using regex patterns:
 - Detects: S01E01, 1x01, Episode 1, Ep 1, etc.
-- Stores in separate `series` table with foreign key to `items`
+- Categorized in CategoryTree under Series type
 - Content store provides helper methods for series navigation
 - Episode sorting: season ASC, episode ASC
 
 ### State Persistence
 - **Settings**: localStorage (JSON)
-- **Watch history**: SQLite (auto-save every 10s)
-- **Favorites**: SQLite (toggle via UI)
-- **Track preferences**: localStorage (audio/subtitle)
+- **Watch history**: JSON files via UserDataManager (auto-save)
+- **Favorites**: JSON files via UserDataManager (toggle via UI)
+- **Track preferences**: JSON files via UserDataManager (audio/subtitle)
 - **Profile selection**: localStorage
+- **M3U cache**: JSON files with 24-hour TTL
+- **Sticky/Hidden groups**: Profile JSON files
 
 ### Error Handling
 - Toast notifications for user-facing errors
@@ -204,19 +232,25 @@ Series detection happens in the Rust parser using regex patterns:
 
 ## Common Development Tasks
 
-### Adding a New Database Table
-1. Update `electron/schema.sql` with CREATE TABLE
-2. Add indexes if needed
-3. Add methods to `electron/database.js` (singleton class)
-4. Expose via IPC in `electron/main.js` (ipcMain.handle)
-5. Add to preload API in `electron/preload.js` (contextBridge)
-6. Update TypeScript types in `src/types/electron.d.ts`
-7. Call from renderer using `window.electronAPI.db.*`
+### Adding New Storage Data
+1. Identify which manager to use (ProfileManager, M3UManager, or UserDataManager)
+2. Add method to appropriate manager in `electron/storage/`
+3. Expose via IPC in `electron/main.cjs` (ipcMain.handle)
+4. Add to preload API in `electron/preload.cjs` (contextBridge)
+5. Update TypeScript types in `src/types/electron.d.ts` if needed
+6. Call from renderer using `window.electron.[profile|m3u|userData].*`
+
+### Using Category Tree in Frontend
+1. Parse M3U with `parseM3UWithTree()` to get CategoryTree WASM object
+2. Call tree methods directly: `tree.getMovies(stickyGroups, hiddenGroups)`
+3. Use `useCategoryTree` hook from `src/hooks/useCategoryTree.ts`
+4. Sticky/Hidden groups stored in profile JSON, managed via ProfileManager
+5. No serialization overhead - WASM object methods called directly from JS
 
 ### Adding a New P2P Command
 1. Define message type in `shared/types/src/index.ts` (WSMessage union)
-2. Add handler in `electron/p2p-server.js`
-3. Add event emitter callback in `electron/main.js` (onXxxCommand)
+2. Add handler in `electron/p2p-server.cjs`
+3. Add event emitter callback in `electron/main.cjs` (onXxxCommand)
 4. Send IPC message to renderer (mainWindow.webContents.send)
 5. Listen in renderer component (useEffect with IPC listener)
 6. Update protocol serialization in `shared/protocol/src/index.ts`
@@ -272,16 +306,18 @@ websocat ws://localhost:8080
 - Check `core/parser/pkg/` directory exists
 - Verify import in `core/parser/index.ts`
 
-### Database Locked
-- Close all instances of the app
-- Database is in WAL mode, so concurrent reads should work
-- Check if another process is holding the DB file
+### Storage Issues
+- Check storage path: `app.getPath('userData')/zenith-storage/`
+- Verify write permissions
+- Look for JSON parsing errors in console
+- Check file system adapter initialization
 
 ### IPC Not Working
-- Check preload script is loaded (main.js line 20)
+- Check preload script is loaded (main.cjs line 23)
 - Verify contextBridge is exposing API correctly
 - Check ipcMain.handle is registered before window creation
 - Look for errors in both main and renderer console
+- Verify API names: `window.electron.profile.*`, not `window.electronAPI.db.*`
 
 ### Hot Reload Not Working
 - Restart Vite dev server
@@ -302,20 +338,23 @@ websocat ws://localhost:8080
 
 ### Desktop (Electron)
 - Node.js >= 18.0.0 required
-- Uses better-sqlite3 (native module, requires rebuild for Electron)
+- No native dependencies (JSON-based storage)
 - Main process code is CommonJS (require/module.exports)
 - Renderer process code is ESM (import/export)
+- Rust parser via WASM (web target)
 
 ### Tizen (Planned)
-- Will use sql.js (WASM SQLite) instead of better-sqlite3
+- JSON-based storage (same as Desktop)
+- Rust parser via WASM (web target)
 - AVPlay API for video playback
 - D-pad navigation required
 - Must package as .wgt file
 
 ### Android (Planned)
-- Flutter with Rust FFI for parser
+- Flutter with Rust FFI for parser (native target, not WASM)
+- JSON-based storage via Flutter file I/O
 - ExoPlayer for video
-- drift + rusqlite for database
+- CategoryTree via Rust FFI (same code, different bindings)
 - Adaptive layouts (phone/tablet/TV)
 
 ## Performance Considerations
@@ -325,5 +364,7 @@ websocat ws://localhost:8080
 - Use React.memo for ContentCard components
 - Lazy load images with native loading="lazy"
 - Cache M3U content (24-hour expiration)
-- Database indexes on frequently queried columns
+- **CategoryTree filtering in Rust** - Zero serialization overhead
+- **WASM direct method calls** - No JSON parsing for category operations
+- JSON file caching reduces re-parsing
 - Auto-cleanup expired cache on startup

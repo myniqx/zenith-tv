@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import type { WatchableItem } from '@zenith-tv/types';
-import { db } from '../services/database';
+import { m3uService } from '../services/m3u-service';
+import { userDataService } from '../services/user-data-service';
+import { parseM3U } from '../services/m3u-parser';
+import { mergeItemsWithUserData, secondsToProgress } from '../lib/item-helpers';
 import { useToastStore } from './toast';
 
 export type CategoryType = 'all' | 'movies' | 'series' | 'live' | 'favorites' | 'recent';
@@ -22,18 +25,20 @@ interface ContentState {
   sortBy: SortBy;
   sortOrder: SortOrder;
   isLoading: boolean;
-  currentProfileId: number | null;
+  currentUsername: string | null;
+  currentUUID: string | null;
 
   // Actions
-  loadItemsForProfile: (profileId: number) => Promise<void>;
-  loadRecent: (profileId: number) => Promise<void>;
-  loadFavorites: (profileId: number) => Promise<void>;
+  loadItems: (username: string, uuid: string) => Promise<void>;
+  loadRecent: (username: string, uuid: string) => Promise<void>;
+  loadFavorites: (username: string, uuid: string) => Promise<void>;
   setCategory: (category: CategoryType) => void;
   setSearchQuery: (query: string) => void;
   setSortBy: (sortBy: SortBy) => void;
   setSortOrder: (order: SortOrder) => void;
   getFilteredItems: () => WatchableItem[];
   toggleFavorite: (url: string) => Promise<void>;
+  saveWatchProgress: (url: string, position: number, duration: number) => Promise<void>;
   clearItems: () => void;
 
   // Series helpers
@@ -52,36 +57,64 @@ export const useContentStore = create<ContentState>((set, get) => ({
   sortBy: 'name',
   sortOrder: 'asc',
   isLoading: false,
-  currentProfileId: null,
+  currentUsername: null,
+  currentUUID: null,
 
-  loadItemsForProfile: async (profileId) => {
-    set({ isLoading: true, currentProfileId: profileId });
+  loadItems: async (username, uuid) => {
+    set({ isLoading: true, currentUsername: username, currentUUID: uuid });
     try {
-      const items = await db.getItemsByProfile(profileId);
+      // Load M3U source
+      const content = await m3uService.loadSource(uuid);
+
+      // Parse M3U content
+      const parsedItems = await parseM3U(content);
+
+      // Load user data for these items
+      const userDataMap = await userDataService.get(username, uuid);
+
+      // Merge items with user data
+      const items = mergeItemsWithUserData(parsedItems, userDataMap);
+
       set({ items });
 
       // Also load recent and favorites
-      await get().loadRecent(profileId);
-      await get().loadFavorites(profileId);
+      await get().loadRecent(username, uuid);
+      await get().loadFavorites(username, uuid);
     } catch (error) {
       console.error('Failed to load items:', error);
+      useToastStore.getState().error('Failed to load items');
     } finally {
       set({ isLoading: false });
     }
   },
 
-  loadRecent: async (profileId) => {
+  loadRecent: async (username, uuid) => {
     try {
-      const recentItems = await db.getRecentItems(profileId);
+      const recent = await userDataService.getAllRecentlyWatched(username, [uuid], 50);
+
+      // Get items and merge with recent data
+      const { items } = get();
+      const recentItems = recent
+        .map((recentData: any) => {
+          const item = items.find((i) => i.url === recentData.url);
+          return item;
+        })
+        .filter((item): item is WatchableItem => item !== undefined);
+
       set({ recentItems });
     } catch (error) {
       console.error('Failed to load recent items:', error);
     }
   },
 
-  loadFavorites: async (profileId) => {
+  loadFavorites: async (username, uuid) => {
     try {
-      const favoritesItems = await db.getFavorites(profileId);
+      const favorites = await userDataService.getAllFavorites(username, [uuid]);
+
+      // Get items and filter favorites
+      const { items } = get();
+      const favoritesItems = items.filter((item) => item.isFavorite);
+
       set({ favoritesItems });
     } catch (error) {
       console.error('Failed to load favorites:', error);
@@ -162,11 +195,11 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   toggleFavorite: async (url) => {
-    const { currentProfileId } = get();
-    if (!currentProfileId) return;
+    const { currentUsername, currentUUID } = get();
+    if (!currentUsername || !currentUUID) return;
 
     try {
-      const isFavorite = await db.toggleFavorite(url);
+      const isFavorite = await userDataService.toggleFavorite(currentUsername, currentUUID, url);
 
       // Update local state
       set((state) => ({
@@ -176,7 +209,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       }));
 
       // Reload favorites list
-      await get().loadFavorites(currentProfileId);
+      await get().loadFavorites(currentUsername, currentUUID);
 
       // Show toast notification
       if (isFavorite) {
@@ -190,12 +223,52 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
+  saveWatchProgress: async (url, position, duration) => {
+    const { currentUsername, currentUUID } = get();
+    if (!currentUsername || !currentUUID) return;
+
+    try {
+      // Convert seconds to progress percentage
+      const progress = secondsToProgress(position, duration);
+
+      // Save progress
+      const userData = await userDataService.updateWatchProgress(
+        currentUsername,
+        currentUUID,
+        url,
+        progress
+      );
+
+      // Update local state
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.url === url
+            ? {
+                ...item,
+                watchHistory: {
+                  lastWatched: new Date(),
+                  position: progress,
+                  duration: 100, // Percentage-based
+                },
+              }
+            : item
+        ),
+      }));
+
+      // Reload recent list
+      await get().loadRecent(currentUsername, currentUUID);
+    } catch (error) {
+      console.error('Failed to save watch progress:', error);
+    }
+  },
+
   clearItems: () => {
     set({
       items: [],
       recentItems: [],
       favoritesItems: [],
-      currentProfileId: null,
+      currentUsername: null,
+      currentUUID: null,
       searchQuery: '',
       sortBy: 'name',
       sortOrder: 'asc',

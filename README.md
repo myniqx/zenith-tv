@@ -17,7 +17,7 @@ Modern cross-platform IPTV player with peer-to-peer remote control support.
 - 🎨 **Modern UI**: Clean, responsive interface with dark theme
 - ⚡ **High Performance**: Rust-powered M3U parser with WASM compilation
 - 🔊 **Multi-Track Support**: Multiple audio tracks and subtitle support with persistence
-- 💾 **Offline First**: Local SQLite database with caching and sync capabilities
+- 💾 **Offline First**: File-based storage with M3U caching (24h TTL)
 - 🌐 **P2P Control**: WebSocket-based remote control with PIN pairing
 - ⌨️ **Keyboard Navigation**: Full keyboard support with visual indicators
 - ♿ **Accessibility**: Comprehensive ARIA labels and high contrast mode
@@ -41,15 +41,94 @@ Modern cross-platform IPTV player with peer-to-peer remote control support.
 ### Core Technologies
 
 - **Parser**: Rust (compiled to WASM for web, FFI for native)
-- **Database**:
-  - Desktop: better-sqlite3 (native SQLite)
-  - Tizen: sql.js (WASM SQLite) - planned
-  - Android: drift + rusqlite - planned
+- **Storage**:
+  - Desktop: File-based JSON (profiles, cache, user data)
+  - Tizen: File-based (tizen.filesystem API) - planned
+  - Android: File-based (AsyncStorage/FileSystem) - planned
 - **UI Framework**: React 19 + TypeScript
 - **State Management**: Zustand
 - **Styling**: Tailwind CSS
 - **Network**: WebSocket (ws package) for P2P control
 - **Build Tool**: Vite + Electron Forge
+
+### Storage Architecture
+
+Zenith TV uses an intelligent file-based storage system optimized for cross-platform compatibility and bandwidth efficiency.
+
+#### Storage Layers
+
+**1. M3U Manager** (`m3u-manager.cjs`)
+- Maps M3U URLs to unique UUIDs for shared caching
+- Multiple users can reference the same M3U source
+- Handles M3U downloads with progress tracking
+- Manages persistent cache (never auto-deleted)
+- Tracks recently added items (30-day window)
+
+**2. Profile Manager** (`profile-manager.cjs`)
+- Username-based profiles (not ID-based)
+- Each profile references multiple M3U sources via UUIDs
+- Handles M3U updates with diff calculation
+- Combines statistics across all M3U sources
+- Provides recent items view (new content in last 30 days)
+
+**3. User Data Manager** (`user-data-manager.cjs`)
+- Per-user, per-M3U preferences
+- Stores favorites, watch progress, hidden items
+- Tracks audio/subtitle preferences
+- Provides watch history and statistics
+
+**4. Diff Calculator** (`diff-calculator.cjs`)
+- Compares old vs new M3U content
+- Detects added and removed items
+- Groups changes by category
+
+**5. Stats Calculator** (`stats-calculator.cjs`)
+- Calculates detailed statistics (movies, series, live streams)
+- Counts seasons and episodes
+- Groups content by category and genre
+
+#### Storage Structure
+
+```
+userData/
+├── profiles/
+│   ├── {username}.json       # Profile metadata + M3U UUIDs
+│   └── ...
+│
+├── m3u/
+│   ├── map.json              # URL → UUID mapping (shared cache)
+│   │
+│   └── {uuid}/               # Per-M3U source directory
+│       ├── source.m3u        # Cached M3U (persistent)
+│       ├── update.json       # Recent additions (30 days)
+│       └── stats.json        # Content statistics
+│
+└── user-data/
+    └── {username}/           # Per-user directory
+        └── {uuid}.json       # User preferences for M3U source
+```
+
+#### Key Features
+
+**Shared M3U Cache**
+- When User A adds `http://iptv.com/playlist.m3u`, it's downloaded and cached
+- When User B adds the same URL, it uses the existing cache (no download)
+- Updates by one user benefit all users referencing that M3U
+
+**Persistent Cache**
+- M3U files are never auto-deleted
+- Offline mode always available
+- Recent items tracked for 30 days
+
+**Bandwidth Optimization**
+- One M3U source shared across multiple users
+- Diff-based updates (only download when needed)
+- Smart caching with UUID mapping
+
+**Update Tracking**
+- "Recent" tab shows items added in last 30 days
+- Each update compares old vs new M3U
+- Shows +X new items, -Y removed items
 
 ## 📁 Project Structure
 
@@ -66,10 +145,17 @@ zenith-tv/
 └── apps/
     ├── desktop/             # Electron app (✅ 100%)
     │   ├── electron/        # Main process
-    │   │   ├── main.js
-    │   │   ├── preload.js
-    │   │   ├── database.js
-    │   │   └── p2p-server.js
+    │   │   ├── main.cjs
+    │   │   ├── preload.cjs
+    │   │   ├── p2p-server.cjs
+    │   │   └── storage/     # File-based storage layer
+    │   │       ├── index.cjs              # Storage API entry point
+    │   │       ├── fs-adapter.cjs         # Platform-agnostic file system
+    │   │       ├── m3u-manager.cjs        # M3U caching & UUID mapping
+    │   │       ├── profile-manager.cjs    # Username-based profiles
+    │   │       ├── user-data-manager.cjs  # User preferences
+    │   │       ├── diff-calculator.cjs    # M3U diff comparison
+    │   │       └── stats-calculator.cjs   # Statistics generation
     │   └── src/             # Renderer process
     │       ├── components/
     │       ├── stores/
@@ -141,16 +227,44 @@ source $HOME/.cargo/env
 brew install wasm-pack
 ```
 
-**On Windows:**
-```powershell
-# Install using winget (Windows Package Manager)
+**On Windows (Git Bash/MSYS2):**
+```bash
+# Install Node.js (download from nodejs.org) or use winget:
 winget install OpenJS.NodeJS.LTS
-winget install pnpm.pnpm
-winget install Rustlang.Rustup
+
+# Install pnpm globally
+npm install -g pnpm
+
+# Install Rust (using rustup)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+# Reload PATH
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# IMPORTANT: Use GNU toolchain (avoids Visual Studio dependency)
+rustup toolchain install stable-x86_64-pc-windows-gnu
+rustup default stable-x86_64-pc-windows-gnu
 
 # Install wasm-pack
 cargo install wasm-pack
 ```
+
+**On Windows (PowerShell/CMD - requires Visual Studio Build Tools):**
+```powershell
+# Install using winget
+winget install OpenJS.NodeJS.LTS
+npm install -g pnpm
+winget install Rustlang.Rustup
+
+# Install Visual Studio Build Tools (REQUIRED for MSVC toolchain)
+# Download from: https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022
+# During install, select "Desktop development with C++"
+
+# Install wasm-pack
+cargo install wasm-pack
+```
+
+**Recommended for Windows:** Use **Git Bash** with **GNU toolchain** to avoid Visual Studio dependency.
 
 #### Step 2: Clone the Repository
 
@@ -278,7 +392,13 @@ flutter build apk        # Build APK
 
 1. **Hot Reload**: The desktop app supports hot reload for UI changes
 2. **DevTools**: Press `Ctrl+Shift+I` (or `Cmd+Option+I` on macOS) to open Chrome DevTools
-3. **Database**: SQLite database is stored in `~/.config/zenith-tv/` on Linux/macOS, `%APPDATA%/zenith-tv/` on Windows
+3. **Storage**: Data is stored in `~/.config/@zenith-tv/desktop/` on Linux/macOS, `%APPDATA%/@zenith-tv/desktop/` on Windows
+   - `profiles/{username}.json` - Profile metadata + M3U UUIDs
+   - `m3u/map.json` - URL → UUID mapping (shared cache index)
+   - `m3u/{uuid}/source.m3u` - Cached M3U playlists (persistent)
+   - `m3u/{uuid}/update.json` - Recently added items (30 days)
+   - `m3u/{uuid}/stats.json` - Content statistics
+   - `user-data/{username}/{uuid}.json` - User preferences per M3U source
 4. **Logs**: Console logs are visible in DevTools
 5. **Parser Changes**: If you modify the Rust parser, rebuild it with `pnpm build:parser`
 
@@ -289,10 +409,13 @@ flutter build apk        # Build APK
 # Enable verbose logging
 DEBUG=* pnpm dev
 
-# Check database
-sqlite3 ~/.config/zenith-tv/zenith.db
-.tables
-.schema
+# Check storage files
+ls -la ~/.config/@zenith-tv/desktop/  # Linux/macOS
+dir %APPDATA%\@zenith-tv\desktop\     # Windows
+
+# View profile data
+cat ~/.config/@zenith-tv/desktop/profiles/<profile-id>.json
+cat ~/.config/@zenith-tv/desktop/user-data/<profile-id>.json
 ```
 
 **Parser Issues:**
@@ -387,12 +510,13 @@ ws.onmessage = (event) => {
 - ✅ Rust M3U parser with WASM
 - ✅ Episode detection (S01E01, 1x01, etc.)
 - ✅ Desktop app UI
-- ✅ SQLite integration with better-sqlite3
+- ✅ File-based storage (cross-platform compatible)
 - ✅ Video player with HTML5
 - ✅ Profile management
 - ✅ Content categorization
 - ✅ Search and filtering
 - ✅ Favorites and watch history
+- ✅ M3U caching (24h TTL)
 
 ### ✅ Phase 2: UX & Performance (Complete)
 - ✅ Settings panel
@@ -414,7 +538,7 @@ ws.onmessage = (event) => {
 
 ### 📋 Phase 4: Tizen TV (Planned)
 - [ ] Tizen Web app project setup
-- [ ] sql.js database integration
+- [ ] File-based storage adapter (tizen.filesystem API)
 - [ ] AVPlay API integration
 - [ ] D-pad navigation
 - [ ] TV-optimized layout
@@ -424,8 +548,8 @@ ws.onmessage = (event) => {
 
 ### 📋 Phase 5: Android (Planned)
 - [ ] Flutter project setup
-- [ ] Rust FFI bindings
-- [ ] drift + rusqlite integration
+- [ ] Rust FFI bindings for parser
+- [ ] File-based storage (AsyncStorage/FileSystem)
 - [ ] ExoPlayer integration
 - [ ] Adaptive layouts (phone/tablet/TV)
 - [ ] Material 3 Design
@@ -462,13 +586,16 @@ cd apps/desktop
 pnpm rebuild
 ```
 
-**Database errors:**
+**Storage errors:**
 ```bash
-# Reset database (WARNING: deletes all data)
-rm ~/.config/zenith-tv/zenith.db
+# Reset all data (WARNING: deletes profiles, cache, and user data)
+rm -rf ~/.config/@zenith-tv/desktop/
 
-# Or on Windows:
-# del %APPDATA%\zenith-tv\zenith.db
+# Or on Windows (PowerShell):
+Remove-Item -Recurse -Force $env:APPDATA\@zenith-tv\desktop\
+
+# Reset only cache (keeps profiles and user data)
+rm -rf ~/.config/@zenith-tv/desktop/cache/
 ```
 
 **P2P server not starting:**
@@ -512,7 +639,6 @@ Built with ❤️ using:
 - [Electron](https://www.electronjs.org/) - Desktop app framework
 - [Zustand](https://github.com/pmndrs/zustand) - State management
 - [Tailwind CSS](https://tailwindcss.com/) - Styling
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - Fast SQLite
 - [ws](https://github.com/websockets/ws) - WebSocket implementation
 - [Vite](https://vitejs.dev/) - Build tool
 

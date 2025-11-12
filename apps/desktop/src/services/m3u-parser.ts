@@ -3,7 +3,7 @@
  * Fetches and parses M3U playlists
  */
 
-import { initParser, parseM3U, type ParsedM3UItem } from '@zenith-tv/parser';
+import { initParser, parseM3U, parseM3UWithTree, type ParsedM3UItem, type CategoryTree } from '@zenith-tv/parser';
 import type { WatchableItem } from '@zenith-tv/types';
 import { db } from './database';
 
@@ -83,8 +83,16 @@ export async function parseM3UContent(content: string): Promise<ParsedM3UItem[]>
   return await parseM3U(content);
 }
 
+/**
+ * Parse M3U content and return CategoryTree (Rust WASM object)
+ */
+export async function parseM3UWithCategoryTree(content: string): Promise<CategoryTree> {
+  await ensureParserInit();
+  return await parseM3UWithTree(content);
+}
+
 // Re-export for convenience
-export { parseM3U };
+export { parseM3U, parseM3UWithTree, CategoryTree };
 
 /**
  * Convert parsed M3U items to WatchableItem format
