@@ -13,6 +13,7 @@ export interface ElectronAPI {
 
   // M3U Management API
   m3u: {
+    // Legacy API (used by ProfileManager)
     addToProfile: (username: string, m3uUrl: string) => Promise<M3UAddResult>;
     removeFromProfile: (username: string, uuid: string) => Promise<void>;
     getProfileM3Us: (username: string) => Promise<M3USource[]>;
@@ -22,32 +23,27 @@ export interface ElectronAPI {
     getRecentItems: (username: string, daysToKeep?: number) => Promise<RecentItem[]>;
     getOutdated: (username: string, maxAgeHours?: number) => Promise<OutdatedM3U[]>;
     getStats: (username: string) => Promise<M3UStats>;
-    onFetchProgress: (callback: (data: { uuid: string; progress: number }) => void) => void;
+
+    // New M3U Manager API
+    createUUID: (m3uUrl: string) => Promise<M3UCreateUUIDResult>;
+    deleteUUID: (uuid: string) => Promise<void>;
+    getURLForUUID: (uuid: string) => Promise<string | null>;
+    getAllUUIDs: () => Promise<string[]>;
+    hasSource: (uuid: string) => Promise<boolean>;
+    writeUUID: (uuid: string, data: M3UWriteData) => Promise<void>;
+    readUUID: (uuid: string) => Promise<M3UReadResult>;
+    fetchUUID: (urlOrPath: string) => Promise<string>;
+
+    // Event listeners for progress
+    onFetchProgress: (callback: (data: { uuid?: string; progress: number }) => void) => void;
     onUpdateProgress: (callback: (data: { uuid: string; progress: number }) => void) => void;
   };
 
   // User Data API (per-user, per-M3U)
   userData: {
-    get: (username: string, uuid: string) => Promise<UserData>;
-    getItem: (username: string, uuid: string, itemUrl: string) => Promise<UserItemData | null>;
-    updateItem: (username: string, uuid: string, itemUrl: string, updates: Partial<UserItemData>) => Promise<UserItemData>;
-    deleteItem: (username: string, uuid: string, itemUrl: string) => Promise<void>;
-
-    toggleFavorite: (username: string, uuid: string, itemUrl: string) => Promise<boolean>;
-    toggleHidden: (username: string, uuid: string, itemUrl: string) => Promise<boolean>;
-    updateWatchProgress: (username: string, uuid: string, itemUrl: string, progress: number) => Promise<UserItemData>;
-    markAsWatched: (username: string, uuid: string, itemUrl: string) => Promise<UserItemData>;
-    saveTracks: (username: string, uuid: string, itemUrl: string, audioTrack?: number, subtitleTrack?: number) => Promise<UserItemData>;
-
-    getAllFavorites: (username: string, uuids: string[]) => Promise<FavoriteItem[]>;
-    getAllRecentlyWatched: (username: string, uuids: string[], limit?: number) => Promise<RecentlyWatchedItem[]>;
-    getStats: (username: string, uuid: string) => Promise<UserDataStats>;
-    getCombinedStats: (username: string, uuids: string[]) => Promise<UserDataStats>;
-
-    clearOldHistory: (username: string, uuid: string, daysToKeep?: number) => Promise<number>;
-    deleteAll: (username: string, uuid: string) => Promise<void>;
-    deleteAllForUser: (username: string) => Promise<void>;
-    clearCache: (username?: string, uuid?: string) => void;
+    readData: (username: string, uuid: string) => Promise<UserData>;
+    writeData: (username: string, uuid: string, data: UserData) => Promise<void>;
+    deleteData: (username: string, uuid: string) => Promise<void>;
   };
 
   // Category Management API
@@ -99,6 +95,28 @@ export interface M3UAddResult {
   hasCache: boolean;
 }
 
+export interface M3UCreateUUIDResult {
+  uuid: string;
+  isNew: boolean;
+}
+
+export interface M3UWriteData {
+  source?: string;
+  update?: M3UUpdateData;
+  stats?: M3UStats;
+}
+
+export interface M3UUpdateData {
+  createdAt: number;
+  lastUpdated: number;
+  items: Record<string, number>;
+}
+
+export interface M3UReadResult {
+  source: string | null;
+  update: M3UUpdateData | null;
+}
+
 export interface M3USource {
   uuid: string;
   url: string;
@@ -106,30 +124,6 @@ export interface M3USource {
   stats: M3UStats | null;
 }
 
-export interface M3UParsedItem {
-  name: string;
-  url: string;
-  group: string;
-  logo?: string;
-  category: string;
-  episode?: {
-    seriesName: string;
-    season: number;
-    episode: number;
-  };
-  addedDate?: number;
-}
-
-export interface M3UUpdateResult {
-  diff: {
-    added: M3UParsedItem[];
-    removed: M3UParsedItem[];
-    unchanged: M3UParsedItem[];
-  };
-  stats: M3UStats;
-  parsedItems: M3UParsedItem[];
-  categoryTree: CategoryTree;
-}
 
 export interface M3UStats {
   totalItems: number;
@@ -151,11 +145,6 @@ export interface RecentItem {
   sourceUUID: string;
 }
 
-export interface OutdatedM3U {
-  uuid: string;
-  url: string;
-  lastUpdated?: number;
-}
 
 // User Data Types
 export interface UserData {

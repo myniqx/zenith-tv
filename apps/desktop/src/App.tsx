@@ -12,7 +12,6 @@ import { useContentStore } from './stores/content';
 import { usePlayerStore } from '@zenith-tv/ui/src/stores/player';
 import { useSettingsStore } from './stores/settings';
 import { useDebounce } from './hooks/useDebounce';
-import { db } from './services/database';
 
 function App() {
   const [showProfileManager, setShowProfileManager] = useState(false);
@@ -32,13 +31,18 @@ function App() {
 
   const {
     profiles,
-    currentProfile,
+    currentUsername,
+    currentM3U,
+    m3uList,
     loadProfiles,
     addProfile,
     addProfileFromFile,
     selectProfile,
+    selectM3U,
     deleteProfile,
-    syncProfile,
+    syncM3U,
+    addM3UToProfile,
+    removeM3UFromProfile,
     isLoading: isSyncing,
     syncProgress,
   } = useProfilesStore();
@@ -59,17 +63,9 @@ function App() {
   const { play } = usePlayerStore();
   const { highContrastMode } = useSettingsStore();
 
-  // Load profiles and clean cache on mount
+  // Load profiles on mount
   useEffect(() => {
-    const init = async () => {
-      // Clean expired cache entries
-      await db.cleanExpiredCache();
-
-      // Load profiles
-      await loadProfiles();
-    };
-
-    init();
+    loadProfiles();
   }, [loadProfiles]);
 
   // Show profile manager if no profiles exist
@@ -178,8 +174,8 @@ function App() {
     return () => clearInterval(interval);
   }, [p2pEnabled]);
 
-  const handleAddProfile = (url: string, name: string) => {
-    addProfile(url, name);
+  const handleAddProfile = (username: string, m3uUrl: string) => {
+    addProfile(username, m3uUrl);
   };
 
   const handleAcceptPairing = async (deviceId: string, pin: string) => {
@@ -203,9 +199,14 @@ function App() {
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
             Zenith TV
           </h1>
-          {currentProfile && (
-            <span className="text-sm text-gray-400" aria-label={`Current profile: ${currentProfile.name}`}>
-              • {currentProfile.name}
+          {currentUsername && (
+            <span className="text-sm text-gray-400" aria-label={`Current profile: ${currentUsername}`}>
+              • {currentUsername}
+            </span>
+          )}
+          {currentM3U && (
+            <span className="text-xs text-gray-500">
+              ({currentM3U.stats?.totalItems || 0} items)
             </span>
           )}
         </div>
@@ -361,15 +362,19 @@ function App() {
       {showProfileManager && (
         <ProfileManager
           profiles={profiles}
-          currentProfile={currentProfile}
+          currentUsername={currentUsername}
+          currentM3U={currentM3U}
+          m3uList={m3uList}
           onAddProfile={handleAddProfile}
           onAddProfileFromFile={addProfileFromFile}
-          onSelectProfile={(profile) => {
-            selectProfile(profile);
-            setShowProfileManager(false);
+          onSelectProfile={(username) => {
+            selectProfile(username);
           }}
+          onSelectM3U={selectM3U}
           onDeleteProfile={deleteProfile}
-          onSyncProfile={syncProfile}
+          onSyncM3U={syncM3U}
+          onAddM3UToProfile={addM3UToProfile}
+          onRemoveM3UFromProfile={removeM3UFromProfile}
           onClose={() => setShowProfileManager(false)}
           syncProgress={syncProgress}
           isSyncing={isSyncing}

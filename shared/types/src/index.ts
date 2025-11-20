@@ -9,6 +9,9 @@ export interface M3UItem {
   group: string;
   logo?: string;
   category: Category;
+  year?: number;
+  season?: number;
+  episode?: number;
 }
 
 export interface Episode {
@@ -18,9 +21,9 @@ export interface Episode {
 }
 
 export type Category =
-  | { type: 'live_stream' }
-  | { type: 'series'; episode: Episode }
-  | { type: 'movie' };
+  | { type: 'LiveStream' }
+  | { type: 'Series'; episode: Episode }
+  | { type: 'Movie' };
 
 // Profile & Storage
 export interface Profile {

@@ -4,12 +4,12 @@ use wasm_bindgen::prelude::*;
 mod parser;
 mod categorizer;
 mod episode_detector;
-mod category_tree;
+mod year_detector;
 
 pub use parser::M3UParser;
-pub use categorizer::{Category, categorize_item};
+pub use categorizer::{Category, categorize_item, CategorizedItem};
 pub use episode_detector::{Episode, detect_episode};
-pub use category_tree::{CategoryTree, CategoryNode};
+pub use year_detector::{detect_year, YearInfo};
 
 /// Represents a parsed M3U item
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,6 +25,12 @@ pub struct M3UItem {
     pub logo: Option<String>,
     #[wasm_bindgen(skip)]
     pub category: Category,
+    #[wasm_bindgen(skip)]
+    pub year: Option<u32>,
+    #[wasm_bindgen(skip)]
+    pub season: Option<u32>,
+    #[wasm_bindgen(skip)]
+    pub episode: Option<u32>,
 }
 
 #[wasm_bindgen]
@@ -48,6 +54,21 @@ impl M3UItem {
     pub fn logo(&self) -> Option<String> {
         self.logo.clone()
     }
+
+    #[wasm_bindgen(getter)]
+    pub fn year(&self) -> Option<u32> {
+        self.year
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn season(&self) -> Option<u32> {
+        self.season
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn episode(&self) -> Option<u32> {
+        self.episode
+    }
 }
 
 /// Parse M3U content and return categorized items
@@ -59,16 +80,6 @@ pub fn parse_m3u(content: &str) -> Result<JsValue, JsValue> {
             serde_wasm_bindgen::to_value(&items)
                 .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))
         }
-        Err(e) => Err(JsValue::from_str(&e)),
-    }
-}
-
-/// Parse M3U content and return a category tree
-#[wasm_bindgen]
-pub fn parse_m3u_with_tree(content: &str) -> Result<CategoryTree, JsValue> {
-    let parser = M3UParser::new(content);
-    match parser.parse() {
-        Ok(items) => Ok(CategoryTree::build(items)),
         Err(e) => Err(JsValue::from_str(&e)),
     }
 }
@@ -97,6 +108,42 @@ http://example.com/show.mkv
 
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].title, "Test Movie");
-        assert_eq!(items[1].title, "Show S01E01");
+        assert_eq!(items[1].title, "Show");
+        assert_eq!(items[1].season, Some(1));
+        assert_eq!(items[1].episode, Some(1));
+    }
+
+    #[test]
+    fn test_year_extraction() {
+        let content = r#"#EXTM3U
+#EXTINF:-1 group-title="Movies",Great Movie (2022)
+http://example.com/movie.mkv
+"#;
+
+        let parser = M3UParser::new(content);
+        let items = parser.parse().unwrap();
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "Great Movie");
+        assert_eq!(items[0].year, Some(2022));
+        assert_eq!(items[0].category, Category::Movie);
+    }
+
+    #[test]
+    fn test_series_with_year() {
+        let content = r#"#EXTM3U
+#EXTINF:-1 group-title="Series",Amazing Show (2023) S02E05
+http://example.com/show.mkv
+"#;
+
+        let parser = M3UParser::new(content);
+        let items = parser.parse().unwrap();
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "Amazing Show");
+        assert_eq!(items[0].year, Some(2023));
+        assert_eq!(items[0].season, Some(2));
+        assert_eq!(items[0].episode, Some(5));
+        assert_eq!(items[0].category, Category::Series);
     }
 }

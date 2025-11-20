@@ -301,6 +301,25 @@ class ProfileManager {
     return outdated;
   }
 
+  /**
+   * Save M3U statistics from parsed items
+   * @param {string} uuid - M3U UUID
+   * @param {Array} parsedItems - Parsed items from Rust parser (frontend)
+   */
+  async saveM3UStats(uuid, parsedItems) {
+    console.log(`[Profile Manager] Saving stats for ${uuid} (${parsedItems.length} items)`);
+
+    // Calculate statistics using stats calculator
+    const stats = this.statsCalc.calculateStats(parsedItems);
+
+    // Save to M3U manager
+    await this.m3uManager.saveStats(uuid, stats);
+
+    console.log(`[Profile Manager] Stats saved: ${stats.totalItems} items (${stats.movies} movies, ${stats.series} series, ${stats.liveStreams} live)`);
+
+    return stats;
+  }
+
 }
 
 // Singleton instance

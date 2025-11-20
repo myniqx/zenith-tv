@@ -1,7 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { usePlayerStore } from '@zenith-tv/ui/src/stores/player';
 import { PlayerControls } from './PlayerControls';
-import { db } from '../services/database';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
 
@@ -27,7 +26,7 @@ export function VideoPlayer() {
     play,
   } = usePlayerStore();
 
-  const { getNextEpisode } = useContentStore();
+  const { getNextEpisode, saveWatchProgress } = useContentStore();
   const { autoPlayNext, defaultVolume, setDefaultVolume } = useSettingsStore();
 
   // Initialize volume from settings on mount
@@ -194,22 +193,20 @@ export function VideoPlayer() {
     video.src = currentItem.url;
     setState('loading');
 
-    // Load watch history and resume from last position
-    const loadWatchHistory = async () => {
-      try {
-        const history = await db.getWatchHistory(currentItem.url);
-        if (history && history.position > 0 && history.position < history.duration - 10) {
-          // Resume if not at the beginning or near the end
-          video.addEventListener('loadedmetadata', () => {
-            video.currentTime = history.position;
-          }, { once: true });
-        }
-      } catch (error) {
-        console.error('Failed to load watch history:', error);
-      }
-    };
+    // Resume from last position if available
+    if (currentItem.watchHistory && currentItem.watchHistory.position > 0) {
+      const progressPercent = currentItem.watchHistory.position;
 
-    loadWatchHistory();
+      video.addEventListener('loadedmetadata', () => {
+        // Convert percentage to seconds
+        const position = (progressPercent / 100) * video.duration;
+
+        // Resume if not at the beginning or near the end
+        if (position > 0 && position < video.duration - 10) {
+          video.currentTime = position;
+        }
+      }, { once: true });
+    }
   }, [currentItem, setState]);
 
   // Update video volume and mute
@@ -230,7 +227,7 @@ export function VideoPlayer() {
     const saveInterval = setInterval(async () => {
       if (video.duration > 0) {
         try {
-          await db.saveWatchProgress(currentItem.url, video.currentTime, video.duration);
+          await saveWatchProgress(currentItem.url, video.currentTime, video.duration);
         } catch (error) {
           console.error('Failed to save watch progress:', error);
         }
@@ -241,7 +238,7 @@ export function VideoPlayer() {
     const handlePause = async () => {
       if (video.duration > 0) {
         try {
-          await db.saveWatchProgress(currentItem.url, video.currentTime, video.duration);
+          await saveWatchProgress(currentItem.url, video.currentTime, video.duration);
         } catch (error) {
           console.error('Failed to save watch progress:', error);
         }
@@ -256,11 +253,11 @@ export function VideoPlayer() {
 
       // Save progress on unmount
       if (video.duration > 0) {
-        db.saveWatchProgress(currentItem.url, video.currentTime, video.duration)
+        saveWatchProgress(currentItem.url, video.currentTime, video.duration)
           .catch(err => console.error('Failed to save watch progress on unmount:', err));
       }
     };
-  }, [currentItem, state]);
+  }, [currentItem, state, saveWatchProgress]);
 
   // Auto-hide controls
   useEffect(() => {

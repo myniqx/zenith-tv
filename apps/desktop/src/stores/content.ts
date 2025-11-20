@@ -1,10 +1,12 @@
 import { create } from 'zustand';
-import type { WatchableItem } from '@zenith-tv/types';
 import { m3uService } from '../services/m3u-service';
 import { userDataService } from '../services/user-data-service';
 import { parseM3U } from '../services/m3u-parser';
-import { mergeItemsWithUserData, secondsToProgress } from '../lib/item-helpers';
 import { useToastStore } from './toast';
+import { GroupObject } from '@/m3u/group';
+import { LucideCircleCheckBig, LucideFlame, LucideHeart, LucidePodcast, LucideTheater, LucideTv } from 'lucide-react';
+import { WatchableObject } from '@/m3u/watchable';
+import { M3UObject } from '@/m3u/m3u';
 
 export type CategoryType = 'all' | 'movies' | 'series' | 'live' | 'favorites' | 'recent';
 export type SortBy = 'name' | 'date' | 'recent';
@@ -12,15 +14,15 @@ export type SortOrder = 'asc' | 'desc';
 
 export interface SeriesGroup {
   seriesName: string;
-  episodes: WatchableItem[];
+  episodes: WatchableObject[];
   totalEpisodes: number;
 }
 
 interface ContentState {
-  items: WatchableItem[];
-  recentItems: WatchableItem[];
-  favoritesItems: WatchableItem[];
-  currentCategory: CategoryType;
+  items: WatchableObject[];
+  recentItems: WatchableObject[];
+  favoritesItems: WatchableObject[];
+  currentCategory: GroupObject;
   searchQuery: string;
   sortBy: SortBy;
   sortOrder: SortOrder;
@@ -28,31 +30,38 @@ interface ContentState {
   currentUsername: string | null;
   currentUUID: string | null;
 
+  movieGroup: GroupObject,
+  tvShowGroup: GroupObject,
+  streamGroup: GroupObject,
+  recentGroup: GroupObject,
+  favoriteGroup: GroupObject,
+  watchedGroup: GroupObject,
+
   // Actions
-  loadItems: (username: string, uuid: string) => Promise<void>;
-  loadRecent: (username: string, uuid: string) => Promise<void>;
-  loadFavorites: (username: string, uuid: string) => Promise<void>;
-  setCategory: (category: CategoryType) => void;
+  setContent: (username: string, uuid: string) => void;
+  load: (fromUpdate?: boolean) => Promise<void>;
+  update: () => Promise<void>;
+  setCategory: (category: GroupObject) => void;
   setSearchQuery: (query: string) => void;
   setSortBy: (sortBy: SortBy) => void;
   setSortOrder: (order: SortOrder) => void;
-  getFilteredItems: () => WatchableItem[];
+  getFilteredItems: () => WatchableObject[];
   toggleFavorite: (url: string) => Promise<void>;
   saveWatchProgress: (url: string, position: number, duration: number) => Promise<void>;
   clearItems: () => void;
 
   // Series helpers
   getSeriesGroups: () => SeriesGroup[];
-  getEpisodesForSeries: (seriesName: string) => WatchableItem[];
-  getNextEpisode: (currentItem: WatchableItem) => WatchableItem | null;
-  getPreviousEpisode: (currentItem: WatchableItem) => WatchableItem | null;
+  getEpisodesForSeries: (seriesName: string) => WatchableObject[];
+  getNextEpisode: (currentItem: WatchableObject) => WatchableObject | null;
+  getPreviousEpisode: (currentItem: WatchableObject) => WatchableObject | null;
 }
 
 export const useContentStore = create<ContentState>((set, get) => ({
   items: [],
   recentItems: [],
   favoritesItems: [],
-  currentCategory: 'all',
+  currentCategory: null!,
   searchQuery: '',
   sortBy: 'name',
   sortOrder: 'asc',
@@ -60,64 +69,218 @@ export const useContentStore = create<ContentState>((set, get) => ({
   currentUsername: null,
   currentUUID: null,
 
-  loadItems: async (username, uuid) => {
-    set({ isLoading: true, currentUsername: username, currentUUID: uuid });
+  movieGroup: null!,
+  tvShowGroup: null!,
+  streamGroup: null!,
+  recentGroup: null!,
+  favoriteGroup: null!,
+  watchedGroup: null!,
+
+  setContent: (username, uuid) => {
+    // Reset store to initial state with new username/uuid
+    const favoriteGroup = new GroupObject("Favorites", LucideHeart);
+    set({
+      items: [],
+      recentItems: [],
+      favoritesItems: [],
+      currentCategory: favoriteGroup,
+      searchQuery: '',
+      sortBy: 'name',
+      sortOrder: 'asc',
+      isLoading: false,
+      currentUsername: username,
+      currentUUID: uuid,
+      movieGroup: new GroupObject("Movies", LucideTheater),
+      tvShowGroup: new GroupObject("TV Shows", LucideTv),
+      streamGroup: new GroupObject("Live Streams", LucidePodcast),
+      recentGroup: new GroupObject("Recent", LucideFlame),
+      favoriteGroup,
+      watchedGroup: new GroupObject("Watched", LucideCircleCheckBig),
+    });
+  },
+
+  load: async (fromUpdate = false) => {
+    /*
+      Bu fonksiyonun yapması gerekenler:
+        - öncelikle bu fonksiyon kullanıcı seçildi ise çalışabilir (username ve uuid setContent!)
+        - bu fonksiyon fetch etmez. kullanıcının bir önceki girişiminden yaptığı kaynakları yükler ayarlar ile birleştirir.
+        - yani readUUID ile source ve update kısmını yükler.
+        - user'in favori hide etc ayarlarını yükler.
+        - sonra parseM3U ile source kısmını parse eder.
+        - her bir m3u objesi eklenirken kontrol eder
+          * eğer update listesinde varsa ekstradan Recent klasörüne de ekler
+          * eğer favorilerde varsa ekstradan Favorites klasörüne de ekler (ve Watchable objesine isFavorite true verir)
+          * eğer watchlistde varsa ekstradan Watched klasörüne de ekler (ve Watchable objesine isWatched true verir)
+          * diğer tüm user ayarlarını aynı şekilde kontrol eder. yükler. 
+    */
+    const { currentUsername, currentUUID } = get();
+
+    if (!currentUsername || !currentUUID) {
+      console.error('Cannot load: username or UUID not set. Call setContent first.');
+
+      // throw error so this bug can be fixed
+      throw new Error('Cannot load content: profile not set');
+    }
+
+    set({ isLoading: true });
+
     try {
-      // Load M3U source
-      const content = await m3uService.loadSource(uuid);
+      console.log(`[Content Store] Loading content for ${currentUsername}/${currentUUID}`);
 
-      // Parse M3U content
-      const parsedItems = await parseM3U(content);
+      // Read UUID data using new API
+      const { source, update } = await window.electron.m3u.readUUID(currentUUID);
+      const userData = await window.electron.userData.readData(currentUsername, currentUUID);
 
-      // Load user data for these items
-      const userDataMap = await userDataService.get(username, uuid);
+      if (!source) {
+        if (!fromUpdate) { // dont show error on update
+          console.error(`[Content Store] No source content found for ${currentUUID}`);
+          useToastStore.getState().error('No source content found, use update instead');
+        }
+        return;
+      }
 
-      // Merge items with user data
-      const items = mergeItemsWithUserData(parsedItems, userDataMap);
+      const m3uList = await parseM3U(source);
 
-      set({ items });
+      for (const item of m3uList) {
+        let watchable: WatchableObject = null!
+        switch (item.category) {
+          case 'Movie':
+            watchable = get().movieGroup.addGroup(item.group).Add(item);
+            break;
+          case 'Series':
+            watchable = get().tvShowGroup.addGroup(item.group).AddTvShow(item);
+            break;
+          case 'LiveStream':
+            watchable = get().streamGroup.addGroup(item.group).Add(item);
+            break;
+        }
 
-      // Also load recent and favorites
-      await get().loadRecent(username, uuid);
-      await get().loadFavorites(username, uuid);
+        const addedDate = update?.items?.[item.url];
+        if (addedDate) {
+          watchable.AddedDate = new Date(addedDate);
+          get().recentGroup.AddWatchable(watchable);
+        }
+        else {
+          watchable.AddedDate = new Date(update?.createdAt || Date.now());
+        }
+
+        const userItemData = userData[item.url];
+        if (userItemData) {
+          watchable.userData = userItemData;
+          if (userItemData.favorite) {
+            get().favoriteGroup.AddWatchable(watchable);
+          }
+          if (userItemData.watched) {
+            get().watchedGroup.AddWatchable(watchable);
+          }
+        }
+      }
+
+      // TODO: check this functions. they must sort items and calculate the stats!
+      get().movieGroup.lastCheck();
+      get().tvShowGroup.lastCheck();
+      get().streamGroup.lastCheck();
+      get().recentGroup.lastCheck();
+
+      console.log('[Content Store] Read result:', {
+        hasSource: !!source,
+        sourceLength: source?.length,
+        hasUpdate: !!update,
+        updateItemsCount: update?.items?.length,
+      });
+
     } catch (error) {
-      console.error('Failed to load items:', error);
-      useToastStore.getState().error('Failed to load items');
+      console.error('[Content Store] Failed to load content:', error);
+      useToastStore.getState().error('Failed to load content');
     } finally {
       set({ isLoading: false });
     }
   },
 
-  loadRecent: async (username, uuid) => {
-    try {
-      const recent = await userDataService.getAllRecentlyWatched(username, [uuid], 50);
+  update: async () => {
+    const { currentUsername, currentUUID } = get();
 
-      // Get items and merge with recent data
-      const { items } = get();
-      const recentItems = recent
-        .map((recentData: any) => {
-          const item = items.find((i) => i.url === recentData.url);
-          return item;
-        })
-        .filter((item): item is WatchableItem => item !== undefined);
+    get().load(true);
 
-      set({ recentItems });
-    } catch (error) {
-      console.error('Failed to load recent items:', error);
+    if (!currentUsername || !currentUUID) {
+      console.error('Cannot update: username or UUID not set. Call setContent first.');
+
+      // throw error so this bug can be fixed
+      throw new Error('Cannot update content: profile not set');
     }
-  },
 
-  loadFavorites: async (username, uuid) => {
+    set({ isLoading: true });
+
     try {
-      const favorites = await userDataService.getAllFavorites(username, [uuid]);
+      console.log(`[Content Store] Updating content for ${currentUsername}/${currentUUID}`);
 
-      // Get items and filter favorites
-      const { items } = get();
-      const favoritesItems = items.filter((item) => item.isFavorite);
+      // Get URL for this UUID
+      const url = await window.electron.m3u.getURLForUUID(currentUUID);
+      const { update } = await window.electron.m3u.readUUID(currentUUID);
 
-      set({ favoritesItems });
+      if (!url) {
+        throw new Error('No URL found for this UUID');
+      }
+
+      console.log(`[Content Store] Fetching from: ${url}`);
+
+      // Fetch fresh content from URL or file
+      const source = await window.electron.m3u.fetchUUID(url);
+
+      console.log(`[Content Store] Fetched ${source.length} bytes`);
+
+      const dateNow = Date.now();
+      const lastUpdate = {
+        createdAt: dateNow,
+        items: {},
+        ...update, // overwrite with existing data
+        lastUpdated: dateNow, // overwrite with current time
+      };
+
+      const m3uList = await parseM3U(source);
+
+      const AddIf = (group: GroupObject, item: M3UObject) => {
+        if (group.has(item)) // TODO: create an has function that returns boolean if item exists regarding it is a tv show (different logic)
+          return;
+        const watchable = group.addGroup(item.group).Add(item);
+        watchable.AddedDate = new Date(dateNow);
+        lastUpdate.items[item.url] = dateNow;
+        get().recentGroup.AddWatchable(watchable);
+      }
+
+      for (const item of m3uList) {
+        switch (item.category) {
+          case 'Movie':
+            AddIf(get().movieGroup, item);
+            break;
+          case 'Series':
+            AddIf(get().tvShowGroup, item);
+            break;
+          case 'LiveStream':
+            AddIf(get().streamGroup, item);
+            break;
+        }
+      }
+
+      // TODO: check this functions. they must sort items and calculate the stats!
+      get().movieGroup.lastCheck();
+      get().tvShowGroup.lastCheck();
+      get().streamGroup.lastCheck();
+      get().recentGroup.lastCheck();
+
+      // Write to storage using new API
+      await window.electron.m3u.writeUUID(currentUUID, {
+        source,
+        update: lastUpdate,
+      });
+
+      console.log(`[Content Store] Content updated successfully`);
+      useToastStore.getState().success('Content updated successfully');
     } catch (error) {
-      console.error('Failed to load favorites:', error);
+      console.error('[Content Store] Failed to update content:', error);
+      useToastStore.getState().error(`Failed to update content: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      set({ isLoading: false });
     }
   },
 
@@ -130,39 +293,16 @@ export const useContentStore = create<ContentState>((set, get) => ({
   setSortOrder: (order) => set({ sortOrder: order }),
 
   getFilteredItems: () => {
-    const { items, recentItems, favoritesItems, currentCategory, searchQuery, sortBy, sortOrder } = get();
+    const { recentItems, favoritesItems, currentCategory, searchQuery, sortBy, sortOrder } = get();
 
     // Step 1: Filter by category
-    let filtered: WatchableItem[] = [];
-    switch (currentCategory) {
-      case 'all':
-        filtered = items;
-        break;
-      case 'movies':
-        filtered = items.filter((item) => item.category.type === 'movie');
-        break;
-      case 'series':
-        filtered = items.filter((item) => item.category.type === 'series');
-        break;
-      case 'live':
-        filtered = items.filter((item) => item.category.type === 'live_stream');
-        break;
-      case 'favorites':
-        filtered = favoritesItems;
-        break;
-      case 'recent':
-        filtered = recentItems;
-        break;
-      default:
-        filtered = items;
-    }
+    let filtered: WatchableObject[] = [...currentCategory.Watchables];
 
     // Step 2: Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter((item) =>
-        item.title.toLowerCase().includes(query) ||
-        item.group?.toLowerCase().includes(query)
+        item.Title.toLowerCase().includes(query)
       );
     }
 
@@ -172,17 +312,17 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
       switch (sortBy) {
         case 'name':
-          comparison = a.title.localeCompare(b.title);
+          comparison = a.Title.localeCompare(b.Title);
           break;
         case 'date':
-          comparison = new Date(a.addedDate).getTime() - new Date(b.addedDate).getTime();
+          comparison = new Date(a.AddedDate).getTime() - new Date(b.AddedDate).getTime();
           break;
         case 'recent':
-          if (a.watchHistory && b.watchHistory) {
-            comparison = new Date(b.watchHistory.lastWatched).getTime() - new Date(a.watchHistory.lastWatched).getTime();
-          } else if (a.watchHistory) {
+          if (a.userData?.lastWatchedAt && b.userData?.lastWatchedAt) {
+            comparison = new Date(b.userData?.lastWatchedAt).getTime() - new Date(a.userData?.lastWatchedAt).getTime();
+          } else if (a.userData?.lastWatchedAt) {
             comparison = -1;
-          } else if (b.watchHistory) {
+          } else if (b.userData?.lastWatchedAt) {
             comparison = 1;
           }
           break;
@@ -244,13 +384,13 @@ export const useContentStore = create<ContentState>((set, get) => ({
         items: state.items.map((item) =>
           item.url === url
             ? {
-                ...item,
-                watchHistory: {
-                  lastWatched: new Date(),
-                  position: progress,
-                  duration: 100, // Percentage-based
-                },
-              }
+              ...item,
+              watchHistory: {
+                lastWatched: new Date(),
+                position: progress,
+                duration: 100, // Percentage-based
+              },
+            }
             : item
         ),
       }));
@@ -280,7 +420,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     const seriesItems = items.filter((item) => item.category.type === 'series');
 
     // Group by series name
-    const groups = new Map<string, WatchableItem[]>();
+    const groups = new Map<string, WatchableObject[]>();
     seriesItems.forEach((item) => {
       if (item.category.type === 'series') {
         const seriesName = item.category.episode.seriesName;

@@ -82,7 +82,7 @@ impl<'a> M3UParser<'a> {
         // Format: #EXTINF:duration tvg-logo="..." group-title="..." ,Title
 
         let comma_pos = metadata.rfind(',')?;
-        let title = metadata[comma_pos + 1..].trim().to_string();
+        let raw_title = metadata[comma_pos + 1..].trim();
         let attributes = &metadata[..comma_pos];
 
         let mut logo = None;
@@ -103,14 +103,18 @@ impl<'a> M3UParser<'a> {
             }
         }
 
-        let category = categorize_item(&title, url);
+        // Categorize and extract metadata (year, season, episode)
+        let categorized = categorize_item(raw_title, url);
 
         Some(M3UItem {
-            title,
+            title: categorized.cleaned_title,
             url: url.to_string(),
             group,
             logo,
-            category,
+            category: categorized.category,
+            year: categorized.year,
+            season: categorized.season,
+            episode: categorized.episode,
         })
     }
 

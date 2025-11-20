@@ -57,15 +57,23 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
       // Create profile
       await profileService.create(username);
 
-      set({ syncProgress: { stage: 'Adding M3U...', percent: 33 } });
+      set({ syncProgress: { stage: 'Adding M3U...', percent: 20 } });
 
       // Add M3U to profile
       const { uuid } = await m3uService.addToProfile(username, m3uUrl);
 
-      set({ syncProgress: { stage: 'Fetching M3U...', percent: 50 } });
+      set({ syncProgress: { stage: 'Fetching M3U...', percent: 40 } });
 
       // Fetch and cache M3U content
       await m3uService.fetchAndCache(uuid, m3uUrl);
+
+      // Parse M3U and save stats
+      set({ syncProgress: { stage: 'Parsing M3U...', percent: 60 } });
+      const content = await m3uService.loadSource(uuid);
+      const parsedItems = await parseM3U(content);
+
+      set({ syncProgress: { stage: 'Saving statistics...', percent: 80 } });
+      await m3uService.saveStats(uuid, parsedItems);
 
       set({ syncProgress: { stage: 'Complete!', percent: 100 } });
 
@@ -114,16 +122,20 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
       // Create profile with file name as username
       const username = result.name.replace(/\.m3u8?$/i, '');
 
-      set({ syncProgress: { stage: 'Creating profile...', percent: 25 } });
+      set({ syncProgress: { stage: 'Creating profile...', percent: 20 } });
       await profileService.create(username);
 
       // Add M3U with file:// URL
-      set({ syncProgress: { stage: 'Importing M3U...', percent: 50 } });
+      set({ syncProgress: { stage: 'Importing M3U...', percent: 40 } });
       const { uuid } = await m3uService.addToProfile(username, `file://${result.path}`);
 
       // Cache the file content
-      set({ syncProgress: { stage: 'Caching content...', percent: 75 } });
+      set({ syncProgress: { stage: 'Caching content...', percent: 60 } });
       await m3uService.fetchAndCache(uuid, `file://${result.path}`);
+
+      // Save statistics
+      set({ syncProgress: { stage: 'Saving statistics...', percent: 80 } });
+      await m3uService.saveStats(uuid, items);
 
       set({ syncProgress: { stage: 'Complete!', percent: 100 } });
 
@@ -218,6 +230,15 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
       // Fetch and cache M3U
       set({ syncProgress: { stage: 'Downloading M3U...', percent: 25 } });
       await m3uService.fetchAndCache(m3uInfo.uuid, m3uInfo.url);
+
+      // Parse M3U and save stats
+      set({ syncProgress: { stage: 'Parsing M3U...', percent: 50 } });
+      const content = await m3uService.loadSource(m3uInfo.uuid);
+      const parsedItems = await parseM3U(content);
+
+      // Calculate and save stats via IPC
+      set({ syncProgress: { stage: 'Saving statistics...', percent: 75 } });
+      await window.electron.m3u.saveStats(m3uInfo.uuid, parsedItems);
 
       set({ syncProgress: { stage: 'Complete!', percent: 100 } });
 

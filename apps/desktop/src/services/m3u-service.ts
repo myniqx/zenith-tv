@@ -92,6 +92,13 @@ export const m3uService = {
   },
 
   /**
+   * Save stats for an M3U from parsed items
+   */
+  async saveStats(uuid: string, parsedItems: any[]): Promise<M3UStats> {
+    return await window.electron.m3u.saveStats(uuid, parsedItems);
+  },
+
+  /**
    * Listen to fetch progress events
    */
   onFetchProgress(callback: (data: { uuid: string; progress: any }) => void): void {

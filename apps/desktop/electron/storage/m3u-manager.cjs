@@ -34,9 +34,11 @@ class M3UManager {
   }
 
   /**
-   * Get UUID for M3U URL (or create new)
+   * Create or get UUID for M3U URL
+   * @param {string} m3uUrl - M3U URL or file:// path
+   * @returns {Promise<{uuid: string, isNew: boolean}>}
    */
-  async getOrCreateUUID(m3uUrl) {
+  async createUUID(m3uUrl) {
     const map = await this.loadMap();
 
     if (map[m3uUrl]) {
@@ -85,7 +87,67 @@ class M3UManager {
   }
 
   /**
-   * Get cached M3U source
+   * Write UUID data (source, update, stats)
+   * @param {string} uuid - UUID
+   * @param {Object} data - Data to write
+   * @param {string} [data.source] - M3U source content
+   * @param {Object} [data.update] - Update tracking data
+   * @param {Object} [data.stats] - Statistics data
+   */
+  async writeUUID(uuid, { source, update, stats }) {
+    if (source !== undefined) {
+      await this.fs.writeText(this.getSourcePath(uuid), source);
+      console.log(`[M3U Manager] Wrote source for ${uuid} (${(source.length / 1024 / 1024).toFixed(2)} MB)`);
+    }
+
+    if (!update) update = {}
+    if (!update.createdAt) update.createdAt = Date.now();
+    await this.fs.writeJSON(this.getUpdatePath(uuid), update);
+    console.log(`[M3U Manager] Wrote update data for ${uuid}`);
+
+    if (stats !== undefined) {
+      await this.fs.writeJSON(this.getStatsPath(uuid), stats);
+      console.log(`[M3U Manager] Wrote stats for ${uuid}`);
+    }
+  }
+
+  /**
+   * Read UUID data (source, update)
+   * @param {string} uuid - UUID
+   * @returns {Promise<{source: string|null, update: Object|null}>}
+   */
+  async readUUID(uuid) {
+    let source = null;
+    let update = null;
+
+    try {
+      source = await this.fs.readText(this.getSourcePath(uuid));
+    } catch (error) {
+      // File doesn't exist
+    }
+
+    try {
+      update = await this.fs.readJSON(this.getUpdatePath(uuid));
+    } catch {
+      update = {};
+    }
+
+    return { source, update };
+  }
+
+  /**
+   * Fetch M3U content from URL or file path
+   * Does NOT write to storage - use writeUUID after processing
+   * @param {string} urlOrPath - M3U URL or file:// path
+   * @param {Function} [onProgress] - Progress callback (0-100)
+   * @returns {Promise<string>} M3U content
+   */
+  async fetchUUID(urlOrPath, onProgress) {
+    return await this.fetchM3U(urlOrPath, onProgress);
+  }
+
+  /**
+   * Get cached M3U source (internal use)
    */
   async getSource(uuid) {
     const path = this.getSourcePath(uuid);
@@ -93,7 +155,7 @@ class M3UManager {
   }
 
   /**
-   * Save M3U source
+   * Save M3U source (internal use)
    */
   async saveSource(uuid, content) {
     const path = this.getSourcePath(uuid);
@@ -102,7 +164,7 @@ class M3UManager {
   }
 
   /**
-   * Get update tracking data
+   * Get update tracking data (internal use)
    */
   async getUpdateData(uuid) {
     const path = this.getUpdatePath(uuid);
@@ -115,75 +177,11 @@ class M3UManager {
   }
 
   /**
-   * Save update tracking data
+   * Save update tracking data (internal use)
    */
   async saveUpdateData(uuid, data) {
     const path = this.getUpdatePath(uuid);
     await this.fs.writeJSON(path, data);
-  }
-
-  /**
-   * Get recent items (last 30 days)
-   */
-  async getRecentItems(uuid, daysToKeep = 30) {
-    const updateData = await this.getUpdateData(uuid);
-    const cutoff = Date.now() - daysToKeep * 24 * 60 * 60 * 1000;
-
-    return updateData.items.filter(item => item.addedAt > cutoff);
-  }
-
-  /**
-   * Add new items to update tracking
-   */
-  async addNewItems(uuid, newItems) {
-    const updateData = await this.getUpdateData(uuid);
-
-    const now = Date.now();
-    const itemsWithTimestamp = newItems.map(item => ({
-      ...item,
-      addedAt: now,
-    }));
-
-    updateData.items.push(...itemsWithTimestamp);
-    updateData.lastUpdated = now;
-
-    // Clean old items (30 days)
-    const cutoff = now - 30 * 24 * 60 * 60 * 1000;
-    updateData.items = updateData.items.filter(item => item.addedAt > cutoff);
-
-    await this.saveUpdateData(uuid, updateData);
-
-    console.log(`[M3U Manager] Added ${newItems.length} new items to ${uuid}`);
-    return itemsWithTimestamp;
-  }
-
-  /**
-   * Get statistics
-   */
-  async getStats(uuid) {
-    const path = this.getStatsPath(uuid);
-    const stats = await this.fs.readJSON(path);
-
-    return stats || {
-      lastUpdated: null,
-      totalItems: 0,
-      movies: 0,
-      series: 0,
-      liveStreams: 0,
-      seasons: 0,
-      episodes: 0,
-      groups: {},
-      categories: {},
-    };
-  }
-
-  /**
-   * Save statistics
-   */
-  async saveStats(uuid, stats) {
-    const path = this.getStatsPath(uuid);
-    stats.lastUpdated = Date.now();
-    await this.fs.writeJSON(path, stats);
   }
 
   /**
@@ -193,46 +191,70 @@ class M3UManager {
     console.log(`[M3U Manager] Fetching M3U from: ${url}`);
 
     try {
-      const response = await fetch(url);
+      // Check if it's a local file
+      if (url.startsWith('file://')) {
+        // Local file - use Node.js fs
+        const fs = require('fs').promises;
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+        // Convert file:// URL to local path
+        const filePath = url.replace('file://', '');
 
-      const contentLength = response.headers.get('content-length');
-      const total = contentLength ? parseInt(contentLength, 10) : 0;
+        console.log(`[M3U Manager] Reading local file: ${filePath}`);
 
-      let loaded = 0;
-      const reader = response.body.getReader();
-      const chunks = [];
+        // Read file
+        const content = await fs.readFile(filePath, 'utf-8');
 
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) break;
-
-        chunks.push(value);
-        loaded += value.length;
-
-        if (onProgress && total > 0) {
-          const progress = (loaded / total) * 100;
-          onProgress(progress);
+        // Report progress as 100% since it's instant
+        if (onProgress) {
+          onProgress(100);
         }
+
+        console.log(`[M3U Manager] Read ${(content.length / 1024 / 1024).toFixed(2)} MB from local file`);
+
+        return content;
+      } else {
+        // Remote URL - use fetch
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+
+        let loaded = 0;
+        const reader = response.body.getReader();
+        const chunks = [];
+
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) break;
+
+          chunks.push(value);
+          loaded += value.length;
+
+          if (onProgress && total > 0) {
+            const progress = (loaded / total) * 100;
+            onProgress(progress);
+          }
+        }
+
+        // Combine chunks
+        const allChunks = new Uint8Array(loaded);
+        let position = 0;
+        for (const chunk of chunks) {
+          allChunks.set(chunk, position);
+          position += chunk.length;
+        }
+
+        const content = new TextDecoder('utf-8').decode(allChunks);
+
+        console.log(`[M3U Manager] Downloaded ${(loaded / 1024 / 1024).toFixed(2)} MB`);
+
+        return content;
       }
-
-      // Combine chunks
-      const allChunks = new Uint8Array(loaded);
-      let position = 0;
-      for (const chunk of chunks) {
-        allChunks.set(chunk, position);
-        position += chunk.length;
-      }
-
-      const content = new TextDecoder('utf-8').decode(allChunks);
-
-      console.log(`[M3U Manager] Downloaded ${(loaded / 1024 / 1024).toFixed(2)} MB`);
-
-      return content;
     } catch (error) {
       console.error('[M3U Manager] Fetch error:', error);
       throw new Error(`Failed to fetch M3U: ${error.message}`);
@@ -256,35 +278,25 @@ class M3UManager {
   }
 
   /**
-   * Delete M3U source and related data
+   * Delete UUID completely (map + all files)
+   * @param {string} uuid - UUID to delete
    */
-  async deleteSource(uuid) {
-    // Delete source file
-    await this.fs.delete(this.getSourcePath(uuid));
-
-    // Delete update data
-    await this.fs.delete(this.getUpdatePath(uuid));
-
-    // Delete stats
-    await this.fs.delete(this.getStatsPath(uuid));
-
-    console.log(`[M3U Manager] Deleted source ${uuid}`);
-  }
-
-  /**
-   * Remove UUID from map
-   */
-  async removeFromMap(m3uUrl) {
+  async deleteUUID(uuid) {
+    // Delete from map
     const map = await this.loadMap();
-    const uuid = map[m3uUrl];
+    const url = Object.keys(map).find(key => map[key] === uuid);
 
-    if (uuid) {
-      delete map[m3uUrl];
+    if (url) {
+      delete map[url];
       await this.saveMap(map);
-      return uuid;
     }
 
-    return null;
+    // Delete all files
+    await this.fs.delete(this.getSourcePath(uuid));
+    await this.fs.delete(this.getUpdatePath(uuid));
+    await this.fs.delete(this.getStatsPath(uuid));
+
+    console.log(`[M3U Manager] Deleted UUID ${uuid} and all related files`);
   }
 }
 
