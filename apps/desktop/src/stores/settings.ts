@@ -7,7 +7,6 @@ export type Language = 'en' | 'tr';
 interface SettingsState {
   // Appearance
   theme: Theme;
-  highContrastMode: boolean;
 
   // Localization
   language: Language;
@@ -27,7 +26,6 @@ interface SettingsState {
 
   // Actions
   setTheme: (theme: Theme) => void;
-  setHighContrastMode: (enabled: boolean) => void;
   setLanguage: (language: Language) => void;
   setDefaultCategory: (category: string) => void;
   setAutoSyncInterval: (minutes: number) => void;
@@ -41,7 +39,6 @@ interface SettingsState {
 
 const defaultSettings = {
   theme: 'dark' as Theme,
-  highContrastMode: false,
   language: 'en' as Language,
   defaultCategory: 'all',
   autoSyncInterval: 0,
@@ -58,8 +55,6 @@ export const useSettingsStore = create<SettingsState>()(
       ...defaultSettings,
 
       setTheme: (theme) => set({ theme }),
-
-      setHighContrastMode: (enabled) => set({ highContrastMode: enabled }),
 
       setLanguage: (language) => set({ language }),
 

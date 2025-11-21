@@ -5,6 +5,7 @@ import { M3UObject } from "./m3u";
 import { UserItemData } from "@/types/electron";
 
 export class WatchableObject extends ViewObject {
+  [x: string]: string;
 
   public Url: string = "";
   public Group: string = "";
@@ -35,13 +36,16 @@ export class WatchableObject extends ViewObject {
    * @return {M3UObject} The M3UObject representation of the current instance.
    */
   protected getM3UObject(): M3UObject {
-    const m3u = new M3UObject();
-    m3u.tvgLogo = this.Logo ?? "";
-    m3u.tvgName = this.Name;
-    m3u.urlTvg = this.Url;
-    m3u.groupTitle = this.Group;
-    m3u.date = this.AddedDate;
-    m3u.possibleLiveStream = this.PossibleLiveStream;
+    const m3u: M3UObject = {
+      title: this.Name,
+      url: this.Url,
+      group: this.Group,
+      category: "Movie",
+      logo: this.Logo,
+      year: this.Year
+    };
+    //   m3u.date = this.AddedDate;
+    //   m3u.possibleLiveStream = this.PossibleLiveStream;
     return m3u;
   }
 
@@ -97,7 +101,9 @@ export class TvShowWatchableObject extends WatchableObject {
    */
   get m3UObject(): M3UObject {
     const m3u = super.getM3UObject();
-    m3u.tvShowInfo = [this.Group, this.Season, this.Episode];
+    m3u.category = "Series";
+    m3u.season = this.Season;
+    m3u.episode = this.Episode;
     return m3u;
   }
 }

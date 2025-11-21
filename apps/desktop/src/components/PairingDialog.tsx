@@ -1,7 +1,15 @@
-/**
- * P2P Pairing Dialog
- */
 import { useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@zenith-tv/ui/dialog';
+import { Button } from '@zenith-tv/ui/button';
+import { Input } from '@zenith-tv/ui/input';
+import { Card, CardContent } from '@zenith-tv/ui/card';
+import { Link2 } from 'lucide-react';
 
 interface PairingDialogProps {
   deviceName: string;
@@ -19,34 +27,33 @@ export function PairingDialog({ deviceName, pin, onAccept, onReject }: PairingDi
       setError('Incorrect PIN');
       return;
     }
-
     onAccept(inputPin);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="pairing-title">
-      <div className="bg-gray-900 rounded-lg p-8 max-w-md w-full mx-4 border border-gray-700">
-        <div className="text-center mb-6">
-          <div className="text-5xl mb-4" aria-hidden="true">🔗</div>
-          <h2 id="pairing-title" className="text-2xl font-bold text-white mb-2">
-            Pairing Request
-          </h2>
-          <p className="text-gray-400">
+    <Dialog open={true} onOpenChange={(open) => !open && onReject()}>
+      <DialogContent className="max-w-md" aria-describedby="pairing-description">
+        <DialogHeader className="text-center">
+          <div className="mx-auto mb-4">
+            <Link2 className="w-12 h-12 text-primary" />
+          </div>
+          <DialogTitle className="text-2xl">Pairing Request</DialogTitle>
+          <DialogDescription id="pairing-description">
             {deviceName} wants to connect
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="mb-6">
-          <div className="bg-gray-800 rounded-lg p-4 text-center">
-            <p className="text-sm text-gray-400 mb-2">Enter PIN to pair:</p>
-            <p className="text-4xl font-mono font-bold text-blue-500 tracking-widest">
+        <Card className="mb-4">
+          <CardContent className="pt-6 text-center">
+            <p className="text-sm text-muted-foreground mb-2">Enter PIN to pair:</p>
+            <p className="text-4xl font-mono font-bold text-primary tracking-widest">
               {pin}
             </p>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="mb-4">
-          <input
+        <div className="space-y-2">
+          <Input
             type="text"
             value={inputPin}
             onChange={(e) => {
@@ -54,8 +61,7 @@ export function PairingDialog({ deviceName, pin, onAccept, onReject }: PairingDi
               setError('');
             }}
             placeholder="Enter PIN"
-            className="w-full px-4 py-3 bg-gray-800 text-white rounded-lg border border-gray-700
-                     focus:border-blue-500 focus:outline-none text-center text-2xl font-mono tracking-widest"
+            className="text-center text-2xl font-mono tracking-widest h-14"
             maxLength={4}
             autoFocus
             aria-label="Enter pairing PIN"
@@ -63,29 +69,30 @@ export function PairingDialog({ deviceName, pin, onAccept, onReject }: PairingDi
             aria-describedby={error ? 'pin-error' : undefined}
           />
           {error && (
-            <p id="pin-error" className="text-red-500 text-sm mt-2 text-center" role="alert">{error}</p>
+            <p id="pin-error" className="text-destructive text-sm text-center" role="alert">
+              {error}
+            </p>
           )}
         </div>
 
-        <div className="flex gap-3">
-          <button
+        <div className="flex gap-3 mt-4">
+          <Button
+            variant="outline"
             onClick={onReject}
-            className="flex-1 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg
-                     transition-colors font-medium"
+            className="flex-1"
             aria-label={`Reject pairing request from ${deviceName}`}
           >
             Reject
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleAccept}
-            className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg
-                     transition-colors font-medium"
+            className="flex-1"
             aria-label={`Accept pairing request from ${deviceName}`}
           >
             Accept
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

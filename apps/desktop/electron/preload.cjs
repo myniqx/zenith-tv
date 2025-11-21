@@ -1,50 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
   version: process.versions.electron,
-
-  // Profile Management API
-  profile: {
-    getAll: () => ipcRenderer.invoke('profile:getAll'),
-    get: (username) => ipcRenderer.invoke('profile:get', username),
-    create: (username) => ipcRenderer.invoke('profile:create', username),
-    delete: (username) => ipcRenderer.invoke('profile:delete', username),
-    hasProfile: (username) => ipcRenderer.invoke('profile:hasProfile', username),
-    updateM3U: (username, m3uUrl) => ipcRenderer.invoke('profile:updateM3U', username, m3uUrl),
-    removeM3U: (username, uuid) => ipcRenderer.invoke('profile:removeM3U', username, uuid),
-  },
-
-  // M3U Management API
-  m3u: {
-    // Legacy API (used by ProfileManager)
-    addToProfile: (username, m3uUrl) => ipcRenderer.invoke('m3u:addToProfile', username, m3uUrl),
-    removeFromProfile: (username, uuid) => ipcRenderer.invoke('m3u:removeFromProfile', username, uuid),
-    getProfileM3Us: (username) => ipcRenderer.invoke('m3u:getProfileM3Us', username),
-
-    // New M3U Manager API
-    createUUID: (m3uUrl) => ipcRenderer.invoke('m3u:createUUID', m3uUrl),
-    deleteUUID: (uuid) => ipcRenderer.invoke('m3u:deleteUUID', uuid),
-    getURLForUUID: (uuid) => ipcRenderer.invoke('m3u:getURLForUUID', uuid),
-    getAllUUIDs: () => ipcRenderer.invoke('m3u:getAllUUIDs'),
-    hasSource: (uuid) => ipcRenderer.invoke('m3u:hasSource', uuid),
-    writeUUID: (uuid, data) => ipcRenderer.invoke('m3u:writeUUID', uuid, data),
-    readUUID: (uuid) => ipcRenderer.invoke('m3u:readUUID', uuid),
-    fetchUUID: (urlOrPath) => ipcRenderer.invoke('m3u:fetchUUID', urlOrPath),
-
-    // Event listeners for progress
-    onFetchProgress: (callback) => ipcRenderer.on('m3u:fetch-progress', (_, data) => callback(data)),
-    onUpdateProgress: (callback) => ipcRenderer.on('m3u:update-progress', (_, data) => callback(data)),
-  },
-
-  // User Data API (per-user, per-M3U)
-  userData: {
-    readData: (username, uuid) => ipcRenderer.invoke('userData:readData', username, uuid),
-    writeData: (username, uuid, data) => ipcRenderer.invoke('userData:writeData', username, uuid, data),
-    deleteData: (username, uuid) => ipcRenderer.invoke('userData:deleteData', username, uuid),
-  },
 
   // P2P Remote Control
   p2p: {
@@ -63,8 +21,47 @@ contextBridge.exposeInMainWorld('electron', {
     onSetVolume: (callback) => ipcRenderer.on('p2p:set-volume', (_, volume) => callback(volume)),
   },
 
-  // File operations
-  file: {
-    selectM3U: () => ipcRenderer.invoke('file:selectM3U'),
+  // File System API
+  fs: {
+    readFile: (path, options) => ipcRenderer.invoke('fs:readFile', path, options),
+    writeFile: (path, content, options) => ipcRenderer.invoke('fs:writeFile', path, content, options),
+    readDir: (path, options) => ipcRenderer.invoke('fs:readDir', path, options),
+    mkdir: (path, recursive) => ipcRenderer.invoke('fs:mkdir', path, recursive),
+    delete: (path) => ipcRenderer.invoke('fs:delete', path),
+    move: (oldPath, newPath) => ipcRenderer.invoke('fs:move', oldPath, newPath),
+    copyFile: (sourcePath, destPath) => ipcRenderer.invoke('fs:copyFile', sourcePath, destPath),
+    exists: (path) => ipcRenderer.invoke('fs:exists', path),
+    stats: (path) => ipcRenderer.invoke('fs:stats', path),
+    watch: (path, callback) => {
+      const listener = (_, data) => callback(data.event, data.filename);
+      ipcRenderer.on('fs:watch:change', listener);
+      return ipcRenderer.invoke('fs:watch', path);
+    },
+    unwatch: (watcherId) => ipcRenderer.invoke('fs:unwatch', watcherId),
+  },
+
+  // Fetch API
+  fetch: {
+    request: (url, options) => ipcRenderer.invoke('fetch:request', url, options),
+    stream: (url, options) => ipcRenderer.invoke('fetch:stream', url, options),
+    m3u: (url, onProgress) => ipcRenderer.invoke('fetch:m3u', url, onProgress),
+  },
+
+  // HTTP API (alias for fetch)
+  http: {
+    request: (url, options) => ipcRenderer.invoke('fetch:request', url, options),
+    stream: (url, options) => ipcRenderer.invoke('fetch:stream', url, options),
+  },
+
+  // Dialog API
+  dialog: {
+    openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
+    openDirectory: (options) => ipcRenderer.invoke('dialog:openDirectory', options),
+    saveFile: (options) => ipcRenderer.invoke('dialog:saveFile', options),
+  },
+
+  // App API
+  app: {
+    getPath: (name) => ipcRenderer.invoke('app:getPath', name),
   },
 });

@@ -75,7 +75,7 @@ export class Catalog extends GroupObject {
     if (list !== 'watched') {
       this.watchedList.value.justRemove(watchable);
     }
-    if (list === 'favorite' {
+    if (list === 'favorite') {
       this.watchList.value.justAdd(watchable);
     }
     if (list === 'watched') {

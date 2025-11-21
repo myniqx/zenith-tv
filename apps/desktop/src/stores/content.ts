@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { m3uService } from '../services/m3u-service';
 import { userDataService } from '../services/user-data-service';
 import { parseM3U } from '../services/m3u-parser';
 import { useToastStore } from './toast';
@@ -7,10 +6,24 @@ import { GroupObject } from '@/m3u/group';
 import { LucideCircleCheckBig, LucideFlame, LucideHeart, LucidePodcast, LucideTheater, LucideTv } from 'lucide-react';
 import { WatchableObject } from '@/m3u/watchable';
 import { M3UObject } from '@/m3u/m3u';
+import { FileSyncedState, syncFile } from '@/tools/fileSync';
+import { UserData } from '@/types/userdata';
+import { fileSystem } from '@/libs';
 
 export type CategoryType = 'all' | 'movies' | 'series' | 'live' | 'favorites' | 'recent';
 export type SortBy = 'name' | 'date' | 'recent';
 export type SortOrder = 'asc' | 'desc';
+
+const getUserDataPath = (username: string) => `userData/${username}.json`;
+const getM3USource = (uuid: string) => `m3u/${uuid}/source.m3u`;
+const getM3UUpdate = (uuid: string) => `m3u/${uuid}/update.json`;
+const getM3UStats = (uuid: string) => `m3u/${uuid}/stats.json`;
+
+interface M3UUpdateData {
+  items: Record<string, number>;
+  createdAt: number;
+  updatedAt: number;
+}
 
 export interface SeriesGroup {
   seriesName: string;
@@ -18,46 +31,53 @@ export interface SeriesGroup {
   totalEpisodes: number;
 }
 
-interface ContentState {
-  items: WatchableObject[];
-  recentItems: WatchableObject[];
-  favoritesItems: WatchableObject[];
-  currentCategory: GroupObject;
-  searchQuery: string;
-  sortBy: SortBy;
-  sortOrder: SortOrder;
-  isLoading: boolean;
-  currentUsername: string | null;
-  currentUUID: string | null;
 
-  movieGroup: GroupObject,
-  tvShowGroup: GroupObject,
-  streamGroup: GroupObject,
-  recentGroup: GroupObject,
-  favoriteGroup: GroupObject,
-  watchedGroup: GroupObject,
+type ContentState =
+  FileSyncedState<UserData, 'userData'> &
+  {
+    items: WatchableObject[];
+    recentItems: WatchableObject[];
+    favoritesItems: WatchableObject[];
+    currentCategory: GroupObject;
+    searchQuery: string;
+    sortBy: SortBy;
+    sortOrder: SortOrder;
+    isLoading: boolean;
+    currentUsername: string | null;
+    currentUUID: string | null;
 
-  // Actions
-  setContent: (username: string, uuid: string) => void;
-  load: (fromUpdate?: boolean) => Promise<void>;
-  update: () => Promise<void>;
-  setCategory: (category: GroupObject) => void;
-  setSearchQuery: (query: string) => void;
-  setSortBy: (sortBy: SortBy) => void;
-  setSortOrder: (order: SortOrder) => void;
-  getFilteredItems: () => WatchableObject[];
-  toggleFavorite: (url: string) => Promise<void>;
-  saveWatchProgress: (url: string, position: number, duration: number) => Promise<void>;
-  clearItems: () => void;
+    movieGroup: GroupObject,
+    tvShowGroup: GroupObject,
+    streamGroup: GroupObject,
+    recentGroup: GroupObject,
+    favoriteGroup: GroupObject,
+    watchedGroup: GroupObject,
 
-  // Series helpers
-  getSeriesGroups: () => SeriesGroup[];
-  getEpisodesForSeries: (seriesName: string) => WatchableObject[];
-  getNextEpisode: (currentItem: WatchableObject) => WatchableObject | null;
-  getPreviousEpisode: (currentItem: WatchableObject) => WatchableObject | null;
-}
+    // Actions
+    reset: () => void;
+    setContent: (username: string, uuid: string) => Promise<void>;
+    load: (fromUpdate?: boolean) => Promise<void>;
+    update: () => Promise<void>;
+    setCategory: (category: GroupObject) => void;
+    setSearchQuery: (query: string) => void;
+    setSortBy: (sortBy: SortBy) => void;
+    setSortOrder: (order: SortOrder) => void;
+    getFilteredItems: () => WatchableObject[];
+    toggleFavorite: (url: string) => Promise<void>;
+    saveWatchProgress: (url: string, position: number, duration: number) => Promise<void>;
+    clearItems: () => void;
+
+    // Series helpers
+    getSeriesGroups: () => SeriesGroup[];
+    getEpisodesForSeries: (seriesName: string) => WatchableObject[];
+    getNextEpisode: (currentItem: WatchableObject) => WatchableObject | null;
+    getPreviousEpisode: (currentItem: WatchableObject) => WatchableObject | null;
+  }
 
 export const useContentStore = create<ContentState>((set, get) => ({
+  // File-synced profiles
+  ...syncFile<UserData, 'userData'>(null, [], 'userData')(set, get),
+
   items: [],
   recentItems: [],
   favoritesItems: [],
@@ -76,9 +96,9 @@ export const useContentStore = create<ContentState>((set, get) => ({
   favoriteGroup: null!,
   watchedGroup: null!,
 
-  setContent: (username, uuid) => {
-    // Reset store to initial state with new username/uuid
+  reset: () => {
     const favoriteGroup = new GroupObject("Favorites", LucideHeart);
+    get().setUserDataFile(null)
     set({
       items: [],
       recentItems: [],
@@ -88,8 +108,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
       sortBy: 'name',
       sortOrder: 'asc',
       isLoading: false,
-      currentUsername: username,
-      currentUUID: uuid,
+      currentUsername: null,
+      currentUUID: null,
       movieGroup: new GroupObject("Movies", LucideTheater),
       tvShowGroup: new GroupObject("TV Shows", LucideTv),
       streamGroup: new GroupObject("Live Streams", LucidePodcast),
@@ -99,12 +119,21 @@ export const useContentStore = create<ContentState>((set, get) => ({
     });
   },
 
+  setContent: async (username, uuid) => {
+    get().reset();
+    set({
+      currentUsername: username,
+      currentUUID: uuid,
+    });
+    await get().setUserDataFile(getUserDataPath(username));
+  },
+
   load: async (fromUpdate = false) => {
     /*
       Bu fonksiyonun yapması gerekenler:
         - öncelikle bu fonksiyon kullanıcı seçildi ise çalışabilir (username ve uuid setContent!)
         - bu fonksiyon fetch etmez. kullanıcının bir önceki girişiminden yaptığı kaynakları yükler ayarlar ile birleştirir.
-        - yani readUUID ile source ve update kısmını yükler.
+        - yani UUID ile source ve update kısmını yükler.
         - user'in favori hide etc ayarlarını yükler.
         - sonra parseM3U ile source kısmını parse eder.
         - her bir m3u objesi eklenirken kontrol eder
@@ -126,10 +155,20 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
     try {
       console.log(`[Content Store] Loading content for ${currentUsername}/${currentUUID}`);
-
+      const dateNow = Date.now();
       // Read UUID data using new API
-      const { source, update } = await window.electron.m3u.readUUID(currentUUID);
-      const userData = await window.electron.userData.readData(currentUsername, currentUUID);
+      const source = await fileSystem.readFile(getM3USource(currentUUID));
+      const update = await fileSystem.readJSONOrDefault<M3UUpdateData>(
+        getM3UUpdate(currentUUID),
+        {
+          items: {},
+          createdAt: dateNow,
+          updatedAt: dateNow
+        }
+      );
+
+      // Read user data from IPC and store in state
+      const { userData } = get();
 
       if (!source) {
         if (!fromUpdate) { // dont show error on update
@@ -155,13 +194,13 @@ export const useContentStore = create<ContentState>((set, get) => ({
             break;
         }
 
-        const addedDate = update?.items?.[item.url];
+        const addedDate = update.items?.[item.url];
         if (addedDate) {
           watchable.AddedDate = new Date(addedDate);
           get().recentGroup.AddWatchable(watchable);
         }
         else {
-          watchable.AddedDate = new Date(update?.createdAt || Date.now());
+          watchable.AddedDate = new Date(update.createdAt);
         }
 
         const userItemData = userData[item.url];
@@ -182,13 +221,10 @@ export const useContentStore = create<ContentState>((set, get) => ({
       get().streamGroup.lastCheck();
       get().recentGroup.lastCheck();
 
-      console.log('[Content Store] Read result:', {
-        hasSource: !!source,
-        sourceLength: source?.length,
-        hasUpdate: !!update,
-        updateItemsCount: update?.items?.length,
-      });
-
+      if (update.createdAt === dateNow) {
+        // Create new update file in case it doesn't exist
+        await fileSystem.writeJSON(getM3UUpdate(currentUUID), update);
+      }
     } catch (error) {
       console.error('[Content Store] Failed to load content:', error);
       useToastStore.getState().error('Failed to load content');
@@ -293,10 +329,10 @@ export const useContentStore = create<ContentState>((set, get) => ({
   setSortOrder: (order) => set({ sortOrder: order }),
 
   getFilteredItems: () => {
-    const { recentItems, favoritesItems, currentCategory, searchQuery, sortBy, sortOrder } = get();
+    const { currentCategory, searchQuery, sortBy, sortOrder } = get();
 
     // Step 1: Filter by category
-    let filtered: WatchableObject[] = [...currentCategory.Watchables];
+    let filtered: WatchableObject[] = currentCategory?.Watchables?.length ? [...currentCategory.Watchables] : [];
 
     // Step 2: Apply search filter
     if (searchQuery.trim()) {
@@ -409,10 +445,64 @@ export const useContentStore = create<ContentState>((set, get) => ({
       favoritesItems: [],
       currentUsername: null,
       currentUUID: null,
+      userData: {},
       searchQuery: '',
       sortBy: 'name',
       sortOrder: 'asc',
     });
+  },
+
+  readUserData: async () => {
+    const { currentUsername, currentUUID } = get();
+    if (!currentUsername || !currentUUID) {
+      console.error('Cannot read user data: username or UUID not set');
+      return;
+    }
+
+    const userDataPath = `userData/${currentUsername}.json`;
+
+    try {
+      const userData = await window.electron.userData.readData(currentUsername, currentUUID);
+      set({ userData: userData || {} });
+      console.log(`[Content Store] Read user data for ${currentUsername}/${currentUUID}`);
+    } catch (error) {
+      console.error('[Content Store] Failed to read user data:', error);
+      set({ userData: {} });
+    }
+  },
+
+  updateUserData: async (data: Record<string, UserItemData>) => {
+    const { currentUsername, currentUUID } = get();
+    if (!currentUsername || !currentUUID) {
+      console.error('Cannot update user data: username or UUID not set');
+      return;
+    }
+
+    try {
+      await window.electron.userData.writeData(currentUsername, currentUUID, data);
+      set({ userData: data });
+      console.log(`[Content Store] Updated user data for ${currentUsername}/${currentUUID}`);
+    } catch (error) {
+      console.error('[Content Store] Failed to update user data:', error);
+      throw error;
+    }
+  },
+
+  deleteUserData: async () => {
+    const { currentUsername, currentUUID } = get();
+    if (!currentUsername || !currentUUID) {
+      console.error('Cannot delete user data: username or UUID not set');
+      return;
+    }
+
+    try {
+      await window.electron.userData.deleteData(currentUsername, currentUUID);
+      set({ userData: {} });
+      console.log(`[Content Store] Deleted user data for ${currentUsername}/${currentUUID}`);
+    } catch (error) {
+      console.error('[Content Store] Failed to delete user data:', error);
+      throw error;
+    }
   },
 
   getSeriesGroups: () => {

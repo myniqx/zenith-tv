@@ -1,4 +1,13 @@
 import { useToastStore } from '../stores/toast';
+import { Button } from '@zenith-tv/ui/button';
+import {
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Info,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 
 export function ToastContainer() {
   const { toasts, removeToast } = useToastStore();
@@ -27,66 +36,47 @@ interface ToastProps {
   onClose: () => void;
 }
 
+interface ToastStyle {
+  bg: string;
+  icon: LucideIcon;
+}
+
 function Toast({ type, message, onClose }: ToastProps) {
-  const getStyles = () => {
+  const getStyles = (): ToastStyle => {
     switch (type) {
       case 'success':
-        return {
-          bg: 'bg-green-600',
-          icon: (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-            </svg>
-          ),
-        };
+        return { bg: 'bg-green-600', icon: CheckCircle };
       case 'error':
-        return {
-          bg: 'bg-red-600',
-          icon: (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-            </svg>
-          ),
-        };
+        return { bg: 'bg-destructive', icon: XCircle };
       case 'warning':
-        return {
-          bg: 'bg-yellow-600',
-          icon: (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
-            </svg>
-          ),
-        };
+        return { bg: 'bg-yellow-600', icon: AlertTriangle };
       case 'info':
       default:
-        return {
-          bg: 'bg-blue-600',
-          icon: (
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
-            </svg>
-          ),
-        };
+        return { bg: 'bg-primary', icon: Info };
     }
   };
 
-  const { bg, icon } = getStyles();
+  const { bg, icon: Icon } = getStyles();
 
   return (
     <div
       className={`${bg} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3
                  animate-slide-in-right`}
+      role="alert"
     >
-      <div className="flex-shrink-0">{icon}</div>
+      <div className="flex-shrink-0">
+        <Icon className="w-5 h-5" />
+      </div>
       <p className="flex-1 text-sm font-medium">{message}</p>
-      <button
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={onClose}
-        className="flex-shrink-0 p-1 hover:bg-white/20 rounded transition-colors"
+        className="flex-shrink-0 h-6 w-6 hover:bg-white/20 text-white"
+        aria-label="Dismiss notification"
       >
-        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-        </svg>
-      </button>
+        <X className="w-4 h-4" />
+      </Button>
     </div>
   );
 }

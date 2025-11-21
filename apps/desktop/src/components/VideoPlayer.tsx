@@ -1,8 +1,10 @@
 import { useRef, useState, useEffect } from 'react';
-import { usePlayerStore } from '@zenith-tv/ui/src/stores/player';
+import { usePlayerStore } from '@zenith-tv/ui/stores/player';
 import { PlayerControls } from './PlayerControls';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
+import { Button } from '@zenith-tv/ui/button';
+import { Loader2, AlertTriangle, Film } from 'lucide-react';
 
 export function VideoPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -33,7 +35,7 @@ export function VideoPlayer() {
   useEffect(() => {
     const { setVolume } = usePlayerStore.getState();
     setVolume(defaultVolume);
-  }, []); // Empty deps - only run on mount
+  }, []);
 
   // Save volume changes to settings
   useEffect(() => {
@@ -47,7 +49,6 @@ export function VideoPlayer() {
     const video = videoRef.current;
     if (!video || !currentItem) return;
 
-    // Restore track preferences from localStorage
     const savedTracks = localStorage.getItem('zenith-track-preferences');
     if (savedTracks) {
       try {
@@ -73,7 +74,6 @@ export function VideoPlayer() {
     setErrorMessage('');
     setState('loading');
 
-    // Reload the video
     video.load();
     video.play().catch((err) => {
       console.error('Retry failed:', err);
@@ -91,7 +91,6 @@ export function VideoPlayer() {
     setRetryCount(0);
     setErrorMessage('');
 
-    // Clear any pending retry timeouts
     return () => {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
@@ -123,11 +122,10 @@ export function VideoPlayer() {
     const handleEnded = () => {
       setState('idle');
 
-      // Auto-play next episode if enabled and available
       if (autoPlayNext && currentItem) {
         const nextEpisode = getNextEpisode(currentItem);
         if (nextEpisode) {
-          setTimeout(() => play(nextEpisode), 500); // Small delay for better UX
+          setTimeout(() => play(nextEpisode), 500);
         }
       }
     };
@@ -155,9 +153,8 @@ export function VideoPlayer() {
       setErrorMessage(message);
       setState('error');
 
-      // Auto-retry with exponential backoff (max 3 attempts)
       if (retryCount < 3) {
-        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        const delay = Math.pow(2, retryCount) * 1000;
         retryTimeoutRef.current = setTimeout(() => {
           retryStream();
         }, delay);
@@ -193,15 +190,12 @@ export function VideoPlayer() {
     video.src = currentItem.url;
     setState('loading');
 
-    // Resume from last position if available
     if (currentItem.watchHistory && currentItem.watchHistory.position > 0) {
       const progressPercent = currentItem.watchHistory.position;
 
       video.addEventListener('loadedmetadata', () => {
-        // Convert percentage to seconds
         const position = (progressPercent / 100) * video.duration;
 
-        // Resume if not at the beginning or near the end
         if (position > 0 && position < video.duration - 10) {
           video.currentTime = position;
         }
@@ -223,7 +217,6 @@ export function VideoPlayer() {
     const video = videoRef.current;
     if (!video || !currentItem || state !== 'playing') return;
 
-    // Save progress every 10 seconds
     const saveInterval = setInterval(async () => {
       if (video.duration > 0) {
         try {
@@ -234,7 +227,6 @@ export function VideoPlayer() {
       }
     }, 10000);
 
-    // Save on pause
     const handlePause = async () => {
       if (video.duration > 0) {
         try {
@@ -251,7 +243,6 @@ export function VideoPlayer() {
       clearInterval(saveInterval);
       video.removeEventListener('pause', handlePause);
 
-      // Save progress on unmount
       if (video.duration > 0) {
         saveWatchProgress(currentItem.url, video.currentTime, video.duration)
           .catch(err => console.error('Failed to save watch progress on unmount:', err));
@@ -340,11 +331,11 @@ export function VideoPlayer() {
     return (
       <div className="flex items-center justify-center h-full bg-black/90">
         <div className="text-center">
-          <div className="text-6xl mb-4">🎬</div>
-          <h3 className="text-2xl font-semibold text-gray-300 mb-2">
+          <Film className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-2xl font-semibold text-muted-foreground mb-2">
             No content selected
           </h3>
-          <p className="text-gray-500">
+          <p className="text-muted-foreground/60">
             Select something to watch from your library
           </p>
         </div>
@@ -367,14 +358,14 @@ export function VideoPlayer() {
       {/* Loading spinner */}
       {state === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <Loader2 className="w-16 h-16 text-primary animate-spin" />
         </div>
       )}
 
       {/* Buffering spinner */}
       {state === 'buffering' && (
         <div className="absolute top-4 right-4">
-          <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          <Loader2 className="w-8 h-8 text-white animate-spin" />
         </div>
       )}
 
@@ -382,16 +373,16 @@ export function VideoPlayer() {
       {state === 'error' && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/90">
           <div className="text-center max-w-lg px-6">
-            <div className="text-6xl mb-4">⚠️</div>
-            <h3 className="text-2xl font-semibold text-red-500 mb-2">
+            <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-destructive" />
+            <h3 className="text-2xl font-semibold text-destructive mb-2">
               Playback Error
             </h3>
-            <p className="text-gray-400 mb-2">
+            <p className="text-muted-foreground mb-2">
               {errorMessage || 'Failed to load video stream'}
             </p>
 
             {retryCount > 0 && retryCount < 3 && (
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm text-muted-foreground mb-4">
                 Auto-retrying... (Attempt {retryCount + 1}/3)
               </p>
             )}
@@ -402,15 +393,11 @@ export function VideoPlayer() {
               </p>
             )}
 
-            <button
-              onClick={handleManualRetry}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg
-                       transition-colors font-medium mt-4"
-            >
+            <Button onClick={handleManualRetry} className="mt-4">
               Retry Now
-            </button>
+            </Button>
 
-            <p className="text-xs text-gray-600 font-mono mt-4 truncate max-w-full">
+            <p className="text-xs text-muted-foreground/50 font-mono mt-4 truncate max-w-full">
               {currentItem.url}
             </p>
           </div>
