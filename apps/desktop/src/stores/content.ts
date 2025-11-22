@@ -13,6 +13,25 @@ import { useProfilesStore } from './profiles';
 export type CategoryType = 'all' | 'movies' | 'series' | 'live' | 'favorites' | 'recent';
 export type SortBy = 'name' | 'date' | 'recent';
 export type SortOrder = 'asc' | 'desc';
+export type GroupBy = 'none' | 'group' | 'year' | 'alphabetic';
+
+// Helper function to convert seconds to progress percentage
+const secondsToProgress = (position: number, duration: number): number => {
+  if (duration <= 0) return 0;
+  return Math.round((position / duration) * 100);
+};
+
+// Turkish alphabet letters for alphabetic grouping
+const ALPHABETIC_GROUPS = [
+  'A', 'B', 'C', 'Ç', 'D', 'E', 'F', 'G', 'Ğ', 'H', 'I', 'İ', 'J', 'K', 'L',
+  'M', 'N', 'O', 'Ö', 'P', 'R', 'S', 'Ş', 'T', 'U', 'Ü', 'V', 'Y', 'Z', '#'
+];
+
+export interface ContentGroupData {
+  title: string;
+  items: WatchableObject[] | GroupObject[];
+  type: 'groups' | 'watchables';
+}
 
 const getUserDataPath = (username: string) => `userData/${username}.json`;
 const getM3USource = (uuid: string) => `m3u/${uuid}/source.m3u`;
@@ -36,6 +55,8 @@ type ContentState =
     searchQuery: string;
     sortBy: SortBy;
     sortOrder: SortOrder;
+    groupBy: GroupBy;
+    groupedContent: ContentGroupData[];
     isLoading: boolean;
     currentUsername: string | null;
     currentUUID: string | null;
@@ -56,6 +77,8 @@ type ContentState =
     setSearchQuery: (query: string) => void;
     setSortBy: (sortBy: SortBy) => void;
     setSortOrder: (order: SortOrder) => void;
+    setGroupBy: (groupBy: GroupBy) => void;
+    updateGroupedContent: () => void;
     getFilteredItems: () => WatchableObject[];
     toggleFavorite: (watchable: WatchableObject) => Promise<void>;
     saveWatchProgress: (watchable: WatchableObject, position: number, duration: number) => Promise<void>;
@@ -75,6 +98,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
   searchQuery: '',
   sortBy: 'name',
   sortOrder: 'asc',
+  groupBy: 'none',
+  groupedContent: [],
   isLoading: false,
   currentUsername: null,
   currentUUID: null,
@@ -97,6 +122,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       searchQuery: '',
       sortBy: 'name',
       sortOrder: 'asc',
+      groupBy: 'none',
       isLoading: false,
       currentUsername: null,
       currentUUID: null,
@@ -317,13 +343,247 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
-  setGroup: (group) => set({ currentGroup: group }),
+  setGroup: (group) => {
+    if (get().currentGroup === group) return;
+    set({ currentGroup: group });
+    get().updateGroupedContent();
+  },
 
-  setSearchQuery: (query) => set({ searchQuery: query }),
+  setSearchQuery: (query) => {
+    if (get().searchQuery === query) return;
+    set({ searchQuery: query });
+    get().updateGroupedContent();
+  },
 
-  setSortBy: (sortBy) => set({ sortBy }),
+  setSortBy: (sortBy) => {
+    if (get().sortBy === sortBy) return;
+    set({ sortBy });
+    get().updateGroupedContent();
+  },
 
-  setSortOrder: (order) => set({ sortOrder: order }),
+  setSortOrder: (order) => {
+    if (get().sortOrder === order) return;
+    set({ sortOrder: order });
+    get().updateGroupedContent();
+  },
+
+  setGroupBy: (groupBy) => {
+    if (get().groupBy === groupBy) return;
+    set({ groupBy });
+    get().updateGroupedContent();
+  },
+
+  updateGroupedContent: () => {
+    const { currentGroup, groupBy, searchQuery, sortBy, sortOrder } = get();
+
+    if (!currentGroup) {
+      set({ groupedContent: [] });
+      return;
+    }
+
+    // Helper function to sort items
+    const sortItems = <T extends WatchableObject | GroupObject>(items: T[]): T[] => {
+      return [...items].sort((a, b) => {
+        let comparison = 0;
+
+        if (a instanceof WatchableObject && b instanceof WatchableObject) {
+          switch (sortBy) {
+            case 'name':
+              comparison = a.Name.localeCompare(b.Name);
+              break;
+            case 'date':
+              comparison = new Date(a.AddedDate).getTime() - new Date(b.AddedDate).getTime();
+              break;
+            case 'recent':
+              if (a.userData?.lastWatchedAt && b.userData?.lastWatchedAt) {
+                comparison = new Date(b.userData.lastWatchedAt).getTime() - new Date(a.userData.lastWatchedAt).getTime();
+              } else if (a.userData?.lastWatchedAt) {
+                comparison = -1;
+              } else if (b.userData?.lastWatchedAt) {
+                comparison = 1;
+              }
+              break;
+          }
+        } else {
+          comparison = a.Name.localeCompare(b.Name);
+        }
+
+        return sortOrder === 'asc' ? comparison : -comparison;
+      });
+    };
+
+    // Helper function to filter by search
+    const filterBySearch = (items: WatchableObject[]): WatchableObject[] => {
+      if (!searchQuery.trim()) return items;
+      const query = searchQuery.toLowerCase();
+      return items.filter(item => item.Name.toLowerCase().includes(query));
+    };
+
+    // Helper to get first letter for alphabetic grouping
+    const getFirstLetter = (name: string): string => {
+      const firstChar = name.charAt(0).toUpperCase();
+      if (ALPHABETIC_GROUPS.includes(firstChar)) {
+        return firstChar;
+      }
+      return '#';
+    };
+
+    // Helper to collect all groups recursively
+    const collectGroupsRecursive = (group: GroupObject): GroupObject[] => {
+      const collected: GroupObject[] = [...group.Groups];
+      group.Groups.forEach(g => collected.push(...collectGroupsRecursive(g)));
+      return collected;
+    };
+
+    // Helper to collect all watchables recursively
+    const collectWatchablesRecursive = (group: GroupObject): WatchableObject[] => {
+      const collected: WatchableObject[] = [...group.Watchables];
+      group.Groups.forEach(g => collected.push(...collectWatchablesRecursive(g)));
+      return collected;
+    };
+
+    // Check if we're searching
+    const isSearching = searchQuery.trim().length > 0;
+
+    // Get groups based on search:
+    // - No search: only direct subgroups
+    // - With search: recursive + filter by name
+    const getGroups = (): GroupObject[] => {
+      if (isSearching) {
+        const allGroups = collectGroupsRecursive(currentGroup);
+        const query = searchQuery.toLowerCase();
+        return allGroups.filter(g => g.Name.toLowerCase().includes(query));
+      }
+      return [...currentGroup.Groups];
+    };
+
+    // Get watchables based on search:
+    // - No search: only direct watchables
+    // - With search: recursive + filter by name
+    const getWatchables = (): WatchableObject[] => {
+      if (isSearching) {
+        return filterBySearch(collectWatchablesRecursive(currentGroup));
+      }
+      return [...currentGroup.Watchables];
+    };
+
+    const result: ContentGroupData[] = [];
+
+    switch (groupBy) {
+      case 'none': {
+        // Groups and watchables in a single list style
+        const groups = getGroups();
+        if (groups.length > 0) {
+          result.push({
+            title: 'Groups',
+            items: sortItems(groups),
+            type: 'groups'
+          });
+        }
+
+        const watchables = getWatchables();
+        if (watchables.length > 0) {
+          result.push({
+            title: currentGroup.Name,
+            items: sortItems(watchables),
+            type: 'watchables'
+          });
+        }
+        break;
+      }
+
+      case 'group': {
+        // First ContentGroup: Groups
+        const groups = getGroups();
+        if (groups.length > 0) {
+          result.push({
+            title: 'Groups',
+            items: sortItems(groups),
+            type: 'groups'
+          });
+        }
+
+        // Second ContentGroup: Watchables
+        const watchables = getWatchables();
+        if (watchables.length > 0) {
+          result.push({
+            title: 'Items',
+            items: sortItems(watchables),
+            type: 'watchables'
+          });
+        }
+        break;
+      }
+
+      case 'year': {
+        // Group by year
+        const yearMap = new Map<string, WatchableObject[]>();
+        const filteredWatchables = getWatchables();
+
+        for (const item of filteredWatchables) {
+          const yearKey = item.Year ? item.Year.toString() : 'Unknown Year';
+          if (!yearMap.has(yearKey)) {
+            yearMap.set(yearKey, []);
+          }
+          yearMap.get(yearKey)!.push(item);
+        }
+
+        // Sort years descending (newest first), Unknown Year at the end
+        const sortedYears = Array.from(yearMap.keys()).sort((a, b) => {
+          if (a === 'Unknown Year') return 1;
+          if (b === 'Unknown Year') return -1;
+          return parseInt(b) - parseInt(a);
+        });
+
+        for (const year of sortedYears) {
+          const items = yearMap.get(year)!;
+          if (items.length > 0) {
+            result.push({
+              title: year,
+              items: sortItems(items),
+              type: 'watchables'
+            });
+          }
+        }
+        break;
+      }
+
+      case 'alphabetic': {
+        // Group by first letter
+        const letterMap = new Map<string, WatchableObject[]>();
+        const filteredWatchables = getWatchables();
+
+        for (const item of filteredWatchables) {
+          const letter = getFirstLetter(item.Name);
+          if (!letterMap.has(letter)) {
+            letterMap.set(letter, []);
+          }
+          letterMap.get(letter)!.push(item);
+        }
+
+        // Sort letters by Turkish alphabet order
+        const sortedLetters = Array.from(letterMap.keys()).sort((a, b) => {
+          const indexA = ALPHABETIC_GROUPS.indexOf(a);
+          const indexB = ALPHABETIC_GROUPS.indexOf(b);
+          return indexA - indexB;
+        });
+
+        for (const letter of sortedLetters) {
+          const items = letterMap.get(letter)!;
+          if (items.length > 0) {
+            result.push({
+              title: letter,
+              items: sortItems(items),
+              type: 'watchables'
+            });
+          }
+        }
+        break;
+      }
+    }
+
+    set({ groupedContent: result });
+  },
 
   getFilteredItems: () => {
     const { currentGroup, searchQuery, sortBy, sortOrder } = get();

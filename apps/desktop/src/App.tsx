@@ -14,7 +14,8 @@ import { useDebounce } from './hooks/useDebounce';
 import { Button } from '@zenith-tv/ui/button';
 import { Input } from '@zenith-tv/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zenith-tv/ui/select';
-import { X, Search, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import { X, Search, ChevronUp, ChevronDown, GripVertical, Layers } from 'lucide-react';
+import type { GroupBy } from './stores/content';
 
 function ResizeHandle({ className = '' }: { className?: string }) {
   return (
@@ -44,6 +45,8 @@ function App() {
     setSortBy,
     sortOrder,
     setSortOrder,
+    groupBy,
+    setGroupBy,
     getFilteredItems,
   } = useContentStore();
 
@@ -207,8 +210,21 @@ function App() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <Select value={groupBy} onValueChange={(value) => setGroupBy(value as GroupBy)}>
+                    <SelectTrigger className="w-[140px]" aria-label="Group content by">
+                      <Layers className="w-4 h-4 mr-2" />
+                      <SelectValue placeholder="Group by..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Grouping</SelectItem>
+                      <SelectItem value="group">By Group</SelectItem>
+                      <SelectItem value="year">By Year</SelectItem>
+                      <SelectItem value="alphabetic">Alphabetic</SelectItem>
+                    </SelectContent>
+                  </Select>
+
                   <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'name' | 'date' | 'recent')}>
-                    <SelectTrigger className="w-[180px]" aria-label="Sort content by">
+                    <SelectTrigger className="w-[150px]" aria-label="Sort content by">
                       <SelectValue placeholder="Sort by..." />
                     </SelectTrigger>
                     <SelectContent>
