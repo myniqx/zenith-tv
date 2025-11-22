@@ -15,7 +15,7 @@ type M3UMap = Record<string, string>;
 type ProfilesState = FileSyncedState<Profile[], 'profiles'> &
   FileSyncedState<M3UMap, 'm3uMap'> & {
     // M3U Map helpers
-    getUUIDForURL: (url: string) => string | null;
+    getUrlFromUUID: (uuid: string) => string | null;
     getOrCreateUUID: (url: string) => Promise<string>;
     removeURLMapping: (url: string) => Promise<void>;
     isUUIDUsed: (uuid: string) => boolean;
@@ -51,9 +51,9 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
   },
 
   // M3U Map helpers
-  getUUIDForURL: (url) => {
+  getUrlFromUUID: (uuid) => {
     const { m3uMap } = get();
-    return m3uMap[url] || null;
+    return Object.entries(m3uMap).find(([_, id]) => id === uuid)?.[0] || null;
   },
 
   getOrCreateUUID: async (url) => {

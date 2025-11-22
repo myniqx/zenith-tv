@@ -1,14 +1,14 @@
 import { create } from 'zustand';
-import { userDataService } from '../services/user-data-service';
 import { parseM3U } from '../services/m3u-parser';
 import { useToastStore } from './toast';
-import { GroupObject } from '@/m3u/group';
+import { GroupObject, TvShowGroupObject, TvShowSeasonGroupObject } from '@/m3u/group';
 import { LucideCircleCheckBig, LucideFlame, LucideHeart, LucidePodcast, LucideTheater, LucideTv } from 'lucide-react';
-import { WatchableObject } from '@/m3u/watchable';
+import { TvShowWatchableObject, WatchableObject } from '@/m3u/watchable';
 import { M3UObject } from '@/m3u/m3u';
 import { FileSyncedState, syncFile } from '@/tools/fileSync';
 import { UserData } from '@/types/userdata';
-import { fileSystem } from '@/libs';
+import { fileSystem, http } from '@/libs';
+import { useProfilesStore } from './profiles';
 
 export type CategoryType = 'all' | 'movies' | 'series' | 'live' | 'favorites' | 'recent';
 export type SortBy = 'name' | 'date' | 'recent';
@@ -25,12 +25,6 @@ interface M3UUpdateData {
   updatedAt: number;
 }
 
-export interface SeriesGroup {
-  seriesName: string;
-  episodes: WatchableObject[];
-  totalEpisodes: number;
-}
-
 
 type ContentState =
   FileSyncedState<UserData, 'userData'> &
@@ -38,7 +32,7 @@ type ContentState =
     items: WatchableObject[];
     recentItems: WatchableObject[];
     favoritesItems: WatchableObject[];
-    currentCategory: GroupObject;
+    currentGroup: GroupObject | null;
     searchQuery: string;
     sortBy: SortBy;
     sortOrder: SortOrder;
@@ -58,30 +52,26 @@ type ContentState =
     setContent: (username: string, uuid: string) => Promise<void>;
     load: (fromUpdate?: boolean) => Promise<void>;
     update: () => Promise<void>;
-    setCategory: (category: GroupObject) => void;
+    setGroup: (group: GroupObject | null) => void;
     setSearchQuery: (query: string) => void;
     setSortBy: (sortBy: SortBy) => void;
     setSortOrder: (order: SortOrder) => void;
     getFilteredItems: () => WatchableObject[];
-    toggleFavorite: (url: string) => Promise<void>;
-    saveWatchProgress: (url: string, position: number, duration: number) => Promise<void>;
-    clearItems: () => void;
+    toggleFavorite: (watchable: WatchableObject) => Promise<void>;
+    saveWatchProgress: (watchable: WatchableObject, position: number, duration: number) => Promise<void>;
 
-    // Series helpers
-    getSeriesGroups: () => SeriesGroup[];
-    getEpisodesForSeries: (seriesName: string) => WatchableObject[];
-    getNextEpisode: (currentItem: WatchableObject) => WatchableObject | null;
-    getPreviousEpisode: (currentItem: WatchableObject) => WatchableObject | null;
+    getNextEpisode: (currentItem: WatchableObject) => WatchableObject | undefined;
+    getPreviousEpisode: (currentItem: WatchableObject) => WatchableObject | undefined;
   }
 
 export const useContentStore = create<ContentState>((set, get) => ({
   // File-synced profiles
-  ...syncFile<UserData, 'userData'>(null, [], 'userData')(set, get),
+  ...syncFile<UserData, 'userData'>(null, {}, 'userData')(set, get),
 
   items: [],
   recentItems: [],
   favoritesItems: [],
-  currentCategory: null!,
+  currentGroup: null,
   searchQuery: '',
   sortBy: 'name',
   sortOrder: 'asc',
@@ -103,7 +93,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       items: [],
       recentItems: [],
       favoritesItems: [],
-      currentCategory: favoriteGroup,
+      currentGroup: null,
       searchQuery: '',
       sortBy: 'name',
       sortOrder: 'asc',
@@ -120,12 +110,17 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   setContent: async (username, uuid) => {
+    if (username === get().currentUsername && uuid === get().currentUUID) {
+      return
+    }
+
     get().reset();
     set({
       currentUsername: username,
       currentUUID: uuid,
     });
     await get().setUserDataFile(getUserDataPath(username));
+    await get().load();
   },
 
   load: async (fromUpdate = false) => {
@@ -249,51 +244,56 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
     try {
       console.log(`[Content Store] Updating content for ${currentUsername}/${currentUUID}`);
+      const dateNow = Date.now();
 
       // Get URL for this UUID
-      const url = await window.electron.m3u.getURLForUUID(currentUUID);
-      const { update } = await window.electron.m3u.readUUID(currentUUID);
-
+      const url = useProfilesStore.getState().getUrlFromUUID(currentUUID);
       if (!url) {
         throw new Error('No URL found for this UUID');
       }
 
+      const update = await fileSystem.readJSONOrDefault<M3UUpdateData>(
+        getM3UUpdate(currentUUID),
+        {
+          items: {},
+          createdAt: dateNow,
+          updatedAt: dateNow
+        }
+      );
+
       console.log(`[Content Store] Fetching from: ${url}`);
 
       // Fetch fresh content from URL or file
-      const source = await window.electron.m3u.fetchUUID(url);
-
+      const source = await http.fetchM3U(url);
       console.log(`[Content Store] Fetched ${source.length} bytes`);
-
-      const dateNow = Date.now();
-      const lastUpdate = {
-        createdAt: dateNow,
-        items: {},
-        ...update, // overwrite with existing data
-        lastUpdated: dateNow, // overwrite with current time
-      };
 
       const m3uList = await parseM3U(source);
 
+      if (m3uList.length) {
+        await fileSystem.writeFile(getM3USource(currentUUID), source);
+      }
+
       const AddIf = (group: GroupObject, item: M3UObject) => {
-        if (group.has(item)) // TODO: create an has function that returns boolean if item exists regarding it is a tv show (different logic)
+        if (group.has(item))
           return;
         const watchable = group.addGroup(item.group).Add(item);
         watchable.AddedDate = new Date(dateNow);
-        lastUpdate.items[item.url] = dateNow;
+        update.items[item.url] = dateNow;
         get().recentGroup.AddWatchable(watchable);
       }
+
+      const { movieGroup, tvShowGroup, streamGroup } = get();
 
       for (const item of m3uList) {
         switch (item.category) {
           case 'Movie':
-            AddIf(get().movieGroup, item);
+            AddIf(movieGroup, item);
             break;
           case 'Series':
-            AddIf(get().tvShowGroup, item);
+            AddIf(tvShowGroup, item);
             break;
           case 'LiveStream':
-            AddIf(get().streamGroup, item);
+            AddIf(streamGroup, item);
             break;
         }
       }
@@ -305,10 +305,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       get().recentGroup.lastCheck();
 
       // Write to storage using new API
-      await window.electron.m3u.writeUUID(currentUUID, {
-        source,
-        update: lastUpdate,
-      });
+      await fileSystem.writeJSON(getM3UUpdate(currentUUID), update);
 
       console.log(`[Content Store] Content updated successfully`);
       useToastStore.getState().success('Content updated successfully');
@@ -320,7 +317,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
-  setCategory: (category) => set({ currentCategory: category }),
+  setGroup: (group) => set({ currentGroup: group }),
 
   setSearchQuery: (query) => set({ searchQuery: query }),
 
@@ -329,10 +326,10 @@ export const useContentStore = create<ContentState>((set, get) => ({
   setSortOrder: (order) => set({ sortOrder: order }),
 
   getFilteredItems: () => {
-    const { currentCategory, searchQuery, sortBy, sortOrder } = get();
+    const { currentGroup, searchQuery, sortBy, sortOrder } = get();
 
-    // Step 1: Filter by category
-    let filtered: WatchableObject[] = currentCategory?.Watchables?.length ? [...currentCategory.Watchables] : [];
+    // Step 1: Filter by group
+    let filtered: WatchableObject[] = currentGroup?.Watchables?.length ? [...currentGroup.Watchables] : [];
 
     // Step 2: Apply search filter
     if (searchQuery.trim()) {
@@ -370,25 +367,24 @@ export const useContentStore = create<ContentState>((set, get) => ({
     return sorted;
   },
 
-  toggleFavorite: async (url) => {
+  toggleFavorite: async (watchable) => {
     const { currentUsername, currentUUID } = get();
     if (!currentUsername || !currentUUID) return;
 
+
     try {
-      const isFavorite = await userDataService.toggleFavorite(currentUsername, currentUUID, url);
+      const { setUserData } = get();
+      const favorite = !watchable.userData.favorite
 
-      // Update local state
-      set((state) => ({
-        items: state.items.map((item) =>
-          item.url === url ? { ...item, isFavorite } : item
-        ),
-      }));
+      watchable.userData.favorite = favorite;
 
-      // Reload favorites list
-      await get().loadFavorites(currentUsername, currentUUID);
+      setUserData(p => ({
+        ...p,
+        [watchable.Url]: watchable.userData
+      }))
 
       // Show toast notification
-      if (isFavorite) {
+      if (favorite) {
         useToastStore.getState().success('Added to favorites');
       } else {
         useToastStore.getState().info('Removed from favorites');
@@ -399,189 +395,68 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
-  saveWatchProgress: async (url, position, duration) => {
+  saveWatchProgress: async (watchable, position, duration) => {
     const { currentUsername, currentUUID } = get();
     if (!currentUsername || !currentUUID) return;
+    if (watchable.category === 'LiveStream') return;
 
     try {
       // Convert seconds to progress percentage
       const progress = secondsToProgress(position, duration);
 
-      // Save progress
-      const userData = await userDataService.updateWatchProgress(
-        currentUsername,
-        currentUUID,
-        url,
-        progress
-      );
+      watchable.userData.watchProgress = progress;
+      if (progress > 95) {
+        watchable.userData.watched = true;
+        watchable.userData.watchedAt = Date.now();
+      }
 
-      // Update local state
-      set((state) => ({
-        items: state.items.map((item) =>
-          item.url === url
-            ? {
-              ...item,
-              watchHistory: {
-                lastWatched: new Date(),
-                position: progress,
-                duration: 100, // Percentage-based
-              },
-            }
-            : item
-        ),
-      }));
+      get().setUserData(p => ({
+        ...p,
+        [watchable.Url]: watchable.userData
+      }))
 
-      // Reload recent list
-      await get().loadRecent(currentUsername, currentUUID);
     } catch (error) {
       console.error('Failed to save watch progress:', error);
     }
   },
 
-  clearItems: () => {
-    set({
-      items: [],
-      recentItems: [],
-      favoritesItems: [],
-      currentUsername: null,
-      currentUUID: null,
-      userData: {},
-      searchQuery: '',
-      sortBy: 'name',
-      sortOrder: 'asc',
-    });
-  },
-
-  readUserData: async () => {
-    const { currentUsername, currentUUID } = get();
-    if (!currentUsername || !currentUUID) {
-      console.error('Cannot read user data: username or UUID not set');
-      return;
-    }
-
-    const userDataPath = `userData/${currentUsername}.json`;
-
-    try {
-      const userData = await window.electron.userData.readData(currentUsername, currentUUID);
-      set({ userData: userData || {} });
-      console.log(`[Content Store] Read user data for ${currentUsername}/${currentUUID}`);
-    } catch (error) {
-      console.error('[Content Store] Failed to read user data:', error);
-      set({ userData: {} });
-    }
-  },
-
-  updateUserData: async (data: Record<string, UserItemData>) => {
-    const { currentUsername, currentUUID } = get();
-    if (!currentUsername || !currentUUID) {
-      console.error('Cannot update user data: username or UUID not set');
-      return;
-    }
-
-    try {
-      await window.electron.userData.writeData(currentUsername, currentUUID, data);
-      set({ userData: data });
-      console.log(`[Content Store] Updated user data for ${currentUsername}/${currentUUID}`);
-    } catch (error) {
-      console.error('[Content Store] Failed to update user data:', error);
-      throw error;
-    }
-  },
-
-  deleteUserData: async () => {
-    const { currentUsername, currentUUID } = get();
-    if (!currentUsername || !currentUUID) {
-      console.error('Cannot delete user data: username or UUID not set');
-      return;
-    }
-
-    try {
-      await window.electron.userData.deleteData(currentUsername, currentUUID);
-      set({ userData: {} });
-      console.log(`[Content Store] Deleted user data for ${currentUsername}/${currentUUID}`);
-    } catch (error) {
-      console.error('[Content Store] Failed to delete user data:', error);
-      throw error;
-    }
-  },
-
-  getSeriesGroups: () => {
-    const { items } = get();
-    const seriesItems = items.filter((item) => item.category.type === 'series');
-
-    // Group by series name
-    const groups = new Map<string, WatchableObject[]>();
-    seriesItems.forEach((item) => {
-      if (item.category.type === 'series') {
-        const seriesName = item.category.episode.seriesName;
-        if (!groups.has(seriesName)) {
-          groups.set(seriesName, []);
-        }
-        groups.get(seriesName)!.push(item);
-      }
-    });
-
-    // Convert to SeriesGroup array and sort episodes
-    return Array.from(groups.entries()).map(([seriesName, episodes]) => {
-      const sortedEpisodes = [...episodes].sort((a, b) => {
-        if (a.category.type === 'series' && b.category.type === 'series') {
-          const seasonDiff = a.category.episode.season - b.category.episode.season;
-          if (seasonDiff !== 0) return seasonDiff;
-          return a.category.episode.episode - b.category.episode.episode;
-        }
-        return 0;
-      });
-
-      return {
-        seriesName,
-        episodes: sortedEpisodes,
-        totalEpisodes: sortedEpisodes.length,
-      };
-    }).sort((a, b) => a.seriesName.localeCompare(b.seriesName));
-  },
-
-  getEpisodesForSeries: (seriesName) => {
-    const { items } = get();
-    const episodes = items.filter(
-      (item) =>
-        item.category.type === 'series' &&
-        item.category.episode.seriesName === seriesName
-    );
-
-    // Sort by season and episode
-    return episodes.sort((a, b) => {
-      if (a.category.type === 'series' && b.category.type === 'series') {
-        const seasonDiff = a.category.episode.season - b.category.episode.season;
-        if (seasonDiff !== 0) return seasonDiff;
-        return a.category.episode.episode - b.category.episode.episode;
-      }
-      return 0;
-    });
-  },
-
   getNextEpisode: (currentItem) => {
-    if (currentItem.category.type !== 'series') return null;
+    if (currentItem.category !== 'Series') return undefined;
+    const tvShow = currentItem as TvShowWatchableObject;
+    const seasonGroup = tvShow.UpperLevel as TvShowSeasonGroupObject;
 
-    const episodes = get().getEpisodesForSeries(currentItem.category.episode.seriesName);
-    const currentIndex = episodes.findIndex((ep) => ep.url === currentItem.url);
 
-    if (currentIndex === -1 || currentIndex === episodes.length - 1) {
-      return null;
+    const watchable = seasonGroup.getEpisode(tvShow.Episode + 1);
+    if (watchable) {
+      return watchable;
     }
 
-    return episodes[currentIndex + 1];
+    const tvShowGroup = seasonGroup.UpperLevel as TvShowGroupObject;
+
+    return tvShowGroup.getEpisode(seasonGroup.Season + 1, 1);
   },
 
   getPreviousEpisode: (currentItem) => {
-    if (currentItem.category.type !== 'series') return null;
+    if (currentItem.category !== 'Series') return undefined;
 
-    const episodes = get().getEpisodesForSeries(currentItem.category.episode.seriesName);
-    const currentIndex = episodes.findIndex((ep) => ep.url === currentItem.url);
+    const tvShow = currentItem as TvShowWatchableObject;
+    const seasonGroup = tvShow.UpperLevel as TvShowSeasonGroupObject;
 
-    if (currentIndex <= 0) {
-      return null;
+    const prevEpisode = tvShow.Episode - 1
+    if (prevEpisode > 0) {
+      return seasonGroup.getEpisode(prevEpisode);
     }
 
-    return episodes[currentIndex - 1];
+    const prevSeason = seasonGroup.Season - 1;
+    if (prevSeason > 0) {
+      const tvShowGroup = seasonGroup.UpperLevel as TvShowGroupObject;
+      const prevSeasonGroup = tvShowGroup.getSeason(prevSeason);
+
+      if (prevSeasonGroup) {
+        return prevSeasonGroup.getEpisode(prevSeasonGroup.episodeCount);
+      }
+    }
+
+    return undefined;
   },
 }));

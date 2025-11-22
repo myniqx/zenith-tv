@@ -9,6 +9,7 @@ import { Badge } from '@zenith-tv/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@zenith-tv/ui/alert-dialog';
 import { Separator } from '@zenith-tv/ui/separator';
 import { X, Plus, FileUp, Check, Trash2, RefreshCw, Tv, User } from 'lucide-react';
+import { useContentStore } from '@/stores/content';
 
 
 
@@ -24,7 +25,9 @@ export function ProfileManager() {
     getCurrentUsername,
     getCurrentUUID,
   } = useProfilesStore();
-  console.log({ profiles })
+
+  const update = useContentStore(s => s.update);
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAddM3UForm, setShowAddM3UForm] = useState(false);
   const [newUrl, setNewUrl] = useState('');
@@ -273,10 +276,7 @@ export function ProfileManager() {
 
                                   <div className="flex items-center gap-1 ml-2">
                                     <Button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        console.log('TODO: Sync M3U', uuid);
-                                      }}
+                                      onClick={() => update()}
                                       variant="ghost"
                                       size="icon"
                                       className="h-8 w-8"

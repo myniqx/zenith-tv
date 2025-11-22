@@ -12,6 +12,4 @@ export interface UserItemData {
   subtitleTrack?: number;
 }
 
-export interface UserData {
-  [url: string]: UserItemData;
-}
+export type UserData = Record<string, UserItemData>;

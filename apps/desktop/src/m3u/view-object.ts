@@ -10,7 +10,7 @@ export class ViewObject {
   public LogoPercent: number = 0.0;
 
   public isSticky: boolean = false;
-  public AddedDate: Date | undefined = undefined;
+  public AddedDate: Date = null!;
 
   get TitleIcon(): LucideIcon { return LucideFolder; }
   get Title(): string {

@@ -4,6 +4,7 @@ use crate::year_detector::detect_year;
 
 /// Content category (simplified - episode info moved to M3UItem)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
 pub enum Category {
     /// Live stream (no file extension in URL)
     LiveStream,

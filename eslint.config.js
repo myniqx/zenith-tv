@@ -70,12 +70,7 @@ export default [
           varsIgnorePattern: '^_',
         },
       ],
-      'no-console': [
-        'warn',
-        {
-          allow: ['warn', 'error'],
-        },
-      ],
+      'no-console': 'off',
       'no-unused-vars': 'off', // Use TypeScript version instead
     },
   },

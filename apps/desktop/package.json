@@ -16,6 +16,7 @@
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@radix-ui/react-tooltip": "^1.2.8",
 		"@zenith-tv/parser": "workspace:*",
 		"@zenith-tv/protocol": "workspace:*",
 		"@zenith-tv/types": "workspace:*",
@@ -25,6 +26,7 @@
 		"lucide-react": "0.554.0",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",
+		"react-resizable-panels": "^3.0.6",
 		"react-window": "^2.2.3",
 		"tailwind-merge": "^3.4.0",
 		"ws": "^8.18.3",

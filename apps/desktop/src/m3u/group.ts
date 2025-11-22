@@ -146,7 +146,7 @@ export class GroupObject extends ViewObject {
 
   get LiveStreamCount(): number {
     return this.Groups.reduce((total, g) => total + g.LiveStreamCount, 0) +
-      this.Watchables.reduce((total, w) => w.possibleLiveStream ? total + 1 : total, 0);
+      this.Watchables.reduce((total, w) => w.category === 'LiveStream' ? total + 1 : total, 0);
   }
 
   get TvShowSeasonCount(): number {
@@ -182,7 +182,7 @@ export class GroupObject extends ViewObject {
       if (m instanceof GroupObject)
         total += (<GroupObject>m).MovieCount;
     }
-    return this.Watchables.reduce((total, w) => w.possibleLiveStream == false ? total + 1 : total, total);
+    return this.Watchables.reduce((total, w) => w.category === 'Movie' ? total + 1 : total, total);
   }
 
   get TvShowCount(): number {
@@ -204,6 +204,11 @@ export class GroupObject extends ViewObject {
   public hasItem(item: WatchableObject): boolean {
     const group = this.Groups.find(g => g.Title === item.Title);
     return !!(group && group.Watchables.some(w => w.Url === item.Url));
+  }
+
+  public has(item: M3UObject): boolean {
+    const group = this.Groups.find(g => g.Title === item.title);
+    return !!(group && group.Watchables.some(w => w.Url === item.url));
   }
 
   public Add(m3u: M3UObject): WatchableObject {
@@ -303,7 +308,7 @@ export class GroupObject extends ViewObject {
 
 }
 
-class TvShowGroupObject extends GroupObject {
+export class TvShowGroupObject extends GroupObject {
 
   get episodeCount(): number {
     return this.Groups.reduce((last, m) => m instanceof TvShowSeasonGroupObject ?
@@ -331,12 +336,28 @@ class TvShowGroupObject extends GroupObject {
     this.Groups.push(groupObject);
     return groupObject;
   }
+
+  getSeason(season: number): TvShowSeasonGroupObject | undefined {
+    return this.Groups.find(g => g instanceof TvShowSeasonGroupObject && g.Season === season) as TvShowSeasonGroupObject;
+  }
+
+  getEpisode(season: number, episode: number): WatchableObject | undefined {
+    return this.getSeason(season)?.getEpisode(episode);
+  }
+
 }
 
-class TvShowSeasonGroupObject extends GroupObject {
+export class TvShowSeasonGroupObject extends GroupObject {
   constructor() {
     super();
     this.GetListIcon = LucideTv;
+  }
+
+  public getEpisode(episode: number): WatchableObject | undefined {
+    return this.Watchables.find(w =>
+      w instanceof TvShowWatchableObject &&
+      (<TvShowWatchableObject>w).Episode === episode
+    )
   }
 
   public Season: number = 0;

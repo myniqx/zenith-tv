@@ -2,17 +2,14 @@ import { LucideCheck, LucideHeart, LucidePodcast, LucideTheater, LucideTv } from
 import { ListType, LucideIcon } from "./types";
 import { ViewObject } from "./view-object";
 import { M3UObject } from "./m3u";
-import { UserItemData } from "@/types/electron";
+import { UserItemData } from "@/types/userdata";
 
 export class WatchableObject extends ViewObject {
-  [x: string]: string;
-
   public Url: string = "";
   public Group: string = "";
-  public possibleLiveStream: boolean | null = null;
   public Year: number | undefined = undefined;
   public userData: UserItemData = {};
-
+  public category: M3UObject["category"] = "Movie";
   public listed: ListType = 'none';
 
   /**
@@ -40,7 +37,7 @@ export class WatchableObject extends ViewObject {
       title: this.Name,
       url: this.Url,
       group: this.Group,
-      category: "Movie",
+      category: this.category,
       logo: this.Logo,
       year: this.Year
     };
@@ -55,7 +52,7 @@ export class WatchableObject extends ViewObject {
    * @return {string} The number of days ago the AddedDate was, or an empty string if AddedDate is undefined.
    */
   private calculateDateDiff(): string {
-    if (this.AddedDate !== undefined) {
+    if (this.AddedDate) {
       const now = new Date();
       const timeDiff = Math.floor((now.getTime() - this.AddedDate.getTime()) / (1000 * 60 * 60 * 24));
       return `${timeDiff} days ago.`;
@@ -69,22 +66,8 @@ export class WatchableObject extends ViewObject {
   }
 
 
-  /**
-   * Checks if the current URL is possible live stream.
-   * (basicly no extension no streaming...)
-   *
-   * @return {boolean} true if the URL is possible live stream, false otherwise.
-   */
-  public get PossibleLiveStream(): boolean {
-    if (this.possibleLiveStream === null) {
-      const i = this.Url.lastIndexOf('/');
-      this.possibleLiveStream = i >= 0 ? this.Url.indexOf('.', i) === -1 : false;
-    }
-    return this.possibleLiveStream === true;
-  }
-
-  get Title(): string { return this.PossibleLiveStream ? "Live Stream" : "Movie"; }
-  get TitleIcon(): LucideIcon { return this.PossibleLiveStream ? LucidePodcast : LucideTheater; }
+  get Title(): string { return this.category }
+  get TitleIcon(): LucideIcon { return this.category === 'LiveStream' ? LucidePodcast : LucideTheater; }
 }
 
 export class TvShowWatchableObject extends WatchableObject {

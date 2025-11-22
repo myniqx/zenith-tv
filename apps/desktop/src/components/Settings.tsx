@@ -5,6 +5,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
+  DialogClose,
 } from '@zenith-tv/ui/dialog';
 import {
   Select,
@@ -19,11 +21,7 @@ import { Label } from '@zenith-tv/ui/label';
 import { Switch } from '@zenith-tv/ui/switch';
 import { Slider } from '@zenith-tv/ui/slider';
 import { Separator } from '@zenith-tv/ui/separator';
-import { Palette, FileText, Play, Wifi } from 'lucide-react';
-
-interface SettingsProps {
-  onClose: () => void;
-}
+import { Palette, FileText, Play, Wifi, Settings as SettingsIcon } from 'lucide-react';
 
 interface SettingsSectionProps {
   title: string;
@@ -63,7 +61,7 @@ function SettingRow({ label, description, children }: SettingRowProps) {
   );
 }
 
-export function Settings({ onClose }: SettingsProps) {
+export function Settings() {
   const {
     theme,
     highContrastMode,
@@ -98,7 +96,17 @@ export function Settings({ onClose }: SettingsProps) {
   };
 
   return (
-    <Dialog open={true} onOpenChange={onClose}>
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Settings"
+          aria-label="Open settings"
+        >
+          <SettingsIcon className="w-5 h-5" />
+        </Button>
+      </DialogTrigger>
       <DialogContent
         className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col"
         aria-describedby=""
@@ -286,7 +294,9 @@ export function Settings({ onClose }: SettingsProps) {
           <Button variant="outline" onClick={handleReset}>
             Reset to Defaults
           </Button>
-          <Button onClick={onClose}>Done</Button>
+          <DialogClose asChild>
+            <Button>Done</Button>
+          </DialogClose>
         </div>
       </DialogContent>
     </Dialog>
