@@ -79,7 +79,7 @@ export class GroupObject extends ViewObject {
       const gr = this.Groups[i];
       gr.lastCheck();
       if (gr.TotalCount == 0)
-        this.Groups.slice(i, 1);
+        this.Groups.splice(i, 1);
     }
     const compare = (a: ViewObject, b: ViewObject) => {
       if (a.isSticky && !b.isSticky) return -1;

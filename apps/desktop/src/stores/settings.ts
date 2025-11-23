@@ -1,50 +1,104 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type Theme = 'dark' | 'light';
+export type Theme = 'dark' | 'light' | 'system';
 export type Language = 'en' | 'tr';
+export type BufferSize = 5 | 10 | 15 | 30;
+export type PlayerBackend = 'html5' | 'vlc' | 'auto';
+
+export interface KeyboardShortcuts {
+  // Player
+  playPause: string;
+  seekForward: string;
+  seekBackward: string;
+  volumeUp: string;
+  volumeDown: string;
+  toggleMute: string;
+  toggleFullscreen: string;
+  // Navigation
+  openSearch: string;
+  openSettings: string;
+  openProfileManager: string;
+}
 
 interface SettingsState {
   // Appearance
   theme: Theme;
 
-  // Localization
+  // TODO: Implement i18n support
   language: Language;
 
-  // Content
-  defaultCategory: string;
-  autoSyncInterval: number; // in minutes, 0 = disabled
-
   // Player
+  playerBackend: PlayerBackend;
   defaultVolume: number; // 0-1
   autoResume: boolean;
   autoPlayNext: boolean;
+  bufferSize: BufferSize;
 
-  // Network (for future P2P)
+  // Startup
+  autoLoadLastProfile: boolean;
+  rememberLayout: boolean;
+  lastProfileId: string | null;
+  lastLayout: {
+    category: string;
+    sortBy: string;
+    groupBy: string;
+  } | null;
+
+  // Keyboard Shortcuts
+  keyboardShortcuts: KeyboardShortcuts;
+
+  // TODO: Enable when P2P is ready
   deviceName: string;
   serverPort: number;
 
   // Actions
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Language) => void;
-  setDefaultCategory: (category: string) => void;
-  setAutoSyncInterval: (minutes: number) => void;
+  setPlayerBackend: (backend: PlayerBackend) => void;
   setDefaultVolume: (volume: number) => void;
   setAutoResume: (enabled: boolean) => void;
   setAutoPlayNext: (enabled: boolean) => void;
+  setBufferSize: (size: BufferSize) => void;
+  setAutoLoadLastProfile: (enabled: boolean) => void;
+  setRememberLayout: (enabled: boolean) => void;
+  setLastProfileId: (id: string | null) => void;
+  setLastLayout: (layout: { category: string; sortBy: string; groupBy: string } | null) => void;
+  setKeyboardShortcut: (action: keyof KeyboardShortcuts, key: string) => void;
+  resetKeyboardShortcuts: () => void;
   setDeviceName: (name: string) => void;
   setServerPort: (port: number) => void;
   resetSettings: () => void;
 }
 
+export const defaultKeyboardShortcuts: KeyboardShortcuts = {
+  // Player
+  playPause: 'Space',
+  seekForward: 'ArrowRight',
+  seekBackward: 'ArrowLeft',
+  volumeUp: 'ArrowUp',
+  volumeDown: 'ArrowDown',
+  toggleMute: 'KeyM',
+  toggleFullscreen: 'KeyF',
+  // Navigation
+  openSearch: 'ctrl+KeyF',
+  openSettings: 'ctrl+Comma',
+  openProfileManager: 'ctrl+KeyP',
+};
+
 const defaultSettings = {
   theme: 'dark' as Theme,
   language: 'en' as Language,
-  defaultCategory: 'all',
-  autoSyncInterval: 0,
+  playerBackend: 'auto' as PlayerBackend,
   defaultVolume: 0.7,
   autoResume: true,
   autoPlayNext: true,
+  bufferSize: 10 as BufferSize,
+  autoLoadLastProfile: false,
+  rememberLayout: false,
+  lastProfileId: null as string | null,
+  lastLayout: null as { category: string; sortBy: string; groupBy: string } | null,
+  keyboardShortcuts: defaultKeyboardShortcuts,
   deviceName: 'Zenith TV',
   serverPort: 8080,
 };
@@ -58,9 +112,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       setLanguage: (language) => set({ language }),
 
-      setDefaultCategory: (category) => set({ defaultCategory: category }),
-
-      setAutoSyncInterval: (minutes) => set({ autoSyncInterval: minutes }),
+      setPlayerBackend: (backend) => set({ playerBackend: backend }),
 
       setDefaultVolume: (volume) => {
         const clamped = Math.max(0, Math.min(1, volume));
@@ -70,6 +122,27 @@ export const useSettingsStore = create<SettingsState>()(
       setAutoResume: (enabled) => set({ autoResume: enabled }),
 
       setAutoPlayNext: (enabled) => set({ autoPlayNext: enabled }),
+
+      setBufferSize: (size) => set({ bufferSize: size }),
+
+      setAutoLoadLastProfile: (enabled) => set({ autoLoadLastProfile: enabled }),
+
+      setRememberLayout: (enabled) => set({ rememberLayout: enabled }),
+
+      setLastProfileId: (id) => set({ lastProfileId: id }),
+
+      setLastLayout: (layout) => set({ lastLayout: layout }),
+
+      setKeyboardShortcut: (action, key) =>
+        set((state) => ({
+          keyboardShortcuts: {
+            ...state.keyboardShortcuts,
+            [action]: key,
+          },
+        })),
+
+      resetKeyboardShortcuts: () =>
+        set({ keyboardShortcuts: defaultKeyboardShortcuts }),
 
       setDeviceName: (name) => set({ deviceName: name }),
 

@@ -8,6 +8,7 @@ import { HeaderBar } from './components/HeaderBar';
 import { PairingDialog } from './components/PairingDialog';
 import { RemoteControlIndicator } from './components/RemoteControlIndicator';
 import { useContentStore } from './stores/content';
+import { useProfilesStore } from './stores/profiles';
 import { usePlayerStore } from '@zenith-tv/ui/stores/player';
 import { useSettingsStore } from './stores/settings';
 import { useDebounce } from './hooks/useDebounce';
@@ -47,15 +48,81 @@ function App() {
     setSortOrder,
     groupBy,
     setGroupBy,
-    getFilteredItems,
   } = useContentStore();
 
-  const { theme } = useSettingsStore();
+  const {
+    theme,
+    autoLoadLastProfile,
+    rememberLayout,
+    lastProfileId,
+    lastLayout,
+    setLastProfileId,
+    setLastLayout,
+  } = useSettingsStore();
+
+  const { profiles, selectProfile } = useProfilesStore();
+  const { currentUsername, currentUUID } = useContentStore();
+
+  // Auto-load last profile on startup
+  useEffect(() => {
+    if (!autoLoadLastProfile || !lastProfileId || !profiles || profiles.length === 0) return;
+
+    const [username, uuid] = lastProfileId.split(':');
+    const profile = profiles.find((p) => p.username === username);
+
+    if (profile && profile.m3uRefs.includes(uuid)) {
+      selectProfile(username, uuid);
+    }
+  }, [profiles]);
+
+  // Save current profile when it changes
+  useEffect(() => {
+    if (autoLoadLastProfile && currentUsername && currentUUID) {
+      setLastProfileId(`${currentUsername}:${currentUUID}`);
+    }
+  }, [currentUsername, currentUUID, autoLoadLastProfile, setLastProfileId]);
+
+  // Restore layout on startup
+  useEffect(() => {
+    if (!rememberLayout || !lastLayout) return;
+
+    const { setGroupBy: setGroupByStore, setSortBy: setSortByStore } = useContentStore.getState();
+    if (lastLayout.groupBy) setGroupByStore(lastLayout.groupBy as GroupBy);
+    if (lastLayout.sortBy) setSortByStore(lastLayout.sortBy as 'name' | 'date' | 'recent');
+  }, []);
+
+  // Save layout when it changes
+  useEffect(() => {
+    if (rememberLayout) {
+      setLastLayout({
+        category: 'all',
+        sortBy,
+        groupBy,
+      });
+    }
+  }, [sortBy, groupBy, rememberLayout, setLastLayout]);
 
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    root.classList.add(theme);
+
+    const applyTheme = (resolvedTheme: 'dark' | 'light') => {
+      root.classList.remove('light', 'dark');
+      root.classList.add(resolvedTheme);
+    };
+
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      applyTheme(mediaQuery.matches ? 'dark' : 'light');
+
+      const handleChange = (e: MediaQueryListEvent) => {
+        applyTheme(e.matches ? 'dark' : 'light');
+      };
+
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    } else {
+      applyTheme(theme);
+    }
   }, [theme]);
 
   useEffect(() => {
@@ -247,10 +314,6 @@ function App() {
                       <ChevronDown className="w-4 h-4" />
                     )}
                   </Button>
-                </div>
-
-                <div className="text-sm text-muted-foreground whitespace-nowrap" aria-live="polite" aria-atomic="true">
-                  {getFilteredItems().length} items
                 </div>
               </div>
 

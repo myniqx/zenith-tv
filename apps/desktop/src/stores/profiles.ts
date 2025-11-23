@@ -27,7 +27,7 @@ type ProfilesState = FileSyncedState<Profile[], 'profiles'> &
 
     // Profile actions
     createProfile: (username: string) => Promise<void>;
-    createProfileFromFile: () => Promise<{ username: string; uuid: string } | null>;
+    createProfileFromFile: (username: string) => Promise<{ username: string; uuid: string } | null>;
     deleteProfile: (username: string) => Promise<void>;
     selectProfile: (username: string, uuid?: string) => Promise<void>;
     addM3UToProfile: (username: string, m3uUrl: string) => Promise<string>;
@@ -141,7 +141,7 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
     useToastStore.getState().success(`Profile "${username}" created`);
   },
 
-  createProfileFromFile: async () => {
+  createProfileFromFile: async (username) => {
     try {
       const filePath = await dialog.pickM3UFile();
       if (!filePath) return null;
@@ -154,8 +154,6 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
         useToastStore.getState().warning('No valid items found in M3U file');
         return null;
       }
-
-      const username = filePath.split(/[/\\]/).pop()?.replace(/\.m3u8?$/i, '') || 'Imported';
 
       const { profiles, setProfiles, getOrCreateUUID } = get();
 

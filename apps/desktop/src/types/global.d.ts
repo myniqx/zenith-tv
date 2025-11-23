@@ -19,8 +19,77 @@ declare global {
         onSeek: (callback: (position: number) => void) => void;
         onSetVolume: (callback: (volume: number) => void) => void;
       };
+
+      vlc: {
+        isAvailable: () => Promise<boolean>;
+        init: () => Promise<{ success: boolean; error?: string }>;
+
+        // Playback control
+        play: (url?: string) => Promise<boolean>;
+        pause: () => Promise<void>;
+        resume: () => Promise<void>;
+        stop: () => Promise<void>;
+        seek: (time: number) => Promise<void>;
+
+        // Volume
+        setVolume: (volume: number) => Promise<void>;
+        getVolume: () => Promise<number>;
+        setMute: (mute: boolean) => Promise<void>;
+        getMute: () => Promise<boolean>;
+
+        // Time/Position
+        getTime: () => Promise<number>;
+        getLength: () => Promise<number>;
+        getPosition: () => Promise<number>;
+        setPosition: (position: number) => Promise<void>;
+
+        // State
+        getState: () => Promise<VlcPlayerState>;
+        isPlaying: () => Promise<boolean>;
+        isSeekable: () => Promise<boolean>;
+
+        // Audio tracks
+        getAudioTracks: () => Promise<VlcTrack[]>;
+        getAudioTrack: () => Promise<number>;
+        setAudioTrack: (trackId: number) => Promise<boolean>;
+
+        // Subtitle tracks
+        getSubtitleTracks: () => Promise<VlcTrack[]>;
+        getSubtitleTrack: () => Promise<number>;
+        setSubtitleTrack: (trackId: number) => Promise<boolean>;
+        setSubtitleDelay: (delay: number) => Promise<boolean>;
+
+        // Video tracks
+        getVideoTracks: () => Promise<VlcTrack[]>;
+
+        // Playback rate
+        setRate: (rate: number) => Promise<void>;
+        getRate: () => Promise<number>;
+
+        // Event listeners
+        onTimeChanged: (callback: (time: number) => void) => void;
+        onStateChanged: (callback: (state: VlcPlayerState) => void) => void;
+        onEndReached: (callback: () => void) => void;
+        onError: (callback: (message: string) => void) => void;
+      };
     };
   }
+
+  interface VlcTrack {
+    id: number;
+    name: string;
+  }
+
+  type VlcPlayerState =
+    | 'idle'
+    | 'opening'
+    | 'buffering'
+    | 'playing'
+    | 'paused'
+    | 'stopped'
+    | 'ended'
+    | 'error'
+    | 'unknown';
 }
 
 export {};

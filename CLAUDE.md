@@ -23,6 +23,12 @@ cd core/parser
 wasm-pack build --target web --release
 cd ../..
 
+# Download VLC SDK and build native addon (required for video playback)
+cd core/vlc-player
+node scripts/download-vlc-sdk.js
+node-gyp rebuild
+cd ../..
+
 # Run desktop app in development mode
 pnpm dev:desktop
 
@@ -61,6 +67,7 @@ The project uses pnpm workspaces with the following packages:
 
 **Core Packages:**
 - `core/parser/` - Rust M3U parser compiled to WASM for web (and FFI for native platforms)
+- `core/vlc-player/` - Native VLC player addon for Electron (C++ N-API)
 - Parser is critical: must rebuild with `wasm-pack build --target web --release` after changes
 
 **Shared Packages:**
@@ -131,7 +138,10 @@ The project uses pnpm workspaces with the following packages:
 ### Key Components
 
 **Video Player** (`src/components/VideoPlayer.tsx`):
-- HTML5 video element (no external player library)
+- Dual backend: VLC (native) or HTML5 (browser), configurable in settings
+- VLC backend: Better codec support (MKV, HEVC, live streams)
+- HTML5 backend: Fallback for when VLC is not available
+- Auto-selects VLC when available (auto mode)
 - Auto-resume from last position
 - Multi-track audio/subtitle support with persistence
 - Auto-retry on stream failure (3 attempts, exponential backoff)
@@ -301,6 +311,14 @@ websocat ws://localhost:8080
 
 ## Troubleshooting
 
+### VLC Player Not Working
+- Ensure VLC SDK is downloaded: `cd core/vlc-player && node scripts/download-vlc-sdk.js`
+- Rebuild native addon: `node-gyp rebuild`
+- Check `core/vlc-player/lib/{platform}/` directory exists
+- Windows: Verify libvlc.dll and plugins/ folder present
+- Linux: Install system VLC: `apt install vlc libvlc-dev`
+- Check Settings → Player Backend is set to "VLC" or "Auto"
+
 ### Parser Not Found
 - Ensure WASM is built: `cd core/parser && wasm-pack build --target web --release`
 - Check `core/parser/pkg/` directory exists
@@ -338,10 +356,33 @@ websocat ws://localhost:8080
 
 ### Desktop (Electron)
 - Node.js >= 18.0.0 required
-- No native dependencies (JSON-based storage)
+- Native VLC player addon for video playback (C++ N-API)
 - Main process code is CommonJS (require/module.exports)
 - Renderer process code is ESM (import/export)
 - Rust parser via WASM (web target)
+
+**VLC Player Setup (required for native playback):**
+```bash
+# Navigate to VLC player package
+cd core/vlc-player
+
+# Download VLC SDK (auto-detects platform)
+node scripts/download-vlc-sdk.js
+
+# Build native addon
+npm run build
+# OR
+node-gyp rebuild
+```
+
+**VLC SDK Structure:**
+- Windows: `core/vlc-player/lib/win32/` - libvlc.dll, libvlccore.dll, plugins/
+- Linux: Uses system libvlc (apt install vlc libvlc-dev)
+- macOS: `core/vlc-player/lib/darwin/` - VLC.app framework
+
+**electron-builder bundles VLC automatically:**
+- extraResources config copies `lib/{platform}/` to `resources/vlc/`
+- Runtime path: `process.resourcesPath + '/vlc'`
 
 ### Tizen (Planned)
 - JSON-based storage (same as Desktop)

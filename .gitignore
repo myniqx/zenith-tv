@@ -68,3 +68,11 @@ apps/mobile/pubspec.lock
 
 # OS
 Thumbs.db
+
+# VLC SDK binaries (downloaded at build time)
+core/vlc-player/lib/win32*/*.dll
+core/vlc-player/lib/win32*/plugins/
+core/vlc-player/lib/win32*/sdk/
+core/vlc-player/lib/darwin/*.dylib
+core/vlc-player/lib/darwin/*.framework/
+core/vlc-player/build/

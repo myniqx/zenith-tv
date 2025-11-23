@@ -21,7 +21,7 @@ export function RemoteControlIndicator({
   }
 
   return (
-    <div className="fixed top-20 right-4 z-30" role="status" aria-live="polite">
+    <div className="fixed top-2 right-50 z-30" role="status" aria-live="polite">
       {controlledBy && (
         <Badge
           variant="secondary"

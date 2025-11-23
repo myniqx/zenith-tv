@@ -18,6 +18,7 @@
 	"dependencies": {
 		"@radix-ui/react-tooltip": "^1.2.8",
 		"@zenith-tv/parser": "workspace:*",
+		"@zenith-tv/vlc-player": "workspace:*",
 		"@zenith-tv/protocol": "workspace:*",
 		"@zenith-tv/types": "workspace:*",
 		"@zenith-tv/ui": "workspace:*",

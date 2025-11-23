@@ -1,4 +1,4 @@
-import { useSettingsStore } from '../stores/settings';
+import { useSettingsStore, type Theme, type BufferSize, type PlayerBackend } from '../stores/settings';
 import { useToastStore } from '../stores/toast';
 import {
   Dialog,
@@ -15,13 +15,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@zenith-tv/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@zenith-tv/ui/tabs';
 import { Button } from '@zenith-tv/ui/button';
-import { Input } from '@zenith-tv/ui/input';
 import { Label } from '@zenith-tv/ui/label';
 import { Switch } from '@zenith-tv/ui/switch';
 import { Slider } from '@zenith-tv/ui/slider';
 import { Separator } from '@zenith-tv/ui/separator';
-import { Palette, FileText, Play, Wifi, Settings as SettingsIcon } from 'lucide-react';
+import {
+  Palette,
+  Play,
+  Power,
+  Settings as SettingsIcon,
+  Keyboard,
+} from 'lucide-react';
+import { KeyboardShortcuts } from './KeyboardShortcuts';
 
 interface SettingsSectionProps {
   title: string;
@@ -64,25 +71,21 @@ function SettingRow({ label, description, children }: SettingRowProps) {
 export function Settings() {
   const {
     theme,
-    highContrastMode,
-    language,
-    defaultCategory,
-    autoSyncInterval,
+    playerBackend,
     defaultVolume,
     autoResume,
     autoPlayNext,
-    deviceName,
-    serverPort,
+    bufferSize,
+    autoLoadLastProfile,
+    rememberLayout,
     setTheme,
-    setHighContrastMode,
-    setLanguage,
-    setDefaultCategory,
-    setAutoSyncInterval,
+    setPlayerBackend,
     setDefaultVolume,
     setAutoResume,
     setAutoPlayNext,
-    setDeviceName,
-    setServerPort,
+    setBufferSize,
+    setAutoLoadLastProfile,
+    setRememberLayout,
     resetSettings,
   } = useSettingsStore();
 
@@ -115,178 +118,156 @@ export function Settings() {
           <DialogTitle className="text-2xl">Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto pr-2">
-          <div className="space-y-8">
-            {/* Appearance */}
-            <SettingsSection
-              title="Appearance"
-              icon={<Palette className="w-5 h-5" />}
-            >
-              <div className="space-y-2">
-                <Label htmlFor="theme">Theme</Label>
-                <Select value={theme} onValueChange={setTheme}>
-                  <SelectTrigger id="theme">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="light" disabled>
-                      Light (Coming Soon)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="general" className="flex items-center gap-2">
+              <SettingsIcon className="w-4 h-4" />
+              General
+            </TabsTrigger>
+            <TabsTrigger value="shortcuts" className="flex items-center gap-2">
+              <Keyboard className="w-4 h-4" />
+              Shortcuts
+            </TabsTrigger>
+          </TabsList>
 
-              <div className="space-y-2">
-                <Label htmlFor="language">Language</Label>
-                <Select value={language} onValueChange={setLanguage}>
-                  <SelectTrigger id="language">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="tr" disabled>
-                      Türkçe (Coming Soon)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <SettingRow
-                label="High Contrast Mode"
-                description="Increase contrast for better visibility"
+          <TabsContent value="general" className="flex-1 overflow-y-auto pr-2 mt-4">
+            <div className="space-y-8">
+              {/* Appearance */}
+              <SettingsSection
+                title="Appearance"
+                icon={<Palette className="w-5 h-5" />}
               >
-                <Switch
-                  checked={highContrastMode}
-                  onCheckedChange={setHighContrastMode}
-                  aria-label={`High contrast mode ${highContrastMode ? 'enabled' : 'disabled'}`}
-                />
-              </SettingRow>
-            </SettingsSection>
-
-            <Separator />
-
-            {/* Content */}
-            <SettingsSection
-              title="Content"
-              icon={<FileText className="w-5 h-5" />}
-            >
-              <div className="space-y-2">
-                <Label htmlFor="defaultCategory">Default Category</Label>
-                <Select
-                  value={defaultCategory}
-                  onValueChange={setDefaultCategory}
-                >
-                  <SelectTrigger id="defaultCategory">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="movies">Movies</SelectItem>
-                    <SelectItem value="series">Series</SelectItem>
-                    <SelectItem value="live">Live TV</SelectItem>
-                    <SelectItem value="favorites">Favorites</SelectItem>
-                    <SelectItem value="recent">Recent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="autoSyncInterval">Auto-Sync Interval</Label>
-                <Select
-                  value={autoSyncInterval.toString()}
-                  onValueChange={(value) => setAutoSyncInterval(parseInt(value))}
-                >
-                  <SelectTrigger id="autoSyncInterval">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">Disabled</SelectItem>
-                    <SelectItem value="30">Every 30 minutes</SelectItem>
-                    <SelectItem value="60">Every hour</SelectItem>
-                    <SelectItem value="360">Every 6 hours</SelectItem>
-                    <SelectItem value="1440">Daily</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Automatically sync M3U playlists in the background
-                </p>
-              </div>
-            </SettingsSection>
-
-            <Separator />
-
-            {/* Player */}
-            <SettingsSection title="Player" icon={<Play className="w-5 h-5" />}>
-              <div className="space-y-3">
-                <Label>Default Volume: {Math.round(defaultVolume * 100)}%</Label>
-                <Slider
-                  value={[defaultVolume * 100]}
-                  onValueChange={([value]) => setDefaultVolume(value / 100)}
-                  min={0}
-                  max={100}
-                  step={1}
-                  className="w-full"
-                />
-              </div>
-
-              <SettingRow
-                label="Auto-Resume Playback"
-                description="Continue from where you left off"
-              >
-                <Switch
-                  checked={autoResume}
-                  onCheckedChange={setAutoResume}
-                />
-              </SettingRow>
-
-              <SettingRow
-                label="Auto-Play Next Episode"
-                description="Automatically play next episode when current ends"
-              >
-                <Switch
-                  checked={autoPlayNext}
-                  onCheckedChange={setAutoPlayNext}
-                />
-              </SettingRow>
-            </SettingsSection>
-
-            <Separator />
-
-            {/* Network */}
-            <SettingsSection
-              title="Network (P2P Remote Control)"
-              icon={<Wifi className="w-5 h-5" />}
-            >
-              <div className="space-y-4 opacity-50">
                 <div className="space-y-2">
-                  <Label htmlFor="deviceName">Device Name</Label>
-                  <Input
-                    id="deviceName"
-                    type="text"
-                    value={deviceName}
-                    onChange={(e) => setDeviceName(e.target.value)}
-                    disabled
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="serverPort">Server Port</Label>
-                  <Input
-                    id="serverPort"
-                    type="number"
-                    value={serverPort}
-                    onChange={(e) => setServerPort(parseInt(e.target.value))}
-                    disabled
-                  />
+                  <Label htmlFor="theme">Theme</Label>
+                  <Select value={theme} onValueChange={(value) => setTheme(value as Theme)}>
+                    <SelectTrigger id="theme">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="dark">Dark</SelectItem>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="system">System</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <p className="text-xs text-muted-foreground">
-                    Coming in Phase 3 - P2P Remote Control
+                    System follows your OS preference
                   </p>
                 </div>
-              </div>
-            </SettingsSection>
-          </div>
-        </div>
+
+              </SettingsSection>
+
+              <Separator />
+
+              {/* Startup */}
+              <SettingsSection
+                title="Startup"
+                icon={<Power className="w-5 h-5" />}
+              >
+                <SettingRow
+                  label="Auto Load Last Profile"
+                  description="Automatically load your last used profile on startup"
+                >
+                  <Switch
+                    checked={autoLoadLastProfile}
+                    onCheckedChange={setAutoLoadLastProfile}
+                  />
+                </SettingRow>
+
+                <SettingRow
+                  label="Remember Layout"
+                  description="Restore last category, sort, and grouping settings"
+                >
+                  <Switch
+                    checked={rememberLayout}
+                    onCheckedChange={setRememberLayout}
+                  />
+                </SettingRow>
+              </SettingsSection>
+
+              <Separator />
+
+              {/* Player */}
+              <SettingsSection title="Player" icon={<Play className="w-5 h-5" />}>
+                <div className="space-y-2">
+                  <Label htmlFor="playerBackend">Player Backend</Label>
+                  <Select
+                    value={playerBackend}
+                    onValueChange={(value) => setPlayerBackend(value as PlayerBackend)}
+                  >
+                    <SelectTrigger id="playerBackend">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto (VLC preferred)</SelectItem>
+                      <SelectItem value="vlc">VLC (Native)</SelectItem>
+                      <SelectItem value="html5">HTML5 (Browser)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    VLC provides better codec support for IPTV streams
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <Label>Default Volume: {Math.round(defaultVolume * 100)}%</Label>
+                  <Slider
+                    value={[defaultVolume * 100]}
+                    onValueChange={([value]) => setDefaultVolume(value / 100)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="bufferSize">Buffer Size</Label>
+                  <Select
+                    value={bufferSize.toString()}
+                    onValueChange={(value) => setBufferSize(parseInt(value) as BufferSize)}
+                  >
+                    <SelectTrigger id="bufferSize">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 seconds</SelectItem>
+                      <SelectItem value="10">10 seconds</SelectItem>
+                      <SelectItem value="15">15 seconds</SelectItem>
+                      <SelectItem value="30">30 seconds</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Higher values improve stability on slow connections
+                  </p>
+                </div>
+
+                <SettingRow
+                  label="Auto-Resume Playback"
+                  description="Continue from where you left off"
+                >
+                  <Switch
+                    checked={autoResume}
+                    onCheckedChange={setAutoResume}
+                  />
+                </SettingRow>
+
+                <SettingRow
+                  label="Auto-Play Next Episode"
+                  description="Automatically play next episode when current ends"
+                >
+                  <Switch
+                    checked={autoPlayNext}
+                    onCheckedChange={setAutoPlayNext}
+                  />
+                </SettingRow>
+              </SettingsSection>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="shortcuts" className="flex-1 overflow-y-auto pr-2 mt-4">
+            <KeyboardShortcuts />
+          </TabsContent>
+        </Tabs>
 
         <Separator className="my-4" />
 

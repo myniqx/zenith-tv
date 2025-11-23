@@ -4,9 +4,322 @@ import { PlayerControls } from './PlayerControls';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '@zenith-tv/ui/button';
-import { Loader2, AlertTriangle, Film } from 'lucide-react';
+import { Loader2, AlertTriangle, Film, MonitorPlay } from 'lucide-react';
+import { useVlcPlayer } from '../hooks/useVlcPlayer';
 
 export function VideoPlayer() {
+  const { playerBackend } = useSettingsStore();
+
+  // Determine which player to use
+  const vlc = useVlcPlayer();
+  const shouldUseVlc = playerBackend === 'vlc' ||
+    (playerBackend === 'auto' && vlc.isAvailable);
+
+  if (shouldUseVlc && vlc.isAvailable) {
+    return <VlcVideoPlayerImpl vlc={vlc} />;
+  }
+
+  return <Html5VideoPlayer />;
+}
+
+// VLC Player Implementation
+function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [showControls, setShowControls] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const hideControlsTimeoutRef = useRef<NodeJS.Timeout>();
+
+  const {
+    currentItem,
+    state,
+    setState,
+    updatePosition,
+    updateDuration,
+    play: playItem,
+  } = usePlayerStore();
+
+  const { getNextEpisode, saveWatchProgress } = useContentStore();
+  const { autoPlayNext, defaultVolume } = useSettingsStore();
+
+  // Sync VLC state with player store
+  useEffect(() => {
+    if (!vlc.isInitialized) return;
+
+    const stateMap: Record<string, typeof state> = {
+      idle: 'idle',
+      opening: 'loading',
+      buffering: 'buffering',
+      playing: 'playing',
+      paused: 'paused',
+      stopped: 'idle',
+      ended: 'idle',
+      error: 'error',
+      unknown: 'idle',
+    };
+
+    const mappedState = stateMap[vlc.state] || 'idle';
+    if (mappedState !== state) {
+      setState(mappedState);
+    }
+  }, [vlc.state, vlc.isInitialized, state, setState]);
+
+  // Sync time updates
+  useEffect(() => {
+    if (vlc.isInitialized && vlc.time > 0) {
+      updatePosition(vlc.time / 1000);
+    }
+  }, [vlc.time, vlc.isInitialized, updatePosition]);
+
+  // Sync duration
+  useEffect(() => {
+    if (vlc.isInitialized && vlc.duration > 0) {
+      updateDuration(vlc.duration / 1000);
+    }
+  }, [vlc.duration, vlc.isInitialized, updateDuration]);
+
+  // Handle end of playback
+  useEffect(() => {
+    if (vlc.state === 'ended' && autoPlayNext && currentItem) {
+      const nextEpisode = getNextEpisode(currentItem);
+      if (nextEpisode) {
+        setTimeout(() => playItem(nextEpisode), 500);
+      }
+    }
+  }, [vlc.state, autoPlayNext, currentItem, getNextEpisode, playItem]);
+
+  // Play current item when it changes
+  useEffect(() => {
+    if (!vlc.isInitialized || !currentItem) return;
+
+    const startPlayback = async () => {
+      setState('loading');
+      await vlc.setVolume(defaultVolume * 100);
+      const success = await vlc.play(currentItem.url);
+
+      if (!success) {
+        setState('error');
+      }
+
+      // Handle resume from watch history
+      if (currentItem.watchHistory && currentItem.watchHistory.position > 0) {
+        const progressPercent = currentItem.watchHistory.position;
+        setTimeout(async () => {
+          if (vlc.duration > 0) {
+            const position = (progressPercent / 100) * vlc.duration;
+            if (position > 0 && position < vlc.duration - 10000) {
+              await vlc.seek(position);
+            }
+          }
+        }, 1000);
+      }
+    };
+
+    startPlayback();
+
+    return () => {
+      vlc.stop();
+    };
+  }, [currentItem?.url, vlc.isInitialized]);
+
+  // Auto-save watch progress
+  useEffect(() => {
+    if (!vlc.isInitialized || !currentItem || vlc.state !== 'playing') return;
+
+    const saveInterval = setInterval(async () => {
+      if (vlc.duration > 0) {
+        try {
+          await saveWatchProgress(
+            currentItem.url,
+            vlc.time / 1000,
+            vlc.duration / 1000
+          );
+        } catch (error) {
+          console.error('Failed to save watch progress:', error);
+        }
+      }
+    }, 10000);
+
+    return () => {
+      clearInterval(saveInterval);
+      if (vlc.duration > 0) {
+        saveWatchProgress(currentItem.url, vlc.time / 1000, vlc.duration / 1000)
+          .catch(err => console.error('Failed to save watch progress on unmount:', err));
+      }
+    };
+  }, [currentItem, vlc.state, vlc.time, vlc.duration, vlc.isInitialized, saveWatchProgress]);
+
+  // Auto-hide controls
+  useEffect(() => {
+    if (showControls && vlc.state === 'playing') {
+      if (hideControlsTimeoutRef.current) {
+        clearTimeout(hideControlsTimeoutRef.current);
+      }
+      hideControlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 3000);
+    }
+
+    return () => {
+      if (hideControlsTimeoutRef.current) {
+        clearTimeout(hideControlsTimeoutRef.current);
+      }
+    };
+  }, [showControls, vlc.state]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (!vlc.isInitialized) return;
+
+      switch (e.key) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          if (vlc.state === 'playing') {
+            await vlc.pause();
+          } else if (vlc.state === 'paused') {
+            await vlc.resume();
+          }
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          await vlc.seek(Math.max(0, vlc.time - 10000));
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          await vlc.seek(Math.min(vlc.duration, vlc.time + 10000));
+          break;
+        case 'f':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'm':
+          e.preventDefault();
+          await vlc.toggleMute();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [vlc]);
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  const handleMouseMove = () => {
+    setShowControls(true);
+  };
+
+  const handleClick = async () => {
+    if (!vlc.isInitialized) return;
+
+    if (vlc.state === 'playing') {
+      await vlc.pause();
+    } else if (vlc.state === 'paused') {
+      await vlc.resume();
+    }
+  };
+
+  const handleRetry = async () => {
+    if (!currentItem) return;
+    await vlc.stop();
+    await vlc.play(currentItem.url);
+  };
+
+  // No content selected
+  if (!currentItem) {
+    return (
+      <div className="flex items-center justify-center h-full bg-black/90">
+        <div className="text-center">
+          <Film className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-2xl font-semibold text-muted-foreground mb-2">
+            No content selected
+          </h3>
+          <p className="text-muted-foreground/60">
+            Select something to watch from your library
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative w-full h-full bg-black group"
+      onMouseMove={handleMouseMove}
+      onClick={handleClick}
+    >
+      {/* VLC renders directly to the window */}
+      <div className="w-full h-full" />
+
+      {/* Loading spinner */}
+      {(vlc.state === 'opening' || vlc.state === 'buffering' || state === 'loading') && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+          <Loader2 className="w-16 h-16 text-primary animate-spin" />
+        </div>
+      )}
+
+      {/* Error message */}
+      {vlc.state === 'error' && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/90">
+          <div className="text-center max-w-lg px-6">
+            <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-destructive" />
+            <h3 className="text-2xl font-semibold text-destructive mb-2">
+              Playback Error
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              {vlc.error || 'Failed to play video stream'}
+            </p>
+
+            <Button onClick={handleRetry}>
+              Retry
+            </Button>
+
+            <p className="text-xs text-muted-foreground/50 font-mono mt-4 truncate max-w-full">
+              {currentItem.url}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Track info overlay */}
+      {vlc.state === 'playing' && vlc.audioTracks.length > 0 && showControls && (
+        <div className="absolute top-4 right-4 bg-black/70 rounded-lg px-3 py-2 text-sm">
+          <div className="text-white/60">
+            Audio: {vlc.audioTracks.find(t => t.id === vlc.currentAudioTrack)?.name || 'Default'}
+          </div>
+          {vlc.subtitleTracks.length > 0 && (
+            <div className="text-white/60">
+              Subtitle: {vlc.subtitleTracks.find(t => t.id === vlc.currentSubtitleTrack)?.name || 'Off'}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Controls */}
+      {showControls && currentItem && (
+        <PlayerControls
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
+        />
+      )}
+    </div>
+  );
+}
+
+// HTML5 Video Player Implementation
+function Html5VideoPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [showControls, setShowControls] = useState(true);
@@ -29,7 +342,7 @@ export function VideoPlayer() {
   } = usePlayerStore();
 
   const { getNextEpisode, saveWatchProgress } = useContentStore();
-  const { autoPlayNext, defaultVolume, setDefaultVolume } = useSettingsStore();
+  const { autoPlayNext, defaultVolume, setDefaultVolume, bufferSize } = useSettingsStore();
 
   // Initialize volume from settings on mount
   useEffect(() => {
@@ -353,6 +666,7 @@ export function VideoPlayer() {
         ref={videoRef}
         className="w-full h-full object-contain cursor-pointer"
         onClick={handleClick}
+        preload={bufferSize >= 15 ? 'auto' : 'metadata'}
       />
 
       {/* Loading spinner */}

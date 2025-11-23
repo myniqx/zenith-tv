@@ -1,0 +1,42 @@
+{
+	"name": "@zenith-tv/vlc-player",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Native libVLC bindings for Electron",
+	"main": "./build/Release/vlc_player.node",
+	"types": "./index.d.ts",
+	"exports": {
+		".": {
+			"types": "./index.d.ts",
+			"require": "./build/Release/vlc_player.node"
+		}
+	},
+	"files": [
+		"build/",
+		"lib/",
+		"index.d.ts",
+		"index.js"
+	],
+	"scripts": {
+		"download-sdk": "node scripts/download-vlc-sdk.js",
+		"download-sdk:all": "node scripts/download-vlc-sdk.js all",
+		"download-sdk:win": "node scripts/download-vlc-sdk.js win32",
+		"download-sdk:linux": "node scripts/download-vlc-sdk.js linux",
+		"download-sdk:mac": "node scripts/download-vlc-sdk.js darwin",
+		"preinstall": "node scripts/download-vlc-sdk.js",
+		"install": "node-gyp rebuild",
+		"build": "node-gyp build",
+		"rebuild": "node-gyp rebuild",
+		"clean": "node-gyp clean"
+	},
+	"dependencies": {
+		"node-addon-api": "^8.5.0"
+	},
+	"devDependencies": {
+		"node-gyp": "^12.1.0"
+	},
+	"engines": {
+		"node": ">=18.0.0"
+	},
+	"gypfile": true
+}

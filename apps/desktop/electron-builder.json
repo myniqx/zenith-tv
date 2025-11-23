@@ -1,0 +1,98 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.zenith-tv.desktop",
+  "productName": "Zenith TV",
+  "directories": {
+    "output": "release",
+    "buildResources": "resources"
+  },
+  "files": [
+    "out/**/*",
+    "!node_modules/**/*",
+    "node_modules/@zenith-tv/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "../../core/vlc-player/lib/${os}",
+      "to": "vlc",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "resources/icon.ico",
+    "extraFiles": [
+      {
+        "from": "../../core/vlc-player/lib/win32",
+        "to": "vlc",
+        "filter": ["*.dll", "plugins/**/*"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64"]
+      },
+      {
+        "target": "deb",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "resources/icons",
+    "category": "AudioVideo",
+    "maintainer": "myniqx",
+    "desktop": {
+      "StartupWMClass": "zenith-tv"
+    }
+  },
+  "mac": {
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "icon": "resources/icon.icns",
+    "category": "public.app-category.entertainment",
+    "extraFiles": [
+      {
+        "from": "../../core/vlc-player/lib/darwin",
+        "to": "Frameworks/VLC",
+        "filter": ["**/*"]
+      }
+    ]
+  },
+  "dmg": {
+    "contents": [
+      {
+        "x": 130,
+        "y": 220
+      },
+      {
+        "x": 410,
+        "y": 220,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ]
+  }
+}

@@ -6,6 +6,7 @@ const { registerFileSystemHandlers, cleanupFileWatchers } = require('./ipc/fileH
 const { registerFetchHandlers } = require('./ipc/fetchHandlers');
 const { registerDialogHandlers } = require('./ipc/dialogHandlers');
 const { registerP2PHandlers, cleanupP2P } = require('./ipc/p2pHandlers');
+const { registerVlcHandlers, cleanupVlc } = require('./ipc/vlcHandlers.cjs');
 
 let mainWindow;
 
@@ -61,11 +62,13 @@ app.whenReady().then(async () => {
   registerFetchHandlers()
   registerDialogHandlers()
   registerP2PHandlers(mainWindow)
+  registerVlcHandlers(mainWindow)
 });
 
 app.on('window-all-closed', () => {
   cleanupFileWatchers()
   cleanupP2P()
+  cleanupVlc()
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -80,4 +83,5 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   cleanupP2P()
   cleanupFileWatchers()
+  cleanupVlc()
 });

@@ -44,6 +44,14 @@ interface M3UUpdateData {
   updatedAt: number;
 }
 
+export interface M3UStats {
+  groupCount: number;
+  tvShowCount: number;
+  liveStreamCount: number;
+  movieCount: number;
+  totalWatchables: number;
+}
+
 
 type ContentState =
   FileSyncedState<UserData, 'userData'> &
@@ -79,12 +87,12 @@ type ContentState =
     setSortOrder: (order: SortOrder) => void;
     setGroupBy: (groupBy: GroupBy) => void;
     updateGroupedContent: () => void;
-    getFilteredItems: () => WatchableObject[];
     toggleFavorite: (watchable: WatchableObject) => Promise<void>;
     saveWatchProgress: (watchable: WatchableObject, position: number, duration: number) => Promise<void>;
 
     getNextEpisode: (currentItem: WatchableObject) => WatchableObject | undefined;
     getPreviousEpisode: (currentItem: WatchableObject) => WatchableObject | undefined;
+    calculateStats: () => M3UStats;
   }
 
 export const useContentStore = create<ContentState>((set, get) => ({
@@ -150,19 +158,6 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   load: async (fromUpdate = false) => {
-    /*
-      Bu fonksiyonun yapması gerekenler:
-        - öncelikle bu fonksiyon kullanıcı seçildi ise çalışabilir (username ve uuid setContent!)
-        - bu fonksiyon fetch etmez. kullanıcının bir önceki girişiminden yaptığı kaynakları yükler ayarlar ile birleştirir.
-        - yani UUID ile source ve update kısmını yükler.
-        - user'in favori hide etc ayarlarını yükler.
-        - sonra parseM3U ile source kısmını parse eder.
-        - her bir m3u objesi eklenirken kontrol eder
-          * eğer update listesinde varsa ekstradan Recent klasörüne de ekler
-          * eğer favorilerde varsa ekstradan Favorites klasörüne de ekler (ve Watchable objesine isFavorite true verir)
-          * eğer watchlistde varsa ekstradan Watched klasörüne de ekler (ve Watchable objesine isWatched true verir)
-          * diğer tüm user ayarlarını aynı şekilde kontrol eder. yükler. 
-    */
     const { currentUsername, currentUUID } = get();
 
     if (!currentUsername || !currentUUID) {
@@ -236,14 +231,18 @@ export const useContentStore = create<ContentState>((set, get) => ({
         }
       }
 
-      // TODO: check this functions. they must sort items and calculate the stats!
       get().movieGroup.lastCheck();
       get().tvShowGroup.lastCheck();
       get().streamGroup.lastCheck();
       get().recentGroup.lastCheck();
 
+      const stats = get().calculateStats();
+      if (stats.totalWatchables !== m3uList.length) {
+        console.warn(`[Content Store] Stats mismatch! Expected ${m3uList.length}, got ${stats.totalWatchables}`);
+      }
+      await fileSystem.writeJSON(getM3UStats(currentUUID), stats);
+
       if (update.createdAt === dateNow) {
-        // Create new update file in case it doesn't exist
         await fileSystem.writeJSON(getM3UUpdate(currentUUID), update);
       }
     } catch (error) {
@@ -324,14 +323,18 @@ export const useContentStore = create<ContentState>((set, get) => ({
         }
       }
 
-      // TODO: check this functions. they must sort items and calculate the stats!
       get().movieGroup.lastCheck();
       get().tvShowGroup.lastCheck();
       get().streamGroup.lastCheck();
       get().recentGroup.lastCheck();
 
-      // Write to storage using new API
+      const stats = get().calculateStats();
+      if (stats.totalWatchables !== m3uList.length) {
+        console.warn(`[Content Store] Stats mismatch! Expected ${m3uList.length}, got ${stats.totalWatchables}`);
+      }
+
       await fileSystem.writeJSON(getM3UUpdate(currentUUID), update);
+      await fileSystem.writeJSON(getM3UStats(currentUUID), stats);
 
       console.log(`[Content Store] Content updated successfully`);
       useToastStore.getState().success('Content updated successfully');
@@ -392,7 +395,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
               comparison = a.Name.localeCompare(b.Name);
               break;
             case 'date':
-              comparison = new Date(a.AddedDate).getTime() - new Date(b.AddedDate).getTime();
+              comparison = new Date(a.AddedDate!).getTime() - new Date(b.AddedDate!).getTime();
               break;
             case 'recent':
               if (a.userData?.lastWatchedAt && b.userData?.lastWatchedAt) {
@@ -585,48 +588,6 @@ export const useContentStore = create<ContentState>((set, get) => ({
     set({ groupedContent: result });
   },
 
-  getFilteredItems: () => {
-    const { currentGroup, searchQuery, sortBy, sortOrder } = get();
-
-    // Step 1: Filter by group
-    let filtered: WatchableObject[] = currentGroup?.Watchables?.length ? [...currentGroup.Watchables] : [];
-
-    // Step 2: Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((item) =>
-        item.Title.toLowerCase().includes(query)
-      );
-    }
-
-    // Step 3: Sort items
-    const sorted = [...filtered].sort((a, b) => {
-      let comparison = 0;
-
-      switch (sortBy) {
-        case 'name':
-          comparison = a.Title.localeCompare(b.Title);
-          break;
-        case 'date':
-          comparison = new Date(a.AddedDate).getTime() - new Date(b.AddedDate).getTime();
-          break;
-        case 'recent':
-          if (a.userData?.lastWatchedAt && b.userData?.lastWatchedAt) {
-            comparison = new Date(b.userData?.lastWatchedAt).getTime() - new Date(a.userData?.lastWatchedAt).getTime();
-          } else if (a.userData?.lastWatchedAt) {
-            comparison = -1;
-          } else if (b.userData?.lastWatchedAt) {
-            comparison = 1;
-          }
-          break;
-      }
-
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-
-    return sorted;
-  },
-
   toggleFavorite: async (watchable) => {
     const { currentUsername, currentUUID } = get();
     if (!currentUsername || !currentUUID) return;
@@ -718,5 +679,30 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
 
     return undefined;
+  },
+
+  calculateStats: () => {
+    const { movieGroup, tvShowGroup, streamGroup } = get();
+
+    const countGroups = (group: GroupObject): number => {
+      return group.Groups.length + group.Groups.reduce((total, g) => total + countGroups(g), 0);
+    };
+
+    const movieCount = movieGroup.TotalCount;
+    const tvShowCount = tvShowGroup.TvShowCount;
+    const tvShowEpisodeCount = tvShowGroup.TvShowEpisodeCount;
+    const liveStreamCount = streamGroup.TotalCount;
+
+
+    const groupCount = countGroups(movieGroup) + countGroups(tvShowGroup) + countGroups(streamGroup);
+    const totalWatchables = movieCount + tvShowEpisodeCount + liveStreamCount;
+
+    return {
+      groupCount,
+      tvShowCount,
+      liveStreamCount,
+      movieCount,
+      totalWatchables,
+    };
   },
 }));

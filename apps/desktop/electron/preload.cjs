@@ -64,4 +64,58 @@ contextBridge.exposeInMainWorld('electron', {
   app: {
     getPath: (name) => ipcRenderer.invoke('app:getPath', name),
   },
+
+  // VLC Player API
+  vlc: {
+    isAvailable: () => ipcRenderer.invoke('vlc:isAvailable'),
+    init: () => ipcRenderer.invoke('vlc:init'),
+
+    // Playback control
+    play: (url) => ipcRenderer.invoke('vlc:play', url),
+    pause: () => ipcRenderer.invoke('vlc:pause'),
+    resume: () => ipcRenderer.invoke('vlc:resume'),
+    stop: () => ipcRenderer.invoke('vlc:stop'),
+    seek: (time) => ipcRenderer.invoke('vlc:seek', time),
+
+    // Volume
+    setVolume: (volume) => ipcRenderer.invoke('vlc:setVolume', volume),
+    getVolume: () => ipcRenderer.invoke('vlc:getVolume'),
+    setMute: (mute) => ipcRenderer.invoke('vlc:setMute', mute),
+    getMute: () => ipcRenderer.invoke('vlc:getMute'),
+
+    // Time/Position
+    getTime: () => ipcRenderer.invoke('vlc:getTime'),
+    getLength: () => ipcRenderer.invoke('vlc:getLength'),
+    getPosition: () => ipcRenderer.invoke('vlc:getPosition'),
+    setPosition: (position) => ipcRenderer.invoke('vlc:setPosition', position),
+
+    // State
+    getState: () => ipcRenderer.invoke('vlc:getState'),
+    isPlaying: () => ipcRenderer.invoke('vlc:isPlaying'),
+    isSeekable: () => ipcRenderer.invoke('vlc:isSeekable'),
+
+    // Audio tracks
+    getAudioTracks: () => ipcRenderer.invoke('vlc:getAudioTracks'),
+    getAudioTrack: () => ipcRenderer.invoke('vlc:getAudioTrack'),
+    setAudioTrack: (trackId) => ipcRenderer.invoke('vlc:setAudioTrack', trackId),
+
+    // Subtitle tracks
+    getSubtitleTracks: () => ipcRenderer.invoke('vlc:getSubtitleTracks'),
+    getSubtitleTrack: () => ipcRenderer.invoke('vlc:getSubtitleTrack'),
+    setSubtitleTrack: (trackId) => ipcRenderer.invoke('vlc:setSubtitleTrack', trackId),
+    setSubtitleDelay: (delay) => ipcRenderer.invoke('vlc:setSubtitleDelay', delay),
+
+    // Video tracks
+    getVideoTracks: () => ipcRenderer.invoke('vlc:getVideoTracks'),
+
+    // Playback rate
+    setRate: (rate) => ipcRenderer.invoke('vlc:setRate', rate),
+    getRate: () => ipcRenderer.invoke('vlc:getRate'),
+
+    // Event listeners
+    onTimeChanged: (callback) => ipcRenderer.on('vlc:timeChanged', (_, time) => callback(time)),
+    onStateChanged: (callback) => ipcRenderer.on('vlc:stateChanged', (_, state) => callback(state)),
+    onEndReached: (callback) => ipcRenderer.on('vlc:endReached', () => callback()),
+    onError: (callback) => ipcRenderer.on('vlc:error', (_, message) => callback(message)),
+  },
 });
