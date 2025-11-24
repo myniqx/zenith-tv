@@ -7,6 +7,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const { createRequire } = require('module');
 
 let nativeModule = null;
 let loadError = null;
@@ -24,10 +25,14 @@ function loadNativeModule() {
     path.join(process.resourcesPath || __dirname, 'vlc_player.node'),
   ];
 
+  // Use createRequire to bypass bundler's static analysis
+  // This ensures the native .node module is loaded at runtime
+  const dynamicRequire = createRequire(__filename);
+
   for (const modulePath of possiblePaths) {
     try {
       if (fs.existsSync(modulePath)) {
-        nativeModule = require(modulePath);
+        nativeModule = dynamicRequire(modulePath);
         return nativeModule;
       }
     } catch (err) {

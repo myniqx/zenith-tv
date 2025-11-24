@@ -3,11 +3,11 @@
  */
 
 import { create } from 'zustand';
-import type { PlayerState, WatchableItem } from '@zenith-tv/types';
+import type { PlayerState, PlayableItem } from '@zenith-tv/types';
 
 interface PlayerStore extends PlayerState {
   // Actions
-  play: (item: WatchableItem) => void;
+  play: (item: PlayableItem) => void;
   pause: () => void;
   resume: () => void;
   seek: (position: number) => void;

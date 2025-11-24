@@ -4,12 +4,21 @@
       "target_name": "vlc_player",
       "cflags!": ["-fno-exceptions"],
       "cflags_cc!": ["-fno-exceptions"],
-      "sources": ["src/vlc_player.cpp"],
+      "sources": [
+        "src/vlc_player.cpp",
+        "src/vlc_controls.cpp"
+      ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")"
       ],
       "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
       "conditions": [
+        [
+          "OS=='win'",
+          {
+            "sources": ["src/vlc_window_win32.cpp"]
+          }
+        ],
         [
           "OS=='win' and target_arch=='arm64'",
           {
@@ -67,14 +76,16 @@
         [
           "OS=='linux'",
           {
+            "sources": ["src/vlc_window_linux.cpp"],
             "cflags_cc": ["-std=c++17"],
             "include_dirs": ["/usr/include/vlc"],
-            "libraries": ["-lvlc"]
+            "libraries": ["-lvlc", "-lX11"]
           }
         ],
         [
           "OS=='mac'",
           {
+            "sources": ["src/vlc_window_mac.cpp"],
             "xcode_settings": {
               "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
               "CLANG_CXX_LIBRARY": "libc++",

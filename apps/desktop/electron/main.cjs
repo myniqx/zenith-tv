@@ -17,6 +17,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     show: false,
+    autoHideMenuBar: false,
     backgroundColor: '#1a1a1a',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
@@ -42,6 +43,10 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 }
+
+
+// Fix for X11/GPU sandbox conflict
+app.commandLine.appendSwitch("disable-gpu-sandbox");
 
 app.whenReady().then(async () => {
   // Setup workspace root path

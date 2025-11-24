@@ -50,6 +50,21 @@ export interface WatchableItem extends M3UItem {
   watchHistory?: WatchHistory;
 }
 
+/**
+ * Interface matching the WatchableObject class from desktop app.
+ * Uses PascalCase properties to match the class definition.
+ */
+export interface PlayableItem {
+  Url: string;
+  Name: string;
+  Logo?: string;
+  Group: string;
+  Year?: number;
+  category: 'Movie' | 'Series' | 'LiveStream';
+  AddedDate?: Date;
+  userData?: UserItemData;
+}
+
 export interface WatchHistory {
   lastWatched: Date;
   position: number;
@@ -75,7 +90,7 @@ export interface PairingRequest {
 
 // Player State
 export interface PlayerState {
-  currentItem: WatchableItem | null;
+  currentItem: PlayableItem | null;
   state: 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'error';
   position: number;
   duration: number;

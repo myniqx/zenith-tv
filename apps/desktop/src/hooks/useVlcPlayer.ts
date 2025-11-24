@@ -1,27 +1,27 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 
-interface VlcPlayerState {
-  isAvailable: boolean;
-  isInitialized: boolean;
-  state: VlcPlayerState;
-  time: number;
-  duration: number;
-  volume: number;
-  isMuted: boolean;
-  audioTracks: VlcTrack[];
-  subtitleTracks: VlcTrack[];
-  currentAudioTrack: number;
-  currentSubtitleTrack: number;
-  error: string | null;
+type VlcState = 'idle' | 'opening' | 'buffering' | 'playing' | 'paused' | 'stopped' | 'ended' | 'error' | 'unknown';
+
+interface VlcTrack {
+  id: number;
+  name: string;
+}
+
+interface Bounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 /**
- * Hook for using the native VLC player
+ * Hook for using the native VLC player with child window embedding
  */
 export function useVlcPlayer() {
   const [isAvailable, setIsAvailable] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [playerState, setPlayerState] = useState<VlcPlayerState>('idle');
+  const [isChildWindowCreated, setIsChildWindowCreated] = useState(false);
+  const [playerState, setPlayerState] = useState<VlcState>('idle');
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(100);
@@ -33,6 +33,7 @@ export function useVlcPlayer() {
   const [error, setError] = useState<string | null>(null);
 
   const isInitializing = useRef(false);
+  const lastBounds = useRef<Bounds | null>(null);
 
   // Check VLC availability and initialize
   useEffect(() => {
@@ -185,10 +186,107 @@ export function useVlcPlayer() {
     }
   }, [isInitialized]);
 
+  // Child window management
+  const createChildWindow = useCallback(async (bounds: Bounds) => {
+    if (!isInitialized) return false;
+
+    try {
+      const result = await window.electron.vlc.createChildWindow(
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height
+      );
+
+      if (result.success) {
+        setIsChildWindowCreated(true);
+        lastBounds.current = bounds;
+        console.log('[VLC] Child window created at:', bounds);
+        return true;
+      } else {
+        console.error('[VLC] Failed to create child window:', result.error);
+        return false;
+      }
+    } catch (err) {
+      console.error('[VLC] Error creating child window:', err);
+      return false;
+    }
+  }, [isInitialized]);
+
+  const destroyChildWindow = useCallback(async () => {
+    if (!isInitialized) return false;
+
+    try {
+      const result = await window.electron.vlc.destroyChildWindow();
+      if (result.success) {
+        setIsChildWindowCreated(false);
+        lastBounds.current = null;
+        console.log('[VLC] Child window destroyed');
+      }
+      return result.success;
+    } catch (err) {
+      console.error('[VLC] Error destroying child window:', err);
+      return false;
+    }
+  }, [isInitialized]);
+
+  const setBounds = useCallback(async (bounds: Bounds) => {
+    if (!isInitialized || !isChildWindowCreated) return false;
+
+    // Skip if bounds haven't changed
+    if (lastBounds.current &&
+        lastBounds.current.x === bounds.x &&
+        lastBounds.current.y === bounds.y &&
+        lastBounds.current.width === bounds.width &&
+        lastBounds.current.height === bounds.height) {
+      return true;
+    }
+
+    try {
+      const result = await window.electron.vlc.setBounds(
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height
+      );
+
+      if (result) {
+        lastBounds.current = bounds;
+      }
+      return result;
+    } catch (err) {
+      console.error('[VLC] Error setting bounds:', err);
+      return false;
+    }
+  }, [isInitialized, isChildWindowCreated]);
+
+  const showWindow = useCallback(async () => {
+    if (!isInitialized || !isChildWindowCreated) return false;
+
+    try {
+      return await window.electron.vlc.showWindow();
+    } catch (err) {
+      console.error('[VLC] Error showing window:', err);
+      return false;
+    }
+  }, [isInitialized, isChildWindowCreated]);
+
+  const hideWindow = useCallback(async () => {
+    if (!isInitialized || !isChildWindowCreated) return false;
+
+    try {
+      return await window.electron.vlc.hideWindow();
+    } catch (err) {
+      console.error('[VLC] Error hiding window:', err);
+      return false;
+    }
+  }, [isInitialized, isChildWindowCreated]);
+
   return {
     // State
     isAvailable,
     isInitialized,
+    isChildWindowCreated,
     state: playerState,
     time,
     duration,
@@ -200,7 +298,7 @@ export function useVlcPlayer() {
     currentSubtitleTrack,
     error,
 
-    // Actions
+    // Playback actions
     play,
     pause,
     resume,
@@ -211,5 +309,12 @@ export function useVlcPlayer() {
     setAudioTrack,
     setSubtitleTrack,
     fetchTracks,
+
+    // Child window actions
+    createChildWindow,
+    destroyChildWindow,
+    setBounds,
+    showWindow,
+    hideWindow,
   };
 }

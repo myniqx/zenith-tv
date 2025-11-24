@@ -12,6 +12,11 @@ export default defineConfig({
         input: {
           index: path.resolve(__dirname, 'electron/main.cjs'),
         },
+        external: [
+          // Native VLC module must not be bundled - use regex patterns
+          /vlc-player/,
+          /vlc_player\.node/,
+        ],
       },
     },
   },

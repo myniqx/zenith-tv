@@ -4,8 +4,9 @@ import { PlayerControls } from './PlayerControls';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '@zenith-tv/ui/button';
-import { Loader2, AlertTriangle, Film, MonitorPlay } from 'lucide-react';
+import { Loader2, AlertTriangle, Film } from 'lucide-react';
 import { useVlcPlayer } from '../hooks/useVlcPlayer';
+import { WatchableObject } from '@/m3u/watchable';
 
 export function VideoPlayer() {
   const { playerBackend } = useSettingsStore();
@@ -25,9 +26,11 @@ export function VideoPlayer() {
 // VLC Player Implementation
 function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoAreaRef = useRef<HTMLDivElement>(null);
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const hideControlsTimeoutRef = useRef<NodeJS.Timeout>();
+  const hideControlsTimeoutRef = useRef<NodeJS.Timeout>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const {
     currentItem,
@@ -40,6 +43,172 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
 
   const { getNextEpisode, saveWatchProgress } = useContentStore();
   const { autoPlayNext, defaultVolume } = useSettingsStore();
+
+  // Track if child window has been created (using ref to avoid re-renders)
+  const childWindowCreatedRef = useRef(false);
+  const isCreatingWindowRef = useRef(false);
+
+  // Create child window and start playback - combined to ensure correct order
+  useEffect(() => {
+    if (!vlc.isInitialized || !currentItem || !videoAreaRef.current) {
+      console.log('[VLC VideoPlayer] Skipping - conditions not met:', {
+        isInitialized: vlc.isInitialized,
+        hasCurrentItem: !!currentItem,
+        hasVideoAreaRef: !!videoAreaRef.current
+      });
+      return;
+    }
+
+    const setupAndPlay = async () => {
+      const element = videoAreaRef.current;
+      if (!element) return;
+
+      // Step 1: Create child window if not already created
+      if (!childWindowCreatedRef.current && !isCreatingWindowRef.current) {
+        isCreatingWindowRef.current = true;
+
+        const rect = element.getBoundingClientRect();
+
+        // The native window handle includes the title bar, so we need to account for:
+        // - The window's client area offset from the full window (title bar height)
+        // - The element's position within the client area
+        // getBoundingClientRect gives position relative to viewport (which IS the client area in Electron)
+        // So rect.x and rect.y are already the correct offsets from the client area origin
+        const bounds = {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+
+        if (bounds.width <= 0 || bounds.height <= 0) {
+          console.log('[VLC VideoPlayer] Invalid bounds, skipping');
+          isCreatingWindowRef.current = false;
+          return;
+        }
+
+        console.log('[VLC VideoPlayer] Step 1: Creating child window with bounds:', bounds);
+        console.log('[VLC VideoPlayer] Element rect:', rect);
+
+        try {
+          const result = await window.electron.vlc.createChildWindow(
+            bounds.x, bounds.y, bounds.width, bounds.height
+          );
+          console.log('[VLC VideoPlayer] Child window creation result:', result);
+          childWindowCreatedRef.current = result.success;
+
+          if (!result.success) {
+            console.error('[VLC VideoPlayer] Failed to create child window:', result.error);
+            isCreatingWindowRef.current = false;
+            return;
+          }
+        } catch (err) {
+          console.error('[VLC VideoPlayer] Exception creating child window:', err);
+          isCreatingWindowRef.current = false;
+          return;
+        }
+
+        isCreatingWindowRef.current = false;
+
+        // Small delay after window creation before playing
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Step 2: Start playback AFTER child window is ready
+      if (childWindowCreatedRef.current) {
+        console.log('[VLC VideoPlayer] Step 2: Starting playback for:', currentItem.Url);
+        setState('loading');
+
+        try {
+          await vlc.setVolume(defaultVolume * 100);
+          const success = await vlc.play(currentItem.Url);
+          console.log('[VLC VideoPlayer] Play result:', success);
+
+          if (!success) {
+            setState('error');
+            return;
+          }
+
+          // Handle resume from watch progress
+          if (currentItem.userData?.watchProgress && currentItem.userData.watchProgress > 0) {
+            const progressPercent = currentItem.userData.watchProgress;
+            setTimeout(async () => {
+              if (vlc.duration > 0) {
+                const position = (progressPercent / 100) * vlc.duration;
+                if (position > 0 && position < vlc.duration - 10000) {
+                  await vlc.seek(position);
+                }
+              }
+            }, 1000);
+          }
+        } catch (err) {
+          console.error('[VLC VideoPlayer] Playback error:', err);
+          setState('error');
+        }
+      }
+    };
+
+    // Small delay to ensure layout is complete
+    const timeoutId = setTimeout(setupAndPlay, 200);
+
+    return () => {
+      clearTimeout(timeoutId);
+      // Stop playback when URL changes
+      vlc.stop();
+    };
+  }, [vlc.isInitialized, currentItem?.Url]); // Trigger on URL change
+
+  // Handle resize - update bounds when container size changes
+  useEffect(() => {
+    if (!vlc.isInitialized || !videoAreaRef.current || !childWindowCreatedRef.current) {
+      return;
+    }
+
+    const updateBounds = async () => {
+      const element = videoAreaRef.current;
+      if (!element || !childWindowCreatedRef.current) return;
+
+      const rect = element.getBoundingClientRect();
+      const bounds = {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+
+      if (bounds.width > 0 && bounds.height > 0) {
+        await window.electron.vlc.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+      }
+    };
+
+    resizeObserverRef.current = new ResizeObserver(() => {
+      updateBounds();
+    });
+
+    resizeObserverRef.current.observe(videoAreaRef.current);
+
+    window.addEventListener('resize', updateBounds);
+
+    return () => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
+      window.removeEventListener('resize', updateBounds);
+    };
+  }, [vlc.isInitialized]);
+
+  // Cleanup child window only when component unmounts
+  useEffect(() => {
+    return () => {
+      if (childWindowCreatedRef.current) {
+        console.log('[VLC VideoPlayer] Destroying child window on unmount');
+        window.electron.vlc.stop().then(() => {
+          window.electron.vlc.destroyChildWindow();
+          childWindowCreatedRef.current = false;
+        });
+      }
+    };
+  }, []);
 
   // Sync VLC state with player store
   useEffect(() => {
@@ -87,40 +256,6 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
     }
   }, [vlc.state, autoPlayNext, currentItem, getNextEpisode, playItem]);
 
-  // Play current item when it changes
-  useEffect(() => {
-    if (!vlc.isInitialized || !currentItem) return;
-
-    const startPlayback = async () => {
-      setState('loading');
-      await vlc.setVolume(defaultVolume * 100);
-      const success = await vlc.play(currentItem.url);
-
-      if (!success) {
-        setState('error');
-      }
-
-      // Handle resume from watch history
-      if (currentItem.watchHistory && currentItem.watchHistory.position > 0) {
-        const progressPercent = currentItem.watchHistory.position;
-        setTimeout(async () => {
-          if (vlc.duration > 0) {
-            const position = (progressPercent / 100) * vlc.duration;
-            if (position > 0 && position < vlc.duration - 10000) {
-              await vlc.seek(position);
-            }
-          }
-        }, 1000);
-      }
-    };
-
-    startPlayback();
-
-    return () => {
-      vlc.stop();
-    };
-  }, [currentItem?.url, vlc.isInitialized]);
-
   // Auto-save watch progress
   useEffect(() => {
     if (!vlc.isInitialized || !currentItem || vlc.state !== 'playing') return;
@@ -129,7 +264,7 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
       if (vlc.duration > 0) {
         try {
           await saveWatchProgress(
-            currentItem.url,
+            currentItem as WatchableObject,
             vlc.time / 1000,
             vlc.duration / 1000
           );
@@ -142,7 +277,7 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
     return () => {
       clearInterval(saveInterval);
       if (vlc.duration > 0) {
-        saveWatchProgress(currentItem.url, vlc.time / 1000, vlc.duration / 1000)
+        saveWatchProgress(currentItem as WatchableObject, vlc.time / 1000, vlc.duration / 1000)
           .catch(err => console.error('Failed to save watch progress on unmount:', err));
       }
     };
@@ -233,7 +368,7 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
   const handleRetry = async () => {
     if (!currentItem) return;
     await vlc.stop();
-    await vlc.play(currentItem.url);
+    await vlc.play(currentItem.Url);
   };
 
   // No content selected
@@ -258,62 +393,70 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
       ref={containerRef}
       className="relative w-full h-full bg-black group"
       onMouseMove={handleMouseMove}
-      onClick={handleClick}
     >
-      {/* VLC renders directly to the window */}
-      <div className="w-full h-full" />
+      {/* Video area - VLC child window will be positioned here */}
+      <div
+        ref={videoAreaRef}
+        className="absolute inset-0 z-0"
+        onClick={handleClick}
+      />
 
-      {/* Loading spinner */}
-      {(vlc.state === 'opening' || vlc.state === 'buffering' || state === 'loading') && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
-          <Loader2 className="w-16 h-16 text-primary animate-spin" />
-        </div>
-      )}
-
-      {/* Error message */}
-      {vlc.state === 'error' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/90">
-          <div className="text-center max-w-lg px-6">
-            <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-destructive" />
-            <h3 className="text-2xl font-semibold text-destructive mb-2">
-              Playback Error
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              {vlc.error || 'Failed to play video stream'}
-            </p>
-
-            <Button onClick={handleRetry}>
-              Retry
-            </Button>
-
-            <p className="text-xs text-muted-foreground/50 font-mono mt-4 truncate max-w-full">
-              {currentItem.url}
-            </p>
+      {/* Overlay container - sits above VLC child window */}
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        {/* Loading spinner */}
+        {(vlc.state === 'opening' || vlc.state === 'buffering' || state === 'loading') && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <Loader2 className="w-16 h-16 text-primary animate-spin" />
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Track info overlay */}
-      {vlc.state === 'playing' && vlc.audioTracks.length > 0 && showControls && (
-        <div className="absolute top-4 right-4 bg-black/70 rounded-lg px-3 py-2 text-sm">
-          <div className="text-white/60">
-            Audio: {vlc.audioTracks.find(t => t.id === vlc.currentAudioTrack)?.name || 'Default'}
-          </div>
-          {vlc.subtitleTracks.length > 0 && (
-            <div className="text-white/60">
-              Subtitle: {vlc.subtitleTracks.find(t => t.id === vlc.currentSubtitleTrack)?.name || 'Off'}
+        {/* Error message */}
+        {vlc.state === 'error' && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/90 pointer-events-auto">
+            <div className="text-center max-w-lg px-6">
+              <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-destructive" />
+              <h3 className="text-2xl font-semibold text-destructive mb-2">
+                Playback Error
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                {vlc.error || 'Failed to play video stream'}
+              </p>
+
+              <Button onClick={handleRetry}>
+                Retry
+              </Button>
+
+              <p className="text-xs text-muted-foreground/50 font-mono mt-4 truncate max-w-full">
+                {currentItem.Url}
+              </p>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Controls */}
-      {showControls && currentItem && (
-        <PlayerControls
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={toggleFullscreen}
-        />
-      )}
+        {/* Track info overlay */}
+        {vlc.state === 'playing' && vlc.audioTracks.length > 0 && showControls && (
+          <div className="absolute top-4 right-4 bg-black/70 rounded-lg px-3 py-2 text-sm pointer-events-auto">
+            <div className="text-white/60">
+              Audio: {vlc.audioTracks.find(t => t.id === vlc.currentAudioTrack)?.name || 'Default'}
+            </div>
+            {vlc.subtitleTracks.length > 0 && (
+              <div className="text-white/60">
+                Subtitle: {vlc.subtitleTracks.find(t => t.id === vlc.currentSubtitleTrack)?.name || 'Off'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Controls */}
+        {showControls && currentItem && (
+          <div className="pointer-events-auto">
+            <PlayerControls
+              isFullscreen={isFullscreen}
+              onToggleFullscreen={toggleFullscreen}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -500,11 +643,11 @@ function Html5VideoPlayer() {
     const video = videoRef.current;
     if (!video || !currentItem) return;
 
-    video.src = currentItem.url;
+    video.src = currentItem.Url;
     setState('loading');
 
-    if (currentItem.watchHistory && currentItem.watchHistory.position > 0) {
-      const progressPercent = currentItem.watchHistory.position;
+    if (currentItem.userData?.watchProgress && currentItem.userData.watchProgress > 0) {
+      const progressPercent = currentItem.userData.watchProgress;
 
       video.addEventListener('loadedmetadata', () => {
         const position = (progressPercent / 100) * video.duration;
@@ -533,7 +676,7 @@ function Html5VideoPlayer() {
     const saveInterval = setInterval(async () => {
       if (video.duration > 0) {
         try {
-          await saveWatchProgress(currentItem.url, video.currentTime, video.duration);
+          await saveWatchProgress(currentItem, video.currentTime, video.duration);
         } catch (error) {
           console.error('Failed to save watch progress:', error);
         }
@@ -543,7 +686,7 @@ function Html5VideoPlayer() {
     const handlePause = async () => {
       if (video.duration > 0) {
         try {
-          await saveWatchProgress(currentItem.url, video.currentTime, video.duration);
+          await saveWatchProgress(currentItem, video.currentTime, video.duration);
         } catch (error) {
           console.error('Failed to save watch progress:', error);
         }
@@ -557,7 +700,7 @@ function Html5VideoPlayer() {
       video.removeEventListener('pause', handlePause);
 
       if (video.duration > 0) {
-        saveWatchProgress(currentItem.url, video.currentTime, video.duration)
+        saveWatchProgress(currentItem, video.currentTime, video.duration)
           .catch(err => console.error('Failed to save watch progress on unmount:', err));
       }
     };
@@ -712,7 +855,7 @@ function Html5VideoPlayer() {
             </Button>
 
             <p className="text-xs text-muted-foreground/50 font-mono mt-4 truncate max-w-full">
-              {currentItem.url}
+              {currentItem.Url}
             </p>
           </div>
         </div>

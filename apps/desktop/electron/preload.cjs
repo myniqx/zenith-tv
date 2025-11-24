@@ -70,6 +70,13 @@ contextBridge.exposeInMainWorld('electron', {
     isAvailable: () => ipcRenderer.invoke('vlc:isAvailable'),
     init: () => ipcRenderer.invoke('vlc:init'),
 
+    // Child window management
+    createChildWindow: (x, y, width, height) => ipcRenderer.invoke('vlc:createChildWindow', x, y, width, height),
+    destroyChildWindow: () => ipcRenderer.invoke('vlc:destroyChildWindow'),
+    setBounds: (x, y, width, height) => ipcRenderer.invoke('vlc:setBounds', x, y, width, height),
+    showWindow: () => ipcRenderer.invoke('vlc:showWindow'),
+    hideWindow: () => ipcRenderer.invoke('vlc:hideWindow'),
+
     // Playback control
     play: (url) => ipcRenderer.invoke('vlc:play', url),
     pause: () => ipcRenderer.invoke('vlc:pause'),

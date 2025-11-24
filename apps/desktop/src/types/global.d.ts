@@ -24,6 +24,13 @@ declare global {
         isAvailable: () => Promise<boolean>;
         init: () => Promise<{ success: boolean; error?: string }>;
 
+        // Child window management
+        createChildWindow: (x: number, y: number, width: number, height: number) => Promise<{ success: boolean; error?: string }>;
+        destroyChildWindow: () => Promise<{ success: boolean; error?: string }>;
+        setBounds: (x: number, y: number, width: number, height: number) => Promise<boolean>;
+        showWindow: () => Promise<boolean>;
+        hideWindow: () => Promise<boolean>;
+
         // Playback control
         play: (url?: string) => Promise<boolean>;
         pause: () => Promise<void>;

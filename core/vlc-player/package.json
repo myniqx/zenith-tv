@@ -3,12 +3,12 @@
 	"version": "0.1.0",
 	"private": true,
 	"description": "Native libVLC bindings for Electron",
-	"main": "./build/Release/vlc_player.node",
+	"main": "./index.js",
 	"types": "./index.d.ts",
 	"exports": {
 		".": {
 			"types": "./index.d.ts",
-			"require": "./build/Release/vlc_player.node"
+			"require": "./index.js"
 		}
 	},
 	"files": [
