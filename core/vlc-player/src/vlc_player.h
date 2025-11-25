@@ -40,6 +40,7 @@ public:
     libvlc_media_t* current_media_;
     std::mutex mutex_;
     std::atomic<bool> disposed_{false};
+    std::string rendering_mode_; // "mem" or "win"
 
     // Child window handles (platform-specific)
 #ifdef _WIN32
@@ -54,6 +55,14 @@ public:
     void* parent_nsview_;
 #endif
     bool child_window_created_;
+
+    // Video memory (vmem) callback support
+    unsigned int video_width_;
+    unsigned int video_height_;
+    unsigned int video_pitch_;
+    std::vector<uint8_t> frame_buffer_;
+    std::mutex frame_mutex_;
+    bool frame_ready_;
 
 private:
     // Core VLC methods
@@ -131,6 +140,16 @@ private:
     static void HandleStateChanged(const libvlc_event_t* event, void* data);
     static void HandleEndReached(const libvlc_event_t* event, void* data);
     static void HandleError(const libvlc_event_t* event, void* data);
+
+    // Video memory callbacks
+    void SetupVideoCallbacks();
+    static void* VideoLockCallback(void* opaque, void** planes);
+    static void VideoUnlockCallback(void* opaque, void* picture, void* const* planes);
+    static void VideoDisplayCallback(void* opaque, void* picture);
+
+    // Frame retrieval
+    Napi::Value GetFrame(const Napi::CallbackInfo& info);
+    Napi::Value GetVideoFormat(const Napi::CallbackInfo& info);
 };
 
 #endif // VLC_PLAYER_H
