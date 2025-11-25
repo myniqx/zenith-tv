@@ -64,8 +64,8 @@ function TreeNode({ group, level, expandedNodes, toggleExpand, isCollapsed }: Tr
     <div>
       <div
         className={cn(
-          'flex items-center gap-1 py-1.5 px-2 rounded-md cursor-pointer transition-colors',
-          'hover:bg-secondary/50',
+          'flex items-center gap-1 py-1.5 px-2 rounded-md cursor-pointer transition-colors select-none',
+          'hover:bg-primary/30',
           isSelected && 'bg-primary text-primary-foreground hover:bg-primary/90'
         )}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
@@ -85,7 +85,7 @@ function TreeNode({ group, level, expandedNodes, toggleExpand, isCollapsed }: Tr
         ) : (
           <span className="w-5" />
         )}
-        <Icon className="w-4 h-4 flex-shrink-0" />
+        <Icon className="w-4 h-4 shrink-0" />
         <span className="text-sm font-medium truncate flex-1">{group.Name}</span>
         {group.TotalCount > 0 && (
           <span className={cn(

@@ -29,10 +29,25 @@ function createWindow() {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    if (is.dev) {
+      mainWindow.webContents.openDevTools()
+    }
   })
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+
+  // VLC window position/size sync (for always-on-top window management)
+  // These events will forward to VLC process manager for window sync
+  mainWindow.on('move', () => {
+    // Position sync handled by renderer when needed
+    // VLC standalone window will be managed independently
+  });
+
+  mainWindow.on('resize', () => {
+    // Size sync handled by renderer when needed
+    // VLC standalone window will be managed independently
   });
 
   // HMR for renderer base on electron-vite cli.
@@ -70,10 +85,10 @@ app.whenReady().then(async () => {
   registerVlcHandlers(mainWindow)
 });
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
   cleanupFileWatchers()
-  cleanupP2P()
-  cleanupVlc()
+  await cleanupP2P()
+  await cleanupVlc()
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -85,8 +100,14 @@ app.on('activate', () => {
   }
 });
 
-app.on('before-quit', () => {
-  cleanupP2P()
+app.on('before-quit', async (event) => {
+  // Prevent default quit to allow async cleanup
+  event.preventDefault();
+
+  await cleanupP2P()
   cleanupFileWatchers()
-  cleanupVlc()
+  await cleanupVlc()
+
+  // Now quit for real
+  app.exit(0);
 });

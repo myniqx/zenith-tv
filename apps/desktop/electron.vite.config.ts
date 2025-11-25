@@ -1,11 +1,22 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite'
+import tailwindcss from '@tailwindcss/vite';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 import path from 'path';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [
+      externalizeDepsPlugin(),
+      viteStaticCopy({
+        targets: [
+          {
+            src: path.resolve(__dirname, 'electron/vlc/vlcStandaloneProcess.cjs'),
+            dest: 'vlc'
+          }
+        ]
+      })
+    ],
     build: {
       outDir: 'out/main',
       rollupOptions: {

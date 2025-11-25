@@ -16,6 +16,10 @@
       "from": "../../core/vlc-player/lib/${os}",
       "to": "vlc",
       "filter": ["**/*"]
+    },
+    {
+      "from": "electron/vlc/vlcStandaloneProcess.cjs",
+      "to": "vlc"
     }
   ],
   "win": {

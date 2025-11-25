@@ -6,7 +6,7 @@
  */
 
 const { ipcMain } = require('electron');
-const { VlcProcessManager } = require('../vlc/vlcProcessManager.cjs');
+const { VlcProcessManager } = require('../vlc/vlcProcessManager.js');
 
 let vlcManager = null;
 
@@ -109,11 +109,11 @@ function registerVlcHandlers(mainWindow) {
 
   // Destroy child window
   ipcMain.handle('vlc:destroyChildWindow', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return { success: false };
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return { success: false };
 
     try {
-      // No-op: window managed by standalone process
+      const result = vlcPlayer.destroyChildWindow();
       return { success: result };
     } catch (error) {
       console.error('[VLC] DestroyChildWindow error:', error);
@@ -134,12 +134,11 @@ function registerVlcHandlers(mainWindow) {
 
   // Show child window
   ipcMain.handle('vlc:showWindow', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return false;
 
     try {
-      // No-op: window managed by standalone process
-      return true;
+      return vlcPlayer.showWindow();
     } catch (error) {
       console.error('[VLC] ShowWindow error:', error);
       return false;
@@ -148,12 +147,11 @@ function registerVlcHandlers(mainWindow) {
 
   // Hide child window
   ipcMain.handle('vlc:hideWindow', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return false;
 
     try {
-      // No-op: window managed by standalone process
-      return true;
+      return vlcPlayer.hideWindow();
     } catch (error) {
       console.error('[VLC] HideWindow error:', error);
       return false;
@@ -210,22 +208,22 @@ function registerVlcHandlers(mainWindow) {
 
   // Volume control
   ipcMain.handle('vlc:setVolume', async (_, volume) => {
-    const manager = await getVlcManager();
-    if (!manager) return;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return;
 
     try {
-      await manager.call('setVolume', volume);
+      vlcPlayer.setVolume(volume);
     } catch (error) {
       console.error('[VLC] SetVolume error:', error);
     }
   });
 
   ipcMain.handle('vlc:getVolume', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 0;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return 0;
 
     try {
-      return await manager.call('getVolume', );
+      return vlcPlayer.getVolume();
     } catch (error) {
       console.error('[VLC] GetVolume error:', error);
       return 0;
@@ -233,22 +231,22 @@ function registerVlcHandlers(mainWindow) {
   });
 
   ipcMain.handle('vlc:setMute', async (_, mute) => {
-    const manager = await getVlcManager();
-    if (!manager) return;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return;
 
     try {
-      await manager.call('setMute', mute);
+      vlcPlayer.setMute(mute);
     } catch (error) {
       console.error('[VLC] SetMute error:', error);
     }
   });
 
   ipcMain.handle('vlc:getMute', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return false;
 
     try {
-      return await manager.call('getMute', );
+      return vlcPlayer.getMute();
     } catch (error) {
       console.error('[VLC] GetMute error:', error);
       return false;
@@ -257,44 +255,44 @@ function registerVlcHandlers(mainWindow) {
 
   // Time/Position
   ipcMain.handle('vlc:getTime', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 0;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return 0;
 
     try {
-      return await manager.call('getTime');
+      return vlcPlayer.getTime();
     } catch (error) {
       return 0;
     }
   });
 
   ipcMain.handle('vlc:getLength', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 0;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return 0;
 
     try {
-      return await manager.call('getLength', );
+      return vlcPlayer.getLength();
     } catch (error) {
       return 0;
     }
   });
 
   ipcMain.handle('vlc:getPosition', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 0;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return 0;
 
     try {
-      return await manager.call('getPosition');
+      return vlcPlayer.getPosition();
     } catch (error) {
       return 0;
     }
   });
 
   ipcMain.handle('vlc:setPosition', async (_, position) => {
-    const manager = await getVlcManager();
-    if (!manager) return;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return;
 
     try {
-      await manager.call('setPosition', position);
+      vlcPlayer.setPosition(position);
     } catch (error) {
       console.error('[VLC] SetPosition error:', error);
     }
@@ -302,33 +300,33 @@ function registerVlcHandlers(mainWindow) {
 
   // State
   ipcMain.handle('vlc:getState', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 'idle';
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return 'idle';
 
     try {
-      return await manager.call('getState', );
+      return vlcPlayer.getState();
     } catch (error) {
       return 'error';
     }
   });
 
   ipcMain.handle('vlc:isPlaying', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return false;
 
     try {
-      return await manager.call('isPlaying');
+      return vlcPlayer.isPlaying();
     } catch (error) {
       return false;
     }
   });
 
   ipcMain.handle('vlc:isSeekable', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return false;
 
     try {
-      return await manager.call('isSeekable');
+      return vlcPlayer.isSeekable();
     } catch (error) {
       return false;
     }
@@ -336,33 +334,33 @@ function registerVlcHandlers(mainWindow) {
 
   // Audio tracks
   ipcMain.handle('vlc:getAudioTracks', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return [];
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return [];
 
     try {
-      return await manager.call('getAudioTracks');
+      return vlcPlayer.getAudioTracks();
     } catch (error) {
       return [];
     }
   });
 
   ipcMain.handle('vlc:getAudioTrack', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return -1;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return -1;
 
     try {
-      return await manager.call('getAudioTrack');
+      return vlcPlayer.getAudioTrack();
     } catch (error) {
       return -1;
     }
   });
 
   ipcMain.handle('vlc:setAudioTrack', async (_, trackId) => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return false;
 
     try {
-      return await manager.call('setAudioTrack', trackId);
+      return vlcPlayer.setAudioTrack(trackId);
     } catch (error) {
       console.error('[VLC] SetAudioTrack error:', error);
       return false;
@@ -371,33 +369,33 @@ function registerVlcHandlers(mainWindow) {
 
   // Subtitle tracks
   ipcMain.handle('vlc:getSubtitleTracks', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return [];
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return [];
 
     try {
-      return await manager.call('getSubtitleTracks');
+      return vlcPlayer.getSubtitleTracks();
     } catch (error) {
       return [];
     }
   });
 
   ipcMain.handle('vlc:getSubtitleTrack', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return -1;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return -1;
 
     try {
-      return await manager.call('getSubtitleTrack');
+      return vlcPlayer.getSubtitleTrack();
     } catch (error) {
       return -1;
     }
   });
 
   ipcMain.handle('vlc:setSubtitleTrack', async (_, trackId) => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return false;
 
     try {
-      return await manager.call('setSubtitleTrack', trackId);
+      return vlcPlayer.setSubtitleTrack(trackId);
     } catch (error) {
       console.error('[VLC] SetSubtitleTrack error:', error);
       return false;
@@ -405,11 +403,11 @@ function registerVlcHandlers(mainWindow) {
   });
 
   ipcMain.handle('vlc:setSubtitleDelay', async (_, delay) => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return false;
 
     try {
-      return await manager.call('setSubtitleDelay', delay);
+      return vlcPlayer.setSubtitleDelay(delay);
     } catch (error) {
       console.error('[VLC] SetSubtitleDelay error:', error);
       return false;
@@ -418,11 +416,11 @@ function registerVlcHandlers(mainWindow) {
 
   // Video tracks
   ipcMain.handle('vlc:getVideoTracks', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return [];
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return [];
 
     try {
-      return await manager.call('getVideoTracks');
+      return vlcPlayer.getVideoTracks();
     } catch (error) {
       return [];
     }
@@ -430,22 +428,22 @@ function registerVlcHandlers(mainWindow) {
 
   // Playback rate
   ipcMain.handle('vlc:setRate', async (_, rate) => {
-    const manager = await getVlcManager();
-    if (!manager) return;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return;
 
     try {
-      await manager.call('setRate', rate);
+      vlcPlayer.setRate(rate);
     } catch (error) {
       console.error('[VLC] SetRate error:', error);
     }
   });
 
   ipcMain.handle('vlc:getRate', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 1.0;
+    const vlcPlayer = getPlayer();
+    if (!vlcPlayer) return 1.0;
 
     try {
-      return await manager.call('getRate', );
+      return vlcPlayer.getRate();
     } catch (error) {
       return 1.0;
     }
