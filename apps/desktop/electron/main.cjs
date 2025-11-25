@@ -70,10 +70,10 @@ app.whenReady().then(async () => {
   registerVlcHandlers(mainWindow)
 });
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
   cleanupFileWatchers()
-  cleanupP2P()
-  cleanupVlc()
+  await cleanupP2P()
+  await cleanupVlc()
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -85,8 +85,14 @@ app.on('activate', () => {
   }
 });
 
-app.on('before-quit', () => {
-  cleanupP2P()
+app.on('before-quit', async (event) => {
+  // Prevent default quit to allow async cleanup
+  event.preventDefault();
+
+  await cleanupP2P()
   cleanupFileWatchers()
-  cleanupVlc()
+  await cleanupVlc()
+
+  // Now quit for real
+  app.exit(0);
 });

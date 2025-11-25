@@ -65,17 +65,23 @@ contextBridge.exposeInMainWorld('electron', {
     getPath: (name) => ipcRenderer.invoke('app:getPath', name),
   },
 
-  // VLC Player API
+  // VLC Player API (Child Process Architecture)
   vlc: {
     isAvailable: () => ipcRenderer.invoke('vlc:isAvailable'),
+
+    // Initialize VLC player and get MessagePort for frame transfer
+    // Returns: { success: boolean, framePort?: MessagePort, error?: string }
     init: () => ipcRenderer.invoke('vlc:init'),
 
-    // Child window management
+    // Window mode: Create child window for VLC rendering
     createChildWindow: (x, y, width, height) => ipcRenderer.invoke('vlc:createChildWindow', x, y, width, height),
     destroyChildWindow: () => ipcRenderer.invoke('vlc:destroyChildWindow'),
     setBounds: (x, y, width, height) => ipcRenderer.invoke('vlc:setBounds', x, y, width, height),
     showWindow: () => ipcRenderer.invoke('vlc:showWindow'),
     hideWindow: () => ipcRenderer.invoke('vlc:hideWindow'),
+
+    // Canvas mode: Setup video callback for frame rendering via MessagePort
+    setupVideoCallback: (width, height) => ipcRenderer.invoke('vlc:setupVideoCallback', width, height),
 
     // Playback control
     play: (url) => ipcRenderer.invoke('vlc:play', url),

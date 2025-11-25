@@ -142,6 +142,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Skip P2P if window.electron is not available (nodeIntegration mode)
+    if (!window.electron?.p2p) {
+      console.log('[P2P] Skipping P2P setup - window.electron not available');
+      return;
+    }
+
     const startP2P = async () => {
       try {
         const info = await window.electron.p2p.start(8080);
@@ -155,11 +161,14 @@ function App() {
     startP2P();
 
     return () => {
-      window.electron.p2p.stop();
+      window.electron?.p2p?.stop();
     };
   }, []);
 
   useEffect(() => {
+    // Skip P2P event listeners if not available
+    if (!window.electron?.p2p) return;
+
     window.electron.p2p.onPairingRequest((request) => {
       setPairingRequest(request);
     });
@@ -196,7 +205,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!p2pEnabled) return;
+    if (!p2pEnabled || !window.electron?.p2p) return;
 
     const { currentItem, state, position, volume } = usePlayerStore.getState();
 
@@ -215,6 +224,7 @@ function App() {
   }, [p2pEnabled]);
 
   const handleAcceptPairing = async (deviceId: string, pin: string) => {
+    if (!window.electron?.p2p) return;
     const accepted = await window.electron.p2p.acceptPairing(deviceId, pin);
     if (accepted && pairingRequest) {
       setControlledBy(pairingRequest.deviceName);
@@ -223,6 +233,7 @@ function App() {
   };
 
   const handleRejectPairing = (deviceId: string) => {
+    if (!window.electron?.p2p) return;
     window.electron.p2p.rejectPairing(deviceId);
     setPairingRequest(null);
   };
