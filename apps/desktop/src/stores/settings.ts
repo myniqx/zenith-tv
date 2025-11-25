@@ -38,12 +38,9 @@ interface SettingsState {
   // Startup
   autoLoadLastProfile: boolean;
   rememberLayout: boolean;
-  lastProfileId: string | null;
-  lastLayout: {
-    category: string;
-    sortBy: string;
-    groupBy: string;
-  } | null;
+  lastProfileUsername: string | null;
+  lastProfileUUID: string | null;
+
 
   // Keyboard Shortcuts
   keyboardShortcuts: KeyboardShortcuts;
@@ -62,8 +59,7 @@ interface SettingsState {
   setBufferSize: (size: BufferSize) => void;
   setAutoLoadLastProfile: (enabled: boolean) => void;
   setRememberLayout: (enabled: boolean) => void;
-  setLastProfileId: (id: string | null) => void;
-  setLastLayout: (layout: { category: string; sortBy: string; groupBy: string } | null) => void;
+  setLastProfile: (username: string, uuid: string) => void;
   setKeyboardShortcut: (action: keyof KeyboardShortcuts, key: string) => void;
   resetKeyboardShortcuts: () => void;
   setDeviceName: (name: string) => void;
@@ -96,8 +92,8 @@ const defaultSettings = {
   bufferSize: 10 as BufferSize,
   autoLoadLastProfile: false,
   rememberLayout: false,
-  lastProfileId: null as string | null,
-  lastLayout: null as { category: string; sortBy: string; groupBy: string } | null,
+  lastProfileUsername: null as string | null,
+  lastProfileUUID: null as string | null,
   keyboardShortcuts: defaultKeyboardShortcuts,
   deviceName: 'Zenith TV',
   serverPort: 8080,
@@ -129,9 +125,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       setRememberLayout: (enabled) => set({ rememberLayout: enabled }),
 
-      setLastProfileId: (id) => set({ lastProfileId: id }),
-
-      setLastLayout: (layout) => set({ lastLayout: layout }),
+      setLastProfile: (username: string, uuid: string) => set({ lastProfileUsername: username, lastProfileUUID: uuid }),
 
       setKeyboardShortcut: (action, key) =>
         set((state) => ({
