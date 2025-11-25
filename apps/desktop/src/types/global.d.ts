@@ -22,14 +22,18 @@ declare global {
 
       vlc: {
         isAvailable: () => Promise<boolean>;
-        init: () => Promise<{ success: boolean; error?: string }>;
+        // Initialize VLC player (returns MessagePort for frame transfer in canvas mode)
+        init: () => Promise<{ success: boolean; framePort?: MessagePort; error?: string }>;
 
-        // Child window management
+        // Window mode: Child window management
         createChildWindow: (x: number, y: number, width: number, height: number) => Promise<{ success: boolean; error?: string }>;
         destroyChildWindow: () => Promise<{ success: boolean; error?: string }>;
         setBounds: (x: number, y: number, width: number, height: number) => Promise<boolean>;
         showWindow: () => Promise<boolean>;
         hideWindow: () => Promise<boolean>;
+
+        // Canvas mode: Setup video callback for frame rendering
+        setupVideoCallback: (width: number, height: number) => Promise<{ success: boolean; error?: string }>;
 
         // Playback control
         play: (url?: string) => Promise<boolean>;

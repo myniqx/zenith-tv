@@ -57,6 +57,10 @@ Napi::Object VlcPlayer::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("on", &VlcPlayer::On),
         InstanceMethod("off", &VlcPlayer::Off),
 
+        // Frame retrieval
+        InstanceMethod("getFrame", &VlcPlayer::GetFrame),
+        InstanceMethod("getVideoFormat", &VlcPlayer::GetVideoFormat),
+
         // Cleanup
         InstanceMethod("dispose", &VlcPlayer::Dispose),
     });
@@ -86,9 +90,21 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo& info)
       parent_nsview_(nullptr),
 #endif
       child_window_created_(false),
+      video_width_(0),
+      video_height_(0),
+      video_pitch_(0),
+      frame_ready_(false),
+      rendering_mode_("win"), // Default to window mode
       event_manager_(nullptr) {
 
     Napi::Env env = info.Env();
+
+    // Optional: Accept mode parameter ("mem" or "win")
+    if (info.Length() > 0 && info[0].IsString()) {
+        rendering_mode_ = info[0].As<Napi::String>().Utf8Value();
+        printf("[VLC] Rendering mode: %s\n", rendering_mode_.c_str());
+        fflush(stdout);
+    }
 
     // Initialize VLC with platform-specific parameters
 #ifdef _WIN32
@@ -144,6 +160,11 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo& info)
         vlc_instance_ = nullptr;
         Napi::Error::New(env, "Failed to create media player").ThrowAsJavaScriptException();
         return;
+    }
+
+    // Setup video callbacks only in memory rendering mode
+    if (rendering_mode_ == "mem") {
+        SetupVideoCallbacks();
     }
 
     SetupEventCallbacks();

@@ -60,7 +60,8 @@ Napi::Value VlcPlayer::SetMedia(const Napi::CallbackInfo& info) {
     fflush(stdout);
 
     // Re-set window handle after media is set to ensure vout initializes
-    if (child_window_created_) {
+    // Skip in memory rendering mode
+    if (child_window_created_ && rendering_mode_ == "win") {
         #ifdef _WIN32
         if (child_hwnd_) {
             printf("[VLC] CALL: libvlc_media_player_set_hwnd(hwnd=%p)\n", child_hwnd_);

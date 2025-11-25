@@ -6,7 +6,8 @@
       "cflags_cc!": ["-fno-exceptions"],
       "sources": [
         "src/vlc_player.cpp",
-        "src/vlc_controls.cpp"
+        "src/vlc_controls.cpp",
+        "src/vlc_vmem.cpp"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")"
