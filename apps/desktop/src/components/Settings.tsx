@@ -29,6 +29,7 @@ import {
   Keyboard,
 } from 'lucide-react';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
+import { VideoSettings } from './VideoSettings';
 
 interface SettingsSectionProps {
   title: string;
@@ -119,10 +120,14 @@ export function Settings() {
         </DialogHeader>
 
         <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="general" className="flex items-center gap-2">
               <SettingsIcon className="w-4 h-4" />
               General
+            </TabsTrigger>
+            <TabsTrigger value="video" className="flex items-center gap-2">
+              <Play className="w-4 h-4" />
+              Video
             </TabsTrigger>
             <TabsTrigger value="shortcuts" className="flex items-center gap-2">
               <Keyboard className="w-4 h-4" />
@@ -262,6 +267,10 @@ export function Settings() {
                 </SettingRow>
               </SettingsSection>
             </div>
+          </TabsContent>
+
+          <TabsContent value="video" className="flex-1 overflow-y-auto pr-2 mt-4">
+            <VideoSettings />
           </TabsContent>
 
           <TabsContent value="shortcuts" className="flex-1 overflow-y-auto pr-2 mt-4">

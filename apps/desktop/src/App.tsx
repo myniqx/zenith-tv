@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { VideoPlayer } from './components/VideoPlayer';
+import { VideoController } from './components/VideoController';
 import { CategoryBrowser } from './components/CategoryBrowser';
 import { ContentGrid } from './components/ContentGrid';
 import { ToastContainer } from './components/ToastContainer';
@@ -321,11 +321,11 @@ function App() {
                 </div>
               </div>
 
-              {/* Content Grid and Video Player */}
+              {/* Content Grid */}
               <div className="flex-1 overflow-hidden">
                 <PanelGroup direction="horizontal" autoSaveId="content-layout">
                   <Panel
-                    defaultSize={50}
+                    defaultSize={100}
                     minSize={30}
                     onResize={(size) => {
                       setUserData(userData => ({
@@ -340,16 +340,11 @@ function App() {
                       <ContentGrid />
                     </div>
                   </Panel>
-
-                  <ResizeHandle className="w-1.5" />
-
-                  <Panel defaultSize={50} minSize={30}>
-                    <div className="h-full">
-                      <VideoPlayer />
-                    </div>
-                  </Panel>
                 </PanelGroup>
               </div>
+
+              {/* Video Controller */}
+              <VideoController />
             </div>
           </Panel>
         </PanelGroup>
