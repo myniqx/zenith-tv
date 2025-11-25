@@ -31,6 +31,7 @@ function ResizeHandle({ className = '' }: { className?: string }) {
 function App() {
   const [isCategoryCollapsed, setIsCategoryCollapsed] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState('');
+  const [lastProfileLoaded, setLastProfileLoaded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [p2pEnabled, setP2pEnabled] = useState(false);
@@ -48,59 +49,53 @@ function App() {
     setSortOrder,
     groupBy,
     setGroupBy,
+    setUserData,
   } = useContentStore();
 
   const {
     theme,
     autoLoadLastProfile,
-    rememberLayout,
-    lastProfileId,
-    lastLayout,
-    setLastProfileId,
-    setLastLayout,
+    lastProfileUsername,
+    lastProfileUUID,
+    setLastProfile,
   } = useSettingsStore();
 
   const { profiles, selectProfile } = useProfilesStore();
-  const { currentUsername, currentUUID } = useContentStore();
 
   // Auto-load last profile on startup
   useEffect(() => {
-    if (!autoLoadLastProfile || !lastProfileId || !profiles || profiles.length === 0) return;
-
-    const [username, uuid] = lastProfileId.split(':');
-    const profile = profiles.find((p) => p.username === username);
-
-    if (profile && profile.m3uRefs.includes(uuid)) {
-      selectProfile(username, uuid);
+    if (lastProfileLoaded)
+      return; // dont let changing profile trigger this
+    if (!autoLoadLastProfile || !lastProfileUsername || !lastProfileUUID) {
+      setLastProfileLoaded(true);
+      return;
     }
-  }, [profiles]);
+    if (!profiles || !profiles.length)
+      return; // if lastProfileUsername exists maybe profiles are not loaded yet
+
+    const profile = profiles.find((p) => p.username === lastProfileUsername);
+
+    if (profile && profile.m3uRefs.includes(lastProfileUUID)) {
+      selectProfile(lastProfileUsername, lastProfileUUID);
+    }
+
+    setLastProfileLoaded(true);
+  }, [
+    profiles,
+    autoLoadLastProfile,
+    lastProfileUsername,
+    lastProfileUUID,
+    selectProfile,
+    setLastProfileLoaded,
+  ]);
 
   // Save current profile when it changes
   useEffect(() => {
-    if (autoLoadLastProfile && currentUsername && currentUUID) {
-      setLastProfileId(`${currentUsername}:${currentUUID}`);
+    if (autoLoadLastProfile && lastProfileUsername && lastProfileUUID) {
+      setLastProfile(lastProfileUsername, lastProfileUUID);
     }
-  }, [currentUsername, currentUUID, autoLoadLastProfile, setLastProfileId]);
+  }, [lastProfileUsername, lastProfileUUID, autoLoadLastProfile, setLastProfile]);
 
-  // Restore layout on startup
-  useEffect(() => {
-    if (!rememberLayout || !lastLayout) return;
-
-    const { setGroupBy: setGroupByStore, setSortBy: setSortByStore } = useContentStore.getState();
-    if (lastLayout.groupBy) setGroupByStore(lastLayout.groupBy as GroupBy);
-    if (lastLayout.sortBy) setSortByStore(lastLayout.sortBy as 'name' | 'date' | 'recent');
-  }, []);
-
-  // Save layout when it changes
-  useEffect(() => {
-    if (rememberLayout) {
-      setLastLayout({
-        category: 'all',
-        sortBy,
-        groupBy,
-      });
-    }
-  }, [sortBy, groupBy, rememberLayout, setLastLayout]);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -252,6 +247,15 @@ function App() {
             maxSize={30}
             onCollapse={() => setIsCategoryCollapsed(true)}
             onExpand={() => setIsCategoryCollapsed(false)}
+            onResize={(size) => {
+              setUserData(userData => ({
+                ...userData,
+                layoutData: {
+                  ...userData.layoutData,
+                  categoryPanelSize: size,
+                },
+              }));
+            }}
           >
             <CategoryBrowser isCollapsed={isCategoryCollapsed} />
           </Panel>
@@ -331,7 +335,18 @@ function App() {
               {/* Content Grid and Video Player */}
               <div className="flex-1 overflow-hidden">
                 <PanelGroup direction="horizontal" autoSaveId="content-layout">
-                  <Panel defaultSize={50} minSize={30}>
+                  <Panel
+                    defaultSize={50}
+                    minSize={30}
+                    onResize={(size) => {
+                      setUserData(userData => ({
+                        ...userData,
+                        layoutData: {
+                          ...userData.layoutData,
+                          contentPanelSize: size,
+                        },
+                      }));
+                    }}>
                     <div className="h-full overflow-hidden">
                       <ContentGrid />
                     </div>

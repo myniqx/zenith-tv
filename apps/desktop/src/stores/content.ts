@@ -9,6 +9,7 @@ import { FileSyncedState, syncFile } from '@/tools/fileSync';
 import { UserData } from '@/types/userdata';
 import { fileSystem, http } from '@/libs';
 import { useProfilesStore } from './profiles';
+import { useSettingsStore } from './settings';
 
 export type CategoryType = 'all' | 'movies' | 'series' | 'live' | 'favorites' | 'recent';
 export type SortBy = 'name' | 'date' | 'recent';
@@ -97,7 +98,20 @@ type ContentState =
 
 export const useContentStore = create<ContentState>((set, get) => ({
   // File-synced profiles
-  ...syncFile<UserData, 'userData'>(null, {}, 'userData')(set, get),
+  ...syncFile<UserData, 'userData'>(null, {
+    watchables: {},
+    playerData: {
+      groupBy: 'none',
+      sortBy: 'name',
+      sortOrder: 'asc'
+    },
+    layoutData: {
+      categoryBrowser: 200,
+      contentBrowser: 600
+    },
+    hiddenGroups: [],
+    stickyGroups: [],
+  }, 'userData')(set, get),
 
   items: [],
   recentItems: [],
@@ -122,15 +136,17 @@ export const useContentStore = create<ContentState>((set, get) => ({
   reset: () => {
     const favoriteGroup = new GroupObject("Favorites", LucideHeart);
     get().setUserDataFile(null)
+    const userData = get().userData
+    const playerData = userData.playerData
     set({
       items: [],
       recentItems: [],
       favoritesItems: [],
       currentGroup: null,
       searchQuery: '',
-      sortBy: 'name',
-      sortOrder: 'asc',
-      groupBy: 'none',
+      sortBy: playerData?.sortBy || 'name',
+      sortOrder: playerData?.sortOrder || 'asc',
+      groupBy: playerData?.groupBy || 'none',
       isLoading: false,
       currentUsername: null,
       currentUUID: null,
@@ -153,6 +169,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       currentUsername: username,
       currentUUID: uuid,
     });
+    useSettingsStore.getState().setLastProfile(username, uuid);
     await get().setUserDataFile(getUserDataPath(username));
     await get().load();
   },
@@ -219,7 +236,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
           watchable.AddedDate = new Date(update.createdAt);
         }
 
-        const userItemData = userData[item.url];
+        const userItemData = userData?.watchables?.[item.url];
         if (userItemData) {
           watchable.userData = userItemData;
           if (userItemData.favorite) {
@@ -377,7 +394,16 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   updateGroupedContent: () => {
-    const { currentGroup, groupBy, searchQuery, sortBy, sortOrder } = get();
+    const { currentGroup, groupBy, searchQuery, sortBy, sortOrder, setUserData } = get();
+
+    setUserData(data => ({
+      ...data,
+      playerData: {
+        groupBy,
+        sortBy,
+        sortOrder
+      }
+    }));
 
     if (!currentGroup) {
       set({ groupedContent: [] });
