@@ -1,4 +1,4 @@
-import type { FetchOptions, FetchResponse, StreamOptions, HttpMethod } from '../types/ipc';
+import type { FetchOptions, FetchResponse, StreamOptions } from '../types/ipc';
 
 /**
  * Type-safe HTTP utilities built on Electron IPC

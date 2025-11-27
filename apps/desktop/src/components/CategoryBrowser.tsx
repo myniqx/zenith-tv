@@ -1,6 +1,6 @@
 import { useContentStore } from '../stores/content';
 import { Separator } from '@zenith-tv/ui/separator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@zenith-tv/ui/tooltip';
 import { ChevronRight, ChevronDown, LayoutGrid } from 'lucide-react';
 import { GroupObject } from '@/m3u/group';
 import { useState, useCallback } from 'react';
@@ -28,7 +28,8 @@ function TreeNode({ group, level, expandedNodes, toggleExpand, isCollapsed }: Tr
 
   const handleClick = useCallback(() => {
     setGroup(group);
-  }, [group, setGroup]);
+    toggleExpand(nodeId);
+  }, [group, setGroup, toggleExpand, nodeId]);
 
   const handleToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

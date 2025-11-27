@@ -30,7 +30,7 @@ export const FILE_FILTERS = {
     { name: 'All Files', extensions: ['*'] },
   ],
   ALL: [{ name: 'All Files', extensions: ['*'] }],
-} as const;
+};
 
 /**
  * Type-safe dialog utilities built on Electron IPC

@@ -1,4 +1,4 @@
-import { LucideCheck, LucideFocus, LucideFolder, LucideHeart, LucideTheater, LucideTv } from "lucide-react";
+import { LucideCheck, LucideFolder, LucideHeart, LucideTheater, LucideTv } from "lucide-react";
 
 
 export type LucideIcon = typeof LucideFolder | typeof LucideCheck | typeof LucideHeart | typeof LucideTv | typeof LucideTheater

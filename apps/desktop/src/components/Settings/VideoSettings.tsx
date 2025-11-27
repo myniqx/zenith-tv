@@ -8,30 +8,24 @@ import {
 import { Slider } from '@zenith-tv/ui/slider';
 import { Label } from '@zenith-tv/ui/label';
 import { Input } from '@zenith-tv/ui/input';
+import { Switch } from '@zenith-tv/ui/switch';
 import { Separator } from '@zenith-tv/ui/separator';
-import { MonitorPlay, Type, Timer, Palette } from 'lucide-react';
-import { useVlcPlayer } from '../hooks/useVlcPlayer';
-
-interface SettingsSectionProps {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}
-
-function SettingsSection({ title, icon, children }: SettingsSectionProps) {
-  return (
-    <section>
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        {icon}
-        {title}
-      </h3>
-      <div className="space-y-4">{children}</div>
-    </section>
-  );
-}
+import { MonitorPlay, Type, Timer, Volume2, Play } from 'lucide-react';
+import { useVlcPlayer } from '../../hooks/useVlcPlayer';
+import { useSettingsStore } from '../../stores/settings';
+import { SettingsSection } from './SettingsSection';
+import { SettingRow } from './SettingRow';
 
 export function VideoSettings() {
   const vlc = useVlcPlayer();
+  const {
+    defaultVolume,
+    autoPlayNext,
+    autoResume,
+    setDefaultVolume,
+    setAutoPlayNext,
+    setAutoResume,
+  } = useSettingsStore();
 
   const handleRateChange = (value: string) => {
     vlc.playback({ rate: parseFloat(value) });
@@ -46,6 +40,26 @@ export function VideoSettings() {
 
   return (
     <div className="space-y-6 p-1">
+      {/* Volume */}
+      <SettingsSection title="Volume" icon={<Volume2 className="w-5 h-5" />}>
+        <div className="space-y-3">
+          <Label>Default Volume: {Math.round(defaultVolume * 100)}%</Label>
+          <Slider
+            value={[defaultVolume * 100]}
+            onValueChange={([value]) => setDefaultVolume(value / 100)}
+            min={0}
+            max={100}
+            step={1}
+            className="w-full"
+          />
+          <p className="text-xs text-muted-foreground">
+            Volume level when starting new videos
+          </p>
+        </div>
+      </SettingsSection>
+
+      <Separator />
+
       {/* Playback Control */}
       <SettingsSection title="Playback" icon={<MonitorPlay className="w-5 h-5" />}>
         <div className="space-y-2">
@@ -64,6 +78,31 @@ export function VideoSettings() {
             </SelectContent>
           </Select>
         </div>
+
+        <SettingRow
+          label="Auto-Resume Playback"
+          description="Continue from where you left off"
+        >
+          <Switch
+            checked={autoResume}
+            onCheckedChange={setAutoResume}
+          />
+        </SettingRow>
+      </SettingsSection>
+
+      <Separator />
+
+      {/* Episode Control */}
+      <SettingsSection title="Episodes" icon={<Play className="w-5 h-5" />}>
+        <SettingRow
+          label="Auto-Play Next Episode"
+          description="Automatically play next episode when current ends"
+        >
+          <Switch
+            checked={autoPlayNext}
+            onCheckedChange={setAutoPlayNext}
+          />
+        </SettingRow>
       </SettingsSection>
 
       <Separator />
@@ -121,19 +160,6 @@ export function VideoSettings() {
               </SelectContent>
             </Select>
           </div>
-        </div>
-
-        <div className="space-y-3 pt-2">
-          <Label>Background Opacity</Label>
-          <Slider
-            defaultValue={[0]}
-            max={100}
-            step={1}
-            className="w-full"
-          />
-          <p className="text-xs text-muted-foreground">
-            0% = Transparent, 100% = Solid Black
-          </p>
         </div>
       </SettingsSection>
     </div>

@@ -26,7 +26,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@zenith-tv/ui/dialog';
-import { VideoSettings } from './VideoSettings';
+import { VideoSettings } from './Settings';
 import { Settings as SettingsIcon } from 'lucide-react';
 
 type ScreenType = 'free' | 'sticky' | 'fullscreen';
@@ -371,14 +371,13 @@ export function VideoController() {
                   <SettingsIcon className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-md max-h-[70vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Video Settings</DialogTitle>
                 </DialogHeader>
                 <VideoSettings />
               </DialogContent>
             </Dialog>
-
           </div>
         </div>
       </div>

@@ -3,7 +3,7 @@ import {
   useSettingsStore,
   defaultKeyboardShortcuts,
   type KeyboardShortcuts as KeyboardShortcutsType,
-} from '../stores/settings';
+} from '../../stores/settings';
 import { Button } from '@zenith-tv/ui/button';
 import { Label } from '@zenith-tv/ui/label';
 import { Separator } from '@zenith-tv/ui/separator';
@@ -95,10 +95,9 @@ function ShortcutRow({
         onClick={isRecording ? onCancelRecording : onStartRecording}
         className={`
           min-w-[120px] px-3 py-1.5 text-sm font-mono rounded-md border transition-colors
-          ${
-            isRecording
-              ? 'border-primary bg-primary/10 text-primary animate-pulse'
-              : 'border-input bg-background hover:bg-muted'
+          ${isRecording
+            ? 'border-primary bg-primary/10 text-primary animate-pulse'
+            : 'border-input bg-background hover:bg-muted'
           }
         `}
       >

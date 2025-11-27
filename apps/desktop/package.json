@@ -16,7 +16,6 @@
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@radix-ui/react-tooltip": "^1.2.8",
 		"@zenith-tv/parser": "workspace:*",
 		"@zenith-tv/protocol": "workspace:*",
 		"@zenith-tv/types": "workspace:*",

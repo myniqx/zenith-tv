@@ -28,12 +28,10 @@ interface SettingsState {
   // TODO: Implement i18n support
   language: Language;
 
-  // Player
-  playerBackend: PlayerBackend;
   defaultVolume: number; // 0-1
+
   autoResume: boolean;
   autoPlayNext: boolean;
-  bufferSize: BufferSize;
 
   // Startup
   autoLoadLastProfile: boolean;
@@ -52,11 +50,10 @@ interface SettingsState {
   // Actions
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Language) => void;
-  setPlayerBackend: (backend: PlayerBackend) => void;
   setDefaultVolume: (volume: number) => void;
   setAutoResume: (enabled: boolean) => void;
   setAutoPlayNext: (enabled: boolean) => void;
-  setBufferSize: (size: BufferSize) => void;
+
   setAutoLoadLastProfile: (enabled: boolean) => void;
   setRememberLayout: (enabled: boolean) => void;
   setLastProfile: (username: string, uuid: string) => void;
@@ -85,11 +82,9 @@ export const defaultKeyboardShortcuts: KeyboardShortcuts = {
 const defaultSettings = {
   theme: 'dark' as Theme,
   language: 'en' as Language,
-  playerBackend: 'auto' as PlayerBackend,
   defaultVolume: 0.7,
   autoResume: true,
   autoPlayNext: true,
-  bufferSize: 10 as BufferSize,
   autoLoadLastProfile: false,
   rememberLayout: false,
   lastProfileUsername: null as string | null,
@@ -107,19 +102,12 @@ export const useSettingsStore = create<SettingsState>()(
       setTheme: (theme) => set({ theme }),
 
       setLanguage: (language) => set({ language }),
-
-      setPlayerBackend: (backend) => set({ playerBackend: backend }),
-
       setDefaultVolume: (volume) => {
         const clamped = Math.max(0, Math.min(1, volume));
         set({ defaultVolume: clamped });
       },
-
       setAutoResume: (enabled) => set({ autoResume: enabled }),
-
       setAutoPlayNext: (enabled) => set({ autoPlayNext: enabled }),
-
-      setBufferSize: (size) => set({ bufferSize: size }),
 
       setAutoLoadLastProfile: (enabled) => set({ autoLoadLastProfile: enabled }),
 

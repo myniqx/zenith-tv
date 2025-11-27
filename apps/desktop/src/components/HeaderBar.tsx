@@ -38,11 +38,10 @@ export function HeaderBar() {
         <nav className="flex items-center gap-1 ml-4" aria-label="Breadcrumb">
           <button
             onClick={() => setGroup(null)}
-            className={`text-sm px-2 py-1 rounded transition-colors ${
-              currentGroup === null
+            className={`text-sm px-2 py-1 rounded transition-colors ${currentGroup === null
                 ? 'text-foreground font-medium'
                 : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-            }`}
+              }`}
           >
             All
           </button>
@@ -52,11 +51,10 @@ export function HeaderBar() {
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
               <button
                 onClick={() => setGroup(crumb)}
-                className={`text-sm px-2 py-1 rounded transition-colors ${
-                  index === breadcrumbs.length - 1
+                className={`text-sm px-2 py-1 rounded transition-colors ${index === breadcrumbs.length - 1
                     ? 'text-foreground font-medium'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-                }`}
+                  }`}
               >
                 {crumb.Name}
               </button>
