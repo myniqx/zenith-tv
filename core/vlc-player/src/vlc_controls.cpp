@@ -1,207 +1,382 @@
 #include "vlc_player.h"
 
-// Core playback methods
-Napi::Value VlcPlayer::SetMedia(const Napi::CallbackInfo& info) {
+// =================================================================================================
+// Unified API Implementation
+// =================================================================================================
+
+Napi::Value VlcPlayer::Open(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
-    if (info.Length() < 1 || !info[0].IsString()) {
-        Napi::TypeError::New(env, "URL string expected").ThrowAsJavaScriptException();
+    if (info.Length() < 1 || !info[0].IsObject()) {
+        Napi::TypeError::New(env, "Options object expected").ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
-    std::string url = info[0].As<Napi::String>().Utf8Value();
+    Napi::Object options = info[0].As<Napi::Object>();
+    
+    if (!options.Has("file") || !options.Get("file").IsString()) {
+        Napi::Error::New(env, "File path/url is required").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    std::string url = options.Get("file").As<Napi::String>().Utf8Value();
+
+    // Store other options for media initialization
+    media_options_.clear();
+
+    // Check for subtitle options
+    if (options.Has("subtitle")) {
+        Napi::Object subOpts = options.Get("subtitle").As<Napi::Object>();
+        // Add subtitle options to media_options_ map if needed for libvlc_media_add_option
+        // For now, we handle them via Subtitle() method after media is playing,
+        // but some might need to be set here if they are media-level options.
+    }
+
+    // Get initial window size from options
+    int window_width = 1280;  // Default 16:9
+    int window_height = 720;
+
+    if (options.Has("window")) {
+        Napi::Object windowOpts = options.Get("window").As<Napi::Object>();
+        if (windowOpts.Has("width")) {
+            window_width = windowOpts.Get("width").As<Napi::Number>().Int32Value();
+        }
+        if (windowOpts.Has("height")) {
+            window_height = windowOpts.Get("height").As<Napi::Number>().Int32Value();
+        }
+    }
+
+    // Call internal SetMedia logic
+    // We can reuse the logic but we need to adapt it to use media_options_
 
     if (url.empty()) {
         Napi::Error::New(env, "Empty URL provided").ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
-    if (url.length() > MAX_URL_LENGTH) {
-        Napi::Error::New(env, "URL exceeds maximum length").ThrowAsJavaScriptException();
-        return env.Undefined();
-    }
-
     std::lock_guard<std::mutex> lock(mutex_);
+
+    // Create window if in "win" mode and not created yet
+    if (rendering_mode_ == "win" && !child_window_created_) {
+        CreateChildWindowInternal(window_width, window_height);
+    }
 
     // Release previous media
     if (current_media_) {
-        printf("[VLC] CALL: libvlc_media_release(current_media=%p)\n", (void*)current_media_);
         libvlc_media_release(current_media_);
-        fflush(stdout);
     }
 
-    // Create new media from URL or path
+    // Create new media
     bool is_url = url.find("://") != std::string::npos;
-
     if (is_url) {
-        printf("[VLC] CALL: libvlc_media_new_location(url='%s')\n", url.c_str());
         current_media_ = libvlc_media_new_location(vlc_instance_, url.c_str());
     } else {
-        printf("[VLC] CALL: libvlc_media_new_path(path='%s')\n", url.c_str());
         current_media_ = libvlc_media_new_path(vlc_instance_, url.c_str());
     }
-    printf("[VLC] RETURN: current_media=%p\n", (void*)current_media_);
-    fflush(stdout);
 
     if (!current_media_) {
         Napi::Error::New(env, "Failed to create media").ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
-    printf("[VLC] CALL: libvlc_media_player_set_media(media_player=%p, media=%p)\n",
-           (void*)media_player_, (void*)current_media_);
-    libvlc_media_player_set_media(media_player_, current_media_);
-    fflush(stdout);
+    // Apply media options
+    for (const auto& opt : media_options_) {
+        std::string option_str = opt.first + "=" + opt.second;
+        libvlc_media_add_option(current_media_, option_str.c_str());
+    }
 
-    // Release media immediately after setting (media player holds its own reference)
-    printf("[VLC] CALL: libvlc_media_release(media=%p)\n", (void*)current_media_);
+    libvlc_media_player_set_media(media_player_, current_media_);
+
+    // Release media immediately after setting
     libvlc_media_release(current_media_);
     current_media_ = nullptr;
-    fflush(stdout);
 
-    // Re-set window handle after media is set to ensure vout initializes
-    // Skip in memory rendering mode
+    // Re-set window handle if needed
     if (child_window_created_ && rendering_mode_ == "win") {
         #ifdef _WIN32
-        if (child_hwnd_) {
-            printf("[VLC] CALL: libvlc_media_player_set_hwnd(hwnd=%p)\n", child_hwnd_);
-            libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
-            fflush(stdout);
-        }
+        if (child_hwnd_) libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
         #elif defined(__linux__)
-        if (child_window_) {
-            if (child_window_ > UINT32_MAX) {
-                printf("[VLC] ERROR: Window ID 0x%lx exceeds 32-bit limit\n", child_window_);
-                fflush(stdout);
-            } else {
-                printf("[VLC] CALL: libvlc_media_player_set_xwindow(xwindow=0x%lx)\n", child_window_);
-                libvlc_media_player_set_xwindow(media_player_, static_cast<uint32_t>(child_window_));
-                fflush(stdout);
-            }
-        }
+        if (child_window_) libvlc_media_player_set_xwindow(media_player_, static_cast<uint32_t>(child_window_));
         #elif defined(__APPLE__)
-        if (child_nsview_) {
-            printf("[VLC] CALL: libvlc_media_player_set_nsobject(nsview=%p)\n", child_nsview_);
-            libvlc_media_player_set_nsobject(media_player_, child_nsview_);
-            fflush(stdout);
-        }
+        if (child_nsview_) libvlc_media_player_set_nsobject(media_player_, child_nsview_);
         #endif
     }
 
     return env.Undefined();
 }
 
-Napi::Value VlcPlayer::Play(const Napi::CallbackInfo& info) {
+Napi::Value VlcPlayer::Playback(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsObject()) return env.Undefined();
 
-    // Optional: allow passing URL directly to play
-    if (info.Length() > 0 && info[0].IsString()) {
-        SetMedia(info);
-    }
-
+    Napi::Object options = info[0].As<Napi::Object>();
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (!media_player_) {
-        return Napi::Boolean::New(env, false);
-    }
+    if (!media_player_) return env.Undefined();
 
-    // Enforce window binding before play to ensure it's not lost
-    if (child_window_created_) {
-        #ifdef _WIN32
-        if (child_hwnd_) {
-            printf("[VLC] CALL: libvlc_media_player_set_hwnd(hwnd=%p)\n", child_hwnd_);
-            libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
+    if (options.Has("action")) {
+        std::string action = options.Get("action").As<Napi::String>().Utf8Value();
+        if (action == "play") {
+            // Enforce window binding before play to ensure it's not lost
+            if (child_window_created_ && rendering_mode_ == "win") {
+                #ifdef _WIN32
+                if (child_hwnd_) {
+                    printf("[VLC] CALL: libvlc_media_player_set_hwnd(hwnd=%p)\n", child_hwnd_);
+                    libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
+                    fflush(stdout);
+                }
+                #elif defined(__linux__)
+                if (child_window_) {
+                    if (child_window_ > UINT32_MAX) {
+                        printf("[VLC] ERROR: Window ID 0x%lx exceeds 32-bit limit\n", child_window_);
+                        fflush(stdout);
+                    } else {
+                        printf("[VLC] CALL: libvlc_media_player_set_xwindow(xwindow=0x%lx)\n", child_window_);
+                        libvlc_media_player_set_xwindow(media_player_, static_cast<uint32_t>(child_window_));
+                        fflush(stdout);
+                    }
+                }
+                #elif defined(__APPLE__)
+                if (child_nsview_) {
+                    printf("[VLC] CALL: libvlc_media_player_set_nsobject(nsview=%p)\n", child_nsview_);
+                    libvlc_media_player_set_nsobject(media_player_, child_nsview_);
+                    fflush(stdout);
+                }
+                #endif
+            }
+
+            printf("[VLC] CALL: libvlc_media_player_play()\n");
+            int result = libvlc_media_player_play(media_player_);
+            printf("[VLC] RETURN: result=%d\n", result);
+            fflush(stdout);
+
+            // Check state after play
+            libvlc_state_t state = libvlc_media_player_get_state(media_player_);
+            const char* state_str = "unknown";
+            switch (state) {
+                case libvlc_NothingSpecial: state_str = "NothingSpecial"; break;
+                case libvlc_Opening: state_str = "Opening"; break;
+                case libvlc_Buffering: state_str = "Buffering"; break;
+                case libvlc_Playing: state_str = "Playing"; break;
+                case libvlc_Paused: state_str = "Paused"; break;
+                case libvlc_Stopped: state_str = "Stopped"; break;
+                case libvlc_Ended: state_str = "Ended"; break;
+                case libvlc_Error: state_str = "Error"; break;
+            }
+            printf("[VLC] CALL: libvlc_media_player_get_state()\n");
+            printf("[VLC] RETURN: state=%s\n", state_str);
             fflush(stdout);
         }
-        #elif defined(__linux__)
-        if (child_window_) {
-            if (child_window_ > UINT32_MAX) {
-                printf("[VLC] ERROR: Window ID 0x%lx exceeds 32-bit limit\n", child_window_);
+        else if (action == "pause") {
+            printf("[VLC] CALL: libvlc_media_player_pause()\n");
+            libvlc_media_player_pause(media_player_);
+            fflush(stdout);
+        }
+        else if (action == "resume") {
+            printf("[VLC] CALL: libvlc_media_player_set_pause(pause=0)\n");
+            libvlc_media_player_set_pause(media_player_, 0);
+            fflush(stdout);
+        }
+        else if (action == "stop") {
+            printf("[VLC] CALL: libvlc_media_player_stop()\n");
+            libvlc_media_player_stop(media_player_);
+            fflush(stdout);
+
+            // Auto-destroy window when stopping in window rendering mode
+            if (rendering_mode_ == "win" && child_window_created_) {
+                printf("[VLC] Auto-destroying window on stop\n");
                 fflush(stdout);
-            } else {
-                printf("[VLC] CALL: libvlc_media_player_set_xwindow(xwindow=0x%lx)\n", child_window_);
-                libvlc_media_player_set_xwindow(media_player_, static_cast<uint32_t>(child_window_));
-                fflush(stdout);
+                DestroyChildWindowInternal();
             }
         }
-        #endif
     }
 
-    // Check if xwindow is set
-    #ifdef __linux__
-    uint32_t xwin = libvlc_media_player_get_xwindow(media_player_);
-    printf("[VLC] CALL: libvlc_media_player_get_xwindow()\n");
-    printf("[VLC] RETURN: xwindow=0x%x\n", xwin);
-    fflush(stdout);
-    #endif
-
-    printf("[VLC] CALL: libvlc_media_player_play()\n");
-    int result = libvlc_media_player_play(media_player_);
-    printf("[VLC] RETURN: result=%d\n", result);
-    fflush(stdout);
-
-    // Check state after play
-    libvlc_state_t state = libvlc_media_player_get_state(media_player_);
-    const char* state_str = "unknown";
-    switch (state) {
-        case libvlc_NothingSpecial: state_str = "NothingSpecial"; break;
-        case libvlc_Opening: state_str = "Opening"; break;
-        case libvlc_Buffering: state_str = "Buffering"; break;
-        case libvlc_Playing: state_str = "Playing"; break;
-        case libvlc_Paused: state_str = "Paused"; break;
-        case libvlc_Stopped: state_str = "Stopped"; break;
-        case libvlc_Ended: state_str = "Ended"; break;
-        case libvlc_Error: state_str = "Error"; break;
+    if (options.Has("time")) {
+        int64_t time = options.Get("time").As<Napi::Number>().Int64Value();
+        libvlc_media_player_set_time(media_player_, time);
     }
-    printf("[VLC] CALL: libvlc_media_player_get_state()\n");
-    printf("[VLC] RETURN: state=%s\n", state_str);
-    fflush(stdout);
 
-    return Napi::Boolean::New(env, result == 0);
-}
+    if (options.Has("position")) {
+        float pos = options.Get("position").As<Napi::Number>().FloatValue();
+        libvlc_media_player_set_position(media_player_, pos);
+    }
 
-Napi::Value VlcPlayer::Pause(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        printf("[VLC] CALL: libvlc_media_player_pause()\n");
-        libvlc_media_player_pause(media_player_);
-        fflush(stdout);
+    if (options.Has("rate")) {
+        float rate = options.Get("rate").As<Napi::Number>().FloatValue();
+        libvlc_media_player_set_rate(media_player_, rate);
     }
 
     return env.Undefined();
 }
 
-Napi::Value VlcPlayer::Resume(const Napi::CallbackInfo& info) {
+Napi::Value VlcPlayer::Audio(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsObject()) return env.Undefined();
 
+    Napi::Object options = info[0].As<Napi::Object>();
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (media_player_) {
-        printf("[VLC] CALL: libvlc_media_player_set_pause(pause=0)\n");
-        libvlc_media_player_set_pause(media_player_, 0);
-        fflush(stdout);
+    if (!media_player_) return env.Undefined();
+
+    if (options.Has("volume")) {
+        int vol = options.Get("volume").As<Napi::Number>().Int32Value();
+        libvlc_audio_set_volume(media_player_, vol);
+    }
+
+    if (options.Has("mute")) {
+        bool mute = options.Get("mute").As<Napi::Boolean>().Value();
+        libvlc_audio_set_mute(media_player_, mute ? 1 : 0);
+    }
+
+    if (options.Has("track")) {
+        int track = options.Get("track").As<Napi::Number>().Int32Value();
+        libvlc_audio_set_track(media_player_, track);
+    }
+    
+    if (options.Has("delay")) {
+        int64_t delay = options.Get("delay").As<Napi::Number>().Int64Value();
+        libvlc_audio_set_delay(media_player_, delay);
     }
 
     return env.Undefined();
 }
 
-Napi::Value VlcPlayer::Stop(const Napi::CallbackInfo& info) {
+Napi::Value VlcPlayer::Video(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsObject()) return env.Undefined();
 
+    Napi::Object options = info[0].As<Napi::Object>();
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (media_player_) {
-        printf("[VLC] CALL: libvlc_media_player_stop()\n");
-        libvlc_media_player_stop(media_player_);
-        fflush(stdout);
+    if (!media_player_) return env.Undefined();
+
+    if (options.Has("track")) {
+        int track = options.Get("track").As<Napi::Number>().Int32Value();
+        libvlc_video_set_track(media_player_, track);
+    }
+    
+    // Future: scale, crop, aspect ratio
+
+    return env.Undefined();
+}
+
+Napi::Value VlcPlayer::Subtitle(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsObject()) return env.Undefined();
+
+    Napi::Object options = info[0].As<Napi::Object>();
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!media_player_) return env.Undefined();
+
+    if (options.Has("track")) {
+        int track = options.Get("track").As<Napi::Number>().Int32Value();
+        libvlc_video_set_spu(media_player_, track);
+    }
+
+    if (options.Has("delay")) {
+        int64_t delay = options.Get("delay").As<Napi::Number>().Int64Value();
+        libvlc_video_set_spu_delay(media_player_, delay);
     }
 
     return env.Undefined();
 }
 
+Napi::Value VlcPlayer::GetMediaInfo(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    Napi::Object result = Napi::Object::New(env);
+    
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!media_player_) return result;
+
+    // Duration
+    result.Set("duration", Napi::Number::New(env, libvlc_media_player_get_length(media_player_)));
+    
+    // Is Seekable
+    result.Set("isSeekable", Napi::Boolean::New(env, libvlc_media_player_is_seekable(media_player_)));
+    
+    // Meta (Basic)
+    Napi::Object meta = Napi::Object::New(env);
+    // TODO: Implement meta retrieval if needed
+    result.Set("meta", meta);
+
+    // Audio Tracks
+    Napi::Array audioTracks = Napi::Array::New(env);
+    libvlc_track_description_t* a_tracks = libvlc_audio_get_track_description(media_player_);
+    if (a_tracks) {
+        libvlc_track_description_t* t = a_tracks;
+        int i = 0;
+        while(t) {
+            Napi::Object track = Napi::Object::New(env);
+            track.Set("id", t->i_id);
+            track.Set("name", t->psz_name ? t->psz_name : "");
+            audioTracks.Set(i++, track);
+            t = t->p_next;
+        }
+        libvlc_track_description_list_release(a_tracks);
+    }
+    result.Set("audioTracks", audioTracks);
+
+    // Subtitle Tracks
+    Napi::Array subTracks = Napi::Array::New(env);
+    libvlc_track_description_t* s_tracks = libvlc_video_get_spu_description(media_player_);
+    if (s_tracks) {
+        libvlc_track_description_t* t = s_tracks;
+        int i = 0;
+        while(t) {
+            Napi::Object track = Napi::Object::New(env);
+            track.Set("id", t->i_id);
+            track.Set("name", t->psz_name ? t->psz_name : "");
+            subTracks.Set(i++, track);
+            t = t->p_next;
+        }
+        libvlc_track_description_list_release(s_tracks);
+    }
+    result.Set("subtitleTracks", subTracks);
+
+    // Current Tracks
+    result.Set("currentAudioTrack", Napi::Number::New(env, libvlc_audio_get_track(media_player_)));
+    result.Set("currentSubtitleTrack", Napi::Number::New(env, libvlc_video_get_spu(media_player_)));
+
+    return result;
+}
+
+Napi::Value VlcPlayer::GetPlayerInfo(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    Napi::Object result = Napi::Object::New(env);
+    
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!media_player_) return result;
+
+    // Current time
+    result.Set("time", Napi::Number::New(env, libvlc_media_player_get_time(media_player_)));
+    
+    // Length/Duration
+    result.Set("length", Napi::Number::New(env, libvlc_media_player_get_length(media_player_)));
+    
+    // State
+    libvlc_state_t vlc_state = libvlc_media_player_get_state(media_player_);
+    std::string state_str;
+    switch (vlc_state) {
+        case libvlc_NothingSpecial: state_str = "idle"; break;
+        case libvlc_Opening: state_str = "opening"; break;
+        case libvlc_Buffering: state_str = "buffering"; break;
+        case libvlc_Playing: state_str = "playing"; break;
+        case libvlc_Paused: state_str = "paused"; break;
+        case libvlc_Stopped: state_str = "stopped"; break;
+        case libvlc_Ended: state_str = "ended"; break;
+        case libvlc_Error: state_str = "error"; break;
+        default: state_str = "unknown"; break;
+    }
+    result.Set("state", Napi::String::New(env, state_str));
+    
+    // Is Playing
+    result.Set("isPlaying", Napi::Boolean::New(env, libvlc_media_player_is_playing(media_player_)));
+
+    return result;
+}
+
+// Core playback methods
 // Time/Position
 Napi::Value VlcPlayer::Seek(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
@@ -219,64 +394,6 @@ Napi::Value VlcPlayer::Seek(const Napi::CallbackInfo& info) {
         printf("[VLC] CALL: libvlc_media_player_set_time(time=%lld)\n", (long long)time);
         libvlc_media_player_set_time(media_player_, time);
         fflush(stdout);
-    }
-
-    return env.Undefined();
-}
-
-Napi::Value VlcPlayer::GetTime(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        int64_t time = libvlc_media_player_get_time(media_player_);
-        return Napi::Number::New(env, static_cast<double>(time));
-    }
-
-    return Napi::Number::New(env, 0);
-}
-
-Napi::Value VlcPlayer::GetLength(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        int64_t length = libvlc_media_player_get_length(media_player_);
-        return Napi::Number::New(env, static_cast<double>(length));
-    }
-
-    return Napi::Number::New(env, 0);
-}
-
-Napi::Value VlcPlayer::GetPosition(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        float position = libvlc_media_player_get_position(media_player_);
-        return Napi::Number::New(env, position);
-    }
-
-    return Napi::Number::New(env, 0);
-}
-
-Napi::Value VlcPlayer::SetPosition(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    if (info.Length() < 1 || !info[0].IsNumber()) {
-        Napi::TypeError::New(env, "Position (0.0-1.0) expected").ThrowAsJavaScriptException();
-        return env.Undefined();
-    }
-
-    float position = info[0].As<Napi::Number>().FloatValue();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        libvlc_media_player_set_position(media_player_, position);
     }
 
     return env.Undefined();
@@ -304,19 +421,6 @@ Napi::Value VlcPlayer::SetVolume(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-Napi::Value VlcPlayer::GetVolume(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        int volume = libvlc_audio_get_volume(media_player_);
-        return Napi::Number::New(env, volume);
-    }
-
-    return Napi::Number::New(env, 0);
-}
-
 Napi::Value VlcPlayer::SetMute(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
@@ -334,19 +438,6 @@ Napi::Value VlcPlayer::SetMute(const Napi::CallbackInfo& info) {
     }
 
     return env.Undefined();
-}
-
-Napi::Value VlcPlayer::GetMute(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        int mute = libvlc_audio_get_mute(media_player_);
-        return Napi::Boolean::New(env, mute != 0);
-    }
-
-    return Napi::Boolean::New(env, false);
 }
 
 // Playback rate
@@ -367,73 +458,6 @@ Napi::Value VlcPlayer::SetRate(const Napi::CallbackInfo& info) {
     }
 
     return env.Undefined();
-}
-
-Napi::Value VlcPlayer::GetRate(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        float rate = libvlc_media_player_get_rate(media_player_);
-        return Napi::Number::New(env, rate);
-    }
-
-    return Napi::Number::New(env, 1.0);
-}
-
-// State
-Napi::Value VlcPlayer::GetState(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        libvlc_state_t state = libvlc_media_player_get_state(media_player_);
-
-        std::string stateStr;
-        switch (state) {
-            case libvlc_NothingSpecial: stateStr = "idle"; break;
-            case libvlc_Opening: stateStr = "opening"; break;
-            case libvlc_Buffering: stateStr = "buffering"; break;
-            case libvlc_Playing: stateStr = "playing"; break;
-            case libvlc_Paused: stateStr = "paused"; break;
-            case libvlc_Stopped: stateStr = "stopped"; break;
-            case libvlc_Ended: stateStr = "ended"; break;
-            case libvlc_Error: stateStr = "error"; break;
-            default: stateStr = "unknown"; break;
-        }
-
-        return Napi::String::New(env, stateStr);
-    }
-
-    return Napi::String::New(env, "idle");
-}
-
-Napi::Value VlcPlayer::IsPlaying(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        int playing = libvlc_media_player_is_playing(media_player_);
-        return Napi::Boolean::New(env, playing != 0);
-    }
-
-    return Napi::Boolean::New(env, false);
-}
-
-Napi::Value VlcPlayer::IsSeekable(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        int seekable = libvlc_media_player_is_seekable(media_player_);
-        return Napi::Boolean::New(env, seekable != 0);
-    }
-
-    return Napi::Boolean::New(env, false);
 }
 
 // Audio tracks
@@ -462,19 +486,6 @@ Napi::Value VlcPlayer::GetAudioTracks(const Napi::CallbackInfo& info) {
     }
 
     return tracks;
-}
-
-Napi::Value VlcPlayer::GetAudioTrack(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        int track = libvlc_audio_get_track(media_player_);
-        return Napi::Number::New(env, track);
-    }
-
-    return Napi::Number::New(env, -1);
 }
 
 Napi::Value VlcPlayer::SetAudioTrack(const Napi::CallbackInfo& info) {
@@ -523,19 +534,6 @@ Napi::Value VlcPlayer::GetSubtitleTracks(const Napi::CallbackInfo& info) {
     }
 
     return tracks;
-}
-
-Napi::Value VlcPlayer::GetSubtitleTrack(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (media_player_) {
-        int track = libvlc_video_get_spu(media_player_);
-        return Napi::Number::New(env, track);
-    }
-
-    return Napi::Number::New(env, -1);
 }
 
 Napi::Value VlcPlayer::SetSubtitleTrack(const Napi::CallbackInfo& info) {
@@ -606,51 +604,82 @@ Napi::Value VlcPlayer::GetVideoTracks(const Napi::CallbackInfo& info) {
     return tracks;
 }
 
-// Window embedding - Platform specific (Legacy)
-Napi::Value VlcPlayer::SetWindow(const Napi::CallbackInfo& info) {
+// =================================================================================================
+// Unified Window API
+// =================================================================================================
+Napi::Value VlcPlayer::Window(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
-    if (info.Length() < 1) {
-        Napi::TypeError::New(env, "Window handle expected").ThrowAsJavaScriptException();
+    if (info.Length() < 1 || !info[0].IsObject()) {
+        Napi::TypeError::New(env, "Options object expected").ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
+    Napi::Object options = info[0].As<Napi::Object>();
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (!media_player_) {
+    if (!child_window_created_) {
+        // Window not created yet
         return Napi::Boolean::New(env, false);
     }
 
-#ifdef _WIN32
-    // Windows: Expect Buffer containing HWND
-    if (info[0].IsBuffer()) {
-        Napi::Buffer<void*> buffer = info[0].As<Napi::Buffer<void*>>();
-        void* hwnd = *reinterpret_cast<void**>(buffer.Data());
-        libvlc_media_player_set_hwnd(media_player_, hwnd);
-        return Napi::Boolean::New(env, true);
-    } else if (info[0].IsNumber()) {
-        // Also accept number for backwards compatibility
-        intptr_t hwnd = static_cast<intptr_t>(info[0].As<Napi::Number>().Int64Value());
-        libvlc_media_player_set_hwnd(media_player_, reinterpret_cast<void*>(hwnd));
-        return Napi::Boolean::New(env, true);
+    // Handle resize
+    if (options.Has("resize")) {
+        Napi::Object resize = options.Get("resize").As<Napi::Object>();
+        int x = resize.Get("x").As<Napi::Number>().Int32Value();
+        int y = resize.Get("y").As<Napi::Number>().Int32Value();
+        int width = resize.Get("width").As<Napi::Number>().Int32Value();
+        int height = resize.Get("height").As<Napi::Number>().Int32Value();
+        SetWindowBounds(x, y, width, height);
     }
-#elif defined(__linux__)
-    // Linux: X11 Window ID
-    if (info[0].IsNumber()) {
-        uint32_t xid = info[0].As<Napi::Number>().Uint32Value();
-        libvlc_media_player_set_xwindow(media_player_, xid);
-        return Napi::Boolean::New(env, true);
-    }
-#elif defined(__APPLE__)
-    // macOS: NSView pointer
-    if (info[0].IsBuffer()) {
-        Napi::Buffer<void*> buffer = info[0].As<Napi::Buffer<void*>>();
-        void* nsview = *reinterpret_cast<void**>(buffer.Data());
-        libvlc_media_player_set_nsobject(media_player_, nsview);
-        return Napi::Boolean::New(env, true);
-    }
-#endif
 
-    Napi::TypeError::New(env, "Invalid window handle format").ThrowAsJavaScriptException();
-    return Napi::Boolean::New(env, false);
+    // Handle fullscreen
+    if (options.Has("fullscreen")) {
+        bool fullscreen = options.Get("fullscreen").As<Napi::Boolean>().Value();
+
+        if (fullscreen && !is_fullscreen_) {
+            // Save current state before going fullscreen
+            GetWindowBounds(&saved_window_state_);
+        } else if (!fullscreen && is_fullscreen_) {
+            // Restore previous state when exiting fullscreen
+            SetWindowBounds(
+                saved_window_state_.x,
+                saved_window_state_.y,
+                saved_window_state_.width,
+                saved_window_state_.height
+            );
+        }
+
+        SetWindowFullscreen(fullscreen);
+        is_fullscreen_ = fullscreen;
+    }
+
+    // Handle onTop
+    if (options.Has("onTop")) {
+        bool onTop = options.Get("onTop").As<Napi::Boolean>().Value();
+        SetWindowOnTop(onTop);
+    }
+
+    // Handle visible
+    if (options.Has("visible")) {
+        bool visible = options.Get("visible").As<Napi::Boolean>().Value();
+        SetWindowVisible(visible);
+    }
+
+    // Handle style
+    if (options.Has("style")) {
+        Napi::Object style = options.Get("style").As<Napi::Object>();
+        bool border = style.Has("border") ? style.Get("border").As<Napi::Boolean>().Value() : saved_window_state_.has_border;
+        bool titleBar = style.Has("titleBar") ? style.Get("titleBar").As<Napi::Boolean>().Value() : saved_window_state_.has_titlebar;
+        bool resizable = style.Has("resizable") ? style.Get("resizable").As<Napi::Boolean>().Value() : saved_window_state_.is_resizable;
+
+        SetWindowStyle(border, titleBar, resizable);
+
+        // Update saved state
+        saved_window_state_.has_border = border;
+        saved_window_state_.has_titlebar = titleBar;
+        saved_window_state_.is_resizable = resizable;
+    }
+
+    return Napi::Boolean::New(env, true);
 }

@@ -2,62 +2,21 @@
 
 Napi::Object VlcPlayer::Init(Napi::Env env, Napi::Object exports) {
     Napi::Function func = DefineClass(env, "VlcPlayer", {
-        // Core methods
-        InstanceMethod("play", &VlcPlayer::Play),
-        InstanceMethod("pause", &VlcPlayer::Pause),
-        InstanceMethod("resume", &VlcPlayer::Resume),
-        InstanceMethod("stop", &VlcPlayer::Stop),
-        InstanceMethod("setMedia", &VlcPlayer::SetMedia),
-
-        // Playback control
-        InstanceMethod("seek", &VlcPlayer::Seek),
-        InstanceMethod("setVolume", &VlcPlayer::SetVolume),
-        InstanceMethod("getVolume", &VlcPlayer::GetVolume),
-        InstanceMethod("setMute", &VlcPlayer::SetMute),
-        InstanceMethod("getMute", &VlcPlayer::GetMute),
-        InstanceMethod("setRate", &VlcPlayer::SetRate),
-        InstanceMethod("getRate", &VlcPlayer::GetRate),
-
-        // Time/Position
-        InstanceMethod("getTime", &VlcPlayer::GetTime),
-        InstanceMethod("getLength", &VlcPlayer::GetLength),
-        InstanceMethod("getPosition", &VlcPlayer::GetPosition),
-        InstanceMethod("setPosition", &VlcPlayer::SetPosition),
-
-        // State
-        InstanceMethod("getState", &VlcPlayer::GetState),
-        InstanceMethod("isPlaying", &VlcPlayer::IsPlaying),
-        InstanceMethod("isSeekable", &VlcPlayer::IsSeekable),
-
-        // Audio tracks
-        InstanceMethod("getAudioTracks", &VlcPlayer::GetAudioTracks),
-        InstanceMethod("getAudioTrack", &VlcPlayer::GetAudioTrack),
-        InstanceMethod("setAudioTrack", &VlcPlayer::SetAudioTrack),
-
-        // Subtitle tracks
-        InstanceMethod("getSubtitleTracks", &VlcPlayer::GetSubtitleTracks),
-        InstanceMethod("getSubtitleTrack", &VlcPlayer::GetSubtitleTrack),
-        InstanceMethod("setSubtitleTrack", &VlcPlayer::SetSubtitleTrack),
-        InstanceMethod("setSubtitleDelay", &VlcPlayer::SetSubtitleDelay),
-
-        // Video tracks
-        InstanceMethod("getVideoTracks", &VlcPlayer::GetVideoTracks),
-
-        // Window (legacy)
-        InstanceMethod("setWindow", &VlcPlayer::SetWindow),
-
-        // Child window embedding (new)
-        InstanceMethod("createChildWindow", &VlcPlayer::CreateChildWindow),
-        InstanceMethod("destroyChildWindow", &VlcPlayer::DestroyChildWindow),
-        InstanceMethod("setBounds", &VlcPlayer::SetBounds),
-        InstanceMethod("showWindow", &VlcPlayer::ShowWindow),
-        InstanceMethod("hideWindow", &VlcPlayer::HideWindow),
+        // Unified API Methods
+        InstanceMethod("open", &VlcPlayer::Open),
+        InstanceMethod("playback", &VlcPlayer::Playback),
+        InstanceMethod("audio", &VlcPlayer::Audio),
+        InstanceMethod("video", &VlcPlayer::Video),
+        InstanceMethod("subtitle", &VlcPlayer::Subtitle),
+        InstanceMethod("window", &VlcPlayer::Window),
+        InstanceMethod("getMediaInfo", &VlcPlayer::GetMediaInfo),
+        InstanceMethod("getPlayerInfo", &VlcPlayer::GetPlayerInfo),
 
         // Events
         InstanceMethod("on", &VlcPlayer::On),
         InstanceMethod("off", &VlcPlayer::Off),
 
-        // Frame retrieval
+        // Frame retrieval (memory rendering mode)
         InstanceMethod("getFrame", &VlcPlayer::GetFrame),
         InstanceMethod("getVideoFormat", &VlcPlayer::GetVideoFormat),
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { usePlayerStore } from '@zenith-tv/ui/stores/player';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
@@ -18,7 +18,7 @@ import {
   Maximize,
   Square,
 } from 'lucide-react';
-import { TvShowWatchableObject } from '../m3u/watchable';
+import { TvShowWatchableObject, WatchableObject } from '../m3u/watchable';
 import {
   Dialog,
   DialogContent,
@@ -51,73 +51,75 @@ export function VideoController() {
   const [localVolume, setLocalVolume] = useState(defaultVolume * 100);
 
   // Refs for window management
-  const childWindowCreatedRef = useRef(false);
-  const isCreatingWindowRef = useRef(false);
+  // const childWindowCreatedRef = useRef(false);
+  // const isCreatingWindowRef = useRef(false);
 
   // Initialize VLC and Window Management
+  // Create child window on mount
+  // Initialize VLC and Window Management
+  // Window creation is handled by VideoPlayer.tsx
+  /*
   useEffect(() => {
-    if (!vlc.isInitialized || !currentItem) return;
-
-    const setupAndPlay = async () => {
-      // Create child window if not exists
+    const initWindow = async () => {
       if (!childWindowCreatedRef.current && !isCreatingWindowRef.current) {
         isCreatingWindowRef.current = true;
         try {
-          // Create window with default bounds
-          const result = await window.electron.vlc.createChildWindow(100, 100, 800, 600);
-          childWindowCreatedRef.current = result.success;
-
-          if (result.success) {
-            await window.electron.vlc.showWindow();
+          const result = await vlc.createChildWindow({ x: 100, y: 100, width: 800, height: 600 });
+          if (result) {
+            childWindowCreatedRef.current = true;
+            await vlc.showWindow();
           }
-        } catch (err) {
-          console.error('Failed to create VLC window:', err);
+        } catch (error) {
+          console.error('[VideoController] Failed to create child window:', error);
+        } finally {
+          isCreatingWindowRef.current = false;
         }
-        isCreatingWindowRef.current = false;
       }
+    };
+    initWindow();
+  }, [vlc]);
+  */
 
+  // Initialize VLC and Window Management
+  useEffect(() => {
+    if (!vlc.isAvailable || !currentItem) return;
+
+    const setupAndPlay = async () => {
       // Start Playback
-      if (childWindowCreatedRef.current) {
-        setState('loading');
-        try {
-          await vlc.setVolume(localVolume);
-          const success = await vlc.play(currentItem.Url);
-          if (!success) setState('error');
+      try {
+        await vlc.audio({ volume: defaultVolume * 100 });
+        await vlc.open(currentItem.Url);
+        await vlc.playback({ action: 'play' });
 
-          // Resume logic
-          if (currentItem.userData?.watchProgress && currentItem.userData.watchProgress > 0) {
-            setTimeout(async () => {
-              if (vlc.duration > 0) {
-                const pos = (currentItem.userData!.watchProgress / 100) * vlc.duration;
-                await vlc.seek(pos);
-              }
-            }, 1000);
-          }
-
-        } catch (err) {
-          console.error('Playback error:', err);
-          setState('error');
+        // Resume logic
+        if (currentItem.userData?.watchProgress && currentItem.userData.watchProgress > 0) {
+          setTimeout(async () => {
+            if (vlc.duration > 0) {
+              const pos = ((currentItem.userData?.watchProgress || 0) / 100) * vlc.duration;
+              await vlc.playback({ time: pos });
+            }
+          }, 1000);
         }
+
+      } catch (err) {
+        console.error('Playback error:', err);
+        setState('error');
       }
     };
 
     setupAndPlay();
-
-    return () => {
-      vlc.stop();
-    };
-  }, [vlc.isInitialized, currentItem?.Url]);
+  }, [vlc.isAvailable, currentItem?.Url, defaultVolume]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (childWindowCreatedRef.current) {
-        window.electron.vlc.stop().then(() => {
-          window.electron.vlc.destroyChildWindow();
-          childWindowCreatedRef.current = false;
+      if (vlc.isAvailable) {
+        vlc.playback({ action: 'stop' }).catch(() => {
+          // Ignore errors on cleanup
         });
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync State
@@ -134,9 +136,9 @@ export function VideoController() {
       error: 'error',
       unknown: 'idle',
     };
-    const mapped = stateMap[vlc.state] || 'idle';
+    const mapped = stateMap[vlc.playerState] || 'idle';
     if (mapped !== state) setState(mapped);
-  }, [vlc.state, state, setState]);
+  }, [vlc.playerState, state, setState]);
 
   // Sync Time & Duration
   useEffect(() => {
@@ -148,45 +150,60 @@ export function VideoController() {
 
   // Auto Play Next
   useEffect(() => {
-    if (vlc.state === 'ended' && autoPlayNext && currentItem) {
-      const next = getNextEpisode(currentItem);
+    if (vlc.playerState === 'ended' && autoPlayNext && currentItem) {
+      const next = getNextEpisode(currentItem as WatchableObject);
       if (next) setTimeout(() => playItem(next), 500);
     }
-  }, [vlc.state, autoPlayNext, currentItem, getNextEpisode, playItem]);
+  }, [vlc.playerState, autoPlayNext, currentItem, getNextEpisode, playItem]);
 
   // Handlers
   const handlePlayPause = async () => {
-    if (vlc.state === 'playing') await vlc.pause();
-    else await vlc.resume();
+    if (vlc.playerState === 'playing') {
+      await vlc.playback({ action: 'pause' });
+    } else if (vlc.playerState === 'stopped' || vlc.playerState === 'ended' || vlc.playerState === 'idle') {
+      // If stopped/ended/idle, need to re-open and play
+      if (currentItem) {
+        await vlc.open(currentItem.Url);
+        await vlc.playback({ action: 'play' });
+      }
+    } else {
+      // Paused state - just resume
+      await vlc.playback({ action: 'resume' });
+    }
   };
 
   const handleStop = async () => {
-    await vlc.stop();
-    await window.electron.vlc.destroyChildWindow();
-    childWindowCreatedRef.current = false;
+    await vlc.playback({ action: 'stop' });
     setState('idle');
   };
 
   const handleSeek = async (vals: number[]) => {
-    await vlc.seek(vals[0] * 1000);
+    await vlc.playback({ time: vals[0] * 1000 });
   };
 
   const handleVolume = async (vals: number[]) => {
     const vol = vals[0];
     setLocalVolume(vol);
     setStoreVolume(vol / 100);
-    await vlc.setVolume(vol);
+    await vlc.audio({ volume: vol });
   };
 
   const toggleMute = async () => {
-    await vlc.toggleMute();
+    await vlc.audio({ mute: !isMuted });
     setIsMuted(!isMuted);
   };
 
-  const handleScreenTypeChange = (type: ScreenType) => {
+  const handleScreenTypeChange = async (type: ScreenType) => {
     setScreenType(type);
+
     if (type === 'fullscreen') {
-      // vlc.toggleFullscreen(); // If available
+      await vlc.window({ fullscreen: true });
+    } else if (type === 'free') {
+      await vlc.window({ fullscreen: false });
+    }
+    // 'sticky' mode için şimdilik fullscreen'den çık
+    else if (type === 'sticky') {
+      await vlc.window({ fullscreen: false, onTop: true });
     }
   };
 
@@ -237,7 +254,7 @@ export function VideoController() {
           {/* Left: Playback & Volume */}
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={handlePlayPause} disabled={isDisabled}>
-              {vlc.state === 'playing' ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+              {vlc.playerState === 'playing' ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
             </Button>
 
             <Button variant="ghost" size="icon" onClick={handleStop} disabled={isDisabled}>
@@ -278,7 +295,7 @@ export function VideoController() {
             {/* Audio Tracks */}
             <Select
               value={vlc.currentAudioTrack.toString()}
-              onValueChange={(val) => vlc.setAudioTrack(parseInt(val))}
+              onValueChange={(val) => vlc.audio({ track: parseInt(val) })}
               disabled={isDisabled || vlc.audioTracks.length === 0}
             >
               <SelectTrigger className="w-[120px] h-8 text-xs">
@@ -297,7 +314,7 @@ export function VideoController() {
             {/* Subtitle Tracks */}
             <Select
               value={vlc.currentSubtitleTrack.toString()}
-              onValueChange={(val) => vlc.setSubtitleTrack(parseInt(val))}
+              onValueChange={(val) => vlc.subtitle({ track: parseInt(val) })}
               disabled={isDisabled}
             >
               <SelectTrigger className="w-[120px] h-8 text-xs">

@@ -10,6 +10,7 @@ import { Label } from '@zenith-tv/ui/label';
 import { Input } from '@zenith-tv/ui/input';
 import { Separator } from '@zenith-tv/ui/separator';
 import { MonitorPlay, Type, Timer, Palette } from 'lucide-react';
+import { useVlcPlayer } from '../hooks/useVlcPlayer';
 
 interface SettingsSectionProps {
   title: string;
@@ -30,13 +31,26 @@ function SettingsSection({ title, icon, children }: SettingsSectionProps) {
 }
 
 export function VideoSettings() {
+  const vlc = useVlcPlayer();
+
+  const handleRateChange = (value: string) => {
+    vlc.playback({ rate: parseFloat(value) });
+  };
+
+  const handleDelayChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const delay = parseInt(e.target.value);
+    if (!isNaN(delay)) {
+      vlc.subtitle({ delay: delay * 1000 }); // ms to microseconds
+    }
+  };
+
   return (
     <div className="space-y-6 p-1">
       {/* Playback Control */}
       <SettingsSection title="Playback" icon={<MonitorPlay className="w-5 h-5" />}>
         <div className="space-y-2">
           <Label>Playback Speed</Label>
-          <Select defaultValue="1.0">
+          <Select defaultValue="1.0" onValueChange={handleRateChange}>
             <SelectTrigger>
               <SelectValue placeholder="Select speed" />
             </SelectTrigger>
@@ -59,7 +73,13 @@ export function VideoSettings() {
         <div className="space-y-2">
           <Label>Subtitle Delay (ms)</Label>
           <div className="flex items-center gap-2">
-            <Input type="number" placeholder="0" defaultValue="0" className="w-full" />
+            <Input
+              type="number"
+              placeholder="0"
+              defaultValue="0"
+              className="w-full"
+              onChange={handleDelayChange}
+            />
             <span className="text-sm text-muted-foreground whitespace-nowrap">
               Positive = Later, Negative = Earlier
             </span>

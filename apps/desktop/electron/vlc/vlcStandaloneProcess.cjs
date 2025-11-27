@@ -167,131 +167,59 @@ function handleMessage(message) {
         result = { success: true };
         break;
 
-      // Window creation - CRITICAL: Use 0n for standalone window
-      case 'createWindow': {
+      // Unified Window API
+      case 'window': {
         if (!player) {
           throw new Error('Player not initialized');
         }
-        // args: [x, y, width, height]
-        // Parent handle is always 0n (standalone window, not embedded)
-        const [x = 0, y = 0, width = 800, height = 600] = args;
-        result = player.createChildWindow(0n, x, y, width, height);
-        windowCreated = true;
-        sendLog('info', `Window created: ${x},${y} ${width}x${height}`);
+        // args[0] is the options object
+        const options = args[0];
+        result = player.window(options);
+        sendLog('debug', `Window called with options: ${JSON.stringify(options)}`);
         break;
       }
 
-      // Window positioning/sizing
-      case 'setBounds': {
-        if (!player) {
-          throw new Error('Player not initialized');
-        }
-        const [x, y, width, height] = args;
-        result = player.setBounds(x, y, width, height);
-        sendLog('debug', `Bounds updated: ${x},${y} ${width}x${height}`);
-        break;
-      }
-
-      // Playback control
-      case 'play':
+      // Unified API Methods
+      case 'open':
         if (!player) throw new Error('Player not initialized');
-        result = player.play(args[0]);
-        sendLog('info', `Playing: ${args[0]}`);
+        result = player.open(args[0]);
+        sendLog('info', `Open called with options: ${JSON.stringify(args[0])}`);
         break;
 
-      case 'pause':
+      case 'playback':
         if (!player) throw new Error('Player not initialized');
-        player.pause();
-        result = null;
+        result = player.playback(args[0]);
+        sendLog('debug', `Playback called with options: ${JSON.stringify(args[0])}`);
         break;
 
-      case 'stop':
+      case 'audio':
         if (!player) throw new Error('Player not initialized');
-        player.stop();
-        result = null;
+        result = player.audio(args[0]);
+        sendLog('debug', `Audio called with options: ${JSON.stringify(args[0])}`);
         break;
 
-      case 'seek':
+      case 'video':
         if (!player) throw new Error('Player not initialized');
-        player.seek(args[0]);
-        result = null;
+        result = player.video(args[0]);
+        sendLog('debug', `Video called with options: ${JSON.stringify(args[0])}`);
         break;
 
-      // Volume
-      case 'setVolume':
+      case 'subtitle':
         if (!player) throw new Error('Player not initialized');
-        player.setVolume(args[0]);
-        result = null;
+        result = player.subtitle(args[0]);
+        sendLog('debug', `Subtitle called with options: ${JSON.stringify(args[0])}`);
         break;
 
-      case 'getVolume':
+      case 'getMediaInfo':
         if (!player) throw new Error('Player not initialized');
-        result = player.getVolume();
+        result = player.getMediaInfo();
+        sendLog('debug', 'GetMediaInfo called');
         break;
 
-      // Rate
-      case 'setRate':
+      case 'getPlayerInfo':
         if (!player) throw new Error('Player not initialized');
-        player.setRate(args[0]);
-        result = null;
-        break;
-
-      case 'getRate':
-        if (!player) throw new Error('Player not initialized');
-        result = player.getRate();
-        break;
-
-      // Audio tracks
-      case 'setAudioTrack':
-        if (!player) throw new Error('Player not initialized');
-        result = player.setAudioTrack(args[0]);
-        break;
-
-      case 'getAudioTracks':
-        if (!player) throw new Error('Player not initialized');
-        result = player.getAudioTracks();
-        break;
-
-      // Subtitle tracks
-      case 'setSubtitleTrack':
-        if (!player) throw new Error('Player not initialized');
-        result = player.setSubtitleTrack(args[0]);
-        break;
-
-      case 'getSubtitleTracks':
-        if (!player) throw new Error('Player not initialized');
-        result = player.getSubtitleTracks();
-        break;
-
-      case 'setSubtitleDelay':
-        if (!player) throw new Error('Player not initialized');
-        result = player.setSubtitleDelay(args[0]);
-        break;
-
-      // State queries
-      case 'getState':
-        if (!player) throw new Error('Player not initialized');
-        result = player.getState();
-        break;
-
-      case 'isPlaying':
-        if (!player) throw new Error('Player not initialized');
-        result = player.isPlaying();
-        break;
-
-      case 'isSeekable':
-        if (!player) throw new Error('Player not initialized');
-        result = player.isSeekable();
-        break;
-
-      case 'getTime':
-        if (!player) throw new Error('Player not initialized');
-        result = player.getTime();
-        break;
-
-      case 'getLength':
-        if (!player) throw new Error('Player not initialized');
-        result = player.getLength();
+        result = player.getPlayerInfo();
+        sendLog('debug', 'GetPlayerInfo called');
         break;
 
       default:

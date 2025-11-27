@@ -70,54 +70,15 @@ contextBridge.exposeInMainWorld('electron', {
     isAvailable: () => ipcRenderer.invoke('vlc:isAvailable'),
     init: () => ipcRenderer.invoke('vlc:init'),
 
-    // Child window management
-    createChildWindow: (x, y, width, height) => ipcRenderer.invoke('vlc:createChildWindow', x, y, width, height),
-    destroyChildWindow: () => ipcRenderer.invoke('vlc:destroyChildWindow'),
-    setBounds: (x, y, width, height) => ipcRenderer.invoke('vlc:setBounds', x, y, width, height),
-    showWindow: () => ipcRenderer.invoke('vlc:showWindow'),
-    hideWindow: () => ipcRenderer.invoke('vlc:hideWindow'),
-
-    // Playback control
-    play: (url) => ipcRenderer.invoke('vlc:play', url),
-    pause: () => ipcRenderer.invoke('vlc:pause'),
-    resume: () => ipcRenderer.invoke('vlc:resume'),
-    stop: () => ipcRenderer.invoke('vlc:stop'),
-    seek: (time) => ipcRenderer.invoke('vlc:seek', time),
-
-    // Volume
-    setVolume: (volume) => ipcRenderer.invoke('vlc:setVolume', volume),
-    getVolume: () => ipcRenderer.invoke('vlc:getVolume'),
-    setMute: (mute) => ipcRenderer.invoke('vlc:setMute', mute),
-    getMute: () => ipcRenderer.invoke('vlc:getMute'),
-
-    // Time/Position
-    getTime: () => ipcRenderer.invoke('vlc:getTime'),
-    getLength: () => ipcRenderer.invoke('vlc:getLength'),
-    getPosition: () => ipcRenderer.invoke('vlc:getPosition'),
-    setPosition: (position) => ipcRenderer.invoke('vlc:setPosition', position),
-
-    // State
-    getState: () => ipcRenderer.invoke('vlc:getState'),
-    isPlaying: () => ipcRenderer.invoke('vlc:isPlaying'),
-    isSeekable: () => ipcRenderer.invoke('vlc:isSeekable'),
-
-    // Audio tracks
-    getAudioTracks: () => ipcRenderer.invoke('vlc:getAudioTracks'),
-    getAudioTrack: () => ipcRenderer.invoke('vlc:getAudioTrack'),
-    setAudioTrack: (trackId) => ipcRenderer.invoke('vlc:setAudioTrack', trackId),
-
-    // Subtitle tracks
-    getSubtitleTracks: () => ipcRenderer.invoke('vlc:getSubtitleTracks'),
-    getSubtitleTrack: () => ipcRenderer.invoke('vlc:getSubtitleTrack'),
-    setSubtitleTrack: (trackId) => ipcRenderer.invoke('vlc:setSubtitleTrack', trackId),
-    setSubtitleDelay: (delay) => ipcRenderer.invoke('vlc:setSubtitleDelay', delay),
-
-    // Video tracks
-    getVideoTracks: () => ipcRenderer.invoke('vlc:getVideoTracks'),
-
-    // Playback rate
-    setRate: (rate) => ipcRenderer.invoke('vlc:setRate', rate),
-    getRate: () => ipcRenderer.invoke('vlc:getRate'),
+    // Unified API
+    open: (options) => ipcRenderer.invoke('vlc:open', options),
+    playback: (options) => ipcRenderer.invoke('vlc:playback', options),
+    audio: (options) => ipcRenderer.invoke('vlc:audio', options),
+    video: (options) => ipcRenderer.invoke('vlc:video', options),
+    subtitle: (options) => ipcRenderer.invoke('vlc:subtitle', options),
+    window: (options) => ipcRenderer.invoke('vlc:window', options),
+    getMediaInfo: () => ipcRenderer.invoke('vlc:getMediaInfo'),
+    getPlayerInfo: () => ipcRenderer.invoke('vlc:getPlayerInfo'),
 
     // Event listeners
     onTimeChanged: (callback) => ipcRenderer.on('vlc:timeChanged', (_, time) => callback(time)),

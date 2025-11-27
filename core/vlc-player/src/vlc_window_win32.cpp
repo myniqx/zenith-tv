@@ -2,149 +2,190 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#endif
 
-Napi::Value VlcPlayer::CreateChildWindow(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
+// =================================================================================================
+// Internal Window Management Methods
+// =================================================================================================
 
-    if (info.Length() < 5) {
-        Napi::TypeError::New(env, "Expected: parentHandle, x, y, width, height").ThrowAsJavaScriptException();
-        return Napi::Boolean::New(env, false);
-    }
-
-    int x = info[1].As<Napi::Number>().Int32Value();
-    int y = info[2].As<Napi::Number>().Int32Value();
-    int width = info[3].As<Napi::Number>().Int32Value();
-    int height = info[4].As<Napi::Number>().Int32Value();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
+void VlcPlayer::CreateChildWindowInternal(int width, int height) {
     if (child_window_created_) {
-        // Already created, just update bounds
-        return Napi::Boolean::New(env, true);
+        return; // Already created
     }
 
-#ifdef _WIN32
-    // Windows implementation
-    if (info[0].IsBuffer()) {
-        Napi::Buffer<void*> buffer = info[0].As<Napi::Buffer<void*>>();
-        parent_hwnd_ = *reinterpret_cast<HWND*>(buffer.Data());
-    } else if (info[0].IsNumber()) {
-        parent_hwnd_ = reinterpret_cast<HWND>(static_cast<intptr_t>(info[0].As<Napi::Number>().Int64Value()));
-    }
+    printf("[VLC] Creating child window: %dx%d\n", width, height);
+    fflush(stdout);
 
-    if (!parent_hwnd_) {
-        return Napi::Boolean::New(env, false);
-    }
-
-    // Create child window with WS_CHILD style
+    // For Windows, we create a standalone top-level window (not child of Electron)
+    // This allows independent window management
     child_hwnd_ = CreateWindowExW(
-        0,
-        L"STATIC",  // Simple window class
-        L"VLC Video",
-        WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
-        x, y, width, height,
-        parent_hwnd_,
+        WS_EX_APPWINDOW | WS_EX_WINDOWEDGE,
+        L"STATIC",
+        L"VLC Player",
+        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+        CW_USEDEFAULT, CW_USEDEFAULT,
+        width, height,
+        NULL,  // No parent (standalone)
         NULL,
         GetModuleHandle(NULL),
         NULL
     );
 
     if (child_hwnd_) {
-        // Set black background
         SetClassLongPtr(child_hwnd_, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(BLACK_BRUSH));
         libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
         child_window_created_ = true;
-        return Napi::Boolean::New(env, true);
-    }
-#endif
 
-    return Napi::Boolean::New(env, false);
+        // Initialize window state
+        RECT rect;
+        GetWindowRect(child_hwnd_, &rect);
+        saved_window_state_.x = rect.left;
+        saved_window_state_.y = rect.top;
+        saved_window_state_.width = rect.right - rect.left;
+        saved_window_state_.height = rect.bottom - rect.top;
+        saved_window_state_.has_border = true;
+        saved_window_state_.has_titlebar = true;
+        saved_window_state_.is_resizable = true;
+        is_fullscreen_ = false;
+
+        printf("[VLC] Child window created: hwnd=%p\n", child_hwnd_);
+        fflush(stdout);
+    } else {
+        printf("[VLC] ERROR: Failed to create child window\n");
+        fflush(stdout);
+    }
 }
 
-Napi::Value VlcPlayer::DestroyChildWindow(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
+void VlcPlayer::DestroyChildWindowInternal() {
     if (!child_window_created_) {
-        return Napi::Boolean::New(env, true);
+        return;
     }
 
-#ifdef _WIN32
+    printf("[VLC] Destroying child window: hwnd=%p\n", child_hwnd_);
+    fflush(stdout);
+
     if (child_hwnd_) {
         DestroyWindow(child_hwnd_);
         child_hwnd_ = nullptr;
     }
-#endif
 
     child_window_created_ = false;
-    return Napi::Boolean::New(env, true);
+    is_fullscreen_ = false;
 }
 
-Napi::Value VlcPlayer::SetBounds(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
+void VlcPlayer::SetWindowBounds(int x, int y, int width, int height) {
+    if (!child_window_created_ || !child_hwnd_) return;
 
-    if (info.Length() < 4) {
-        Napi::TypeError::New(env, "Expected: x, y, width, height").ThrowAsJavaScriptException();
-        return Napi::Boolean::New(env, false);
+    printf("[VLC] SetWindowBounds: x=%d, y=%d, w=%d, h=%d\n", x, y, width, height);
+    fflush(stdout);
+
+    SetWindowPos(child_hwnd_, NULL, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+
+    // Update saved state if not in fullscreen
+    if (!is_fullscreen_) {
+        saved_window_state_.x = x;
+        saved_window_state_.y = y;
+        saved_window_state_.width = width;
+        saved_window_state_.height = height;
     }
+}
 
-    int x = info[0].As<Napi::Number>().Int32Value();
-    int y = info[1].As<Napi::Number>().Int32Value();
-    int width = info[2].As<Napi::Number>().Int32Value();
-    int height = info[3].As<Napi::Number>().Int32Value();
+void VlcPlayer::SetWindowFullscreen(bool fullscreen) {
+    if (!child_window_created_ || !child_hwnd_) return;
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    printf("[VLC] SetWindowFullscreen: %s\n", fullscreen ? "true" : "false");
+    fflush(stdout);
 
-    if (!child_window_created_) {
-        return Napi::Boolean::New(env, false);
+    if (fullscreen) {
+        // Get monitor info for fullscreen
+        HMONITOR monitor = MonitorFromWindow(child_hwnd_, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi = { sizeof(mi) };
+        GetMonitorInfo(monitor, &mi);
+
+        // Remove window decorations and maximize
+        SetWindowLongPtr(child_hwnd_, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+        SetWindowPos(
+            child_hwnd_,
+            HWND_TOP,
+            mi.rcMonitor.left,
+            mi.rcMonitor.top,
+            mi.rcMonitor.right - mi.rcMonitor.left,
+            mi.rcMonitor.bottom - mi.rcMonitor.top,
+            SWP_FRAMECHANGED
+        );
+    } else {
+        // Restore window decorations
+        DWORD style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+        if (!saved_window_state_.has_border) style &= ~WS_BORDER;
+        if (!saved_window_state_.has_titlebar) style &= ~WS_CAPTION;
+        if (!saved_window_state_.is_resizable) style &= ~WS_THICKFRAME;
+
+        SetWindowLongPtr(child_hwnd_, GWL_STYLE, style);
+        SetWindowPos(
+            child_hwnd_,
+            HWND_NOTOPMOST,
+            saved_window_state_.x,
+            saved_window_state_.y,
+            saved_window_state_.width,
+            saved_window_state_.height,
+            SWP_FRAMECHANGED
+        );
     }
+}
 
-#ifdef _WIN32
-    if (child_hwnd_) {
-        SetWindowPos(child_hwnd_, NULL, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
-        return Napi::Boolean::New(env, true);
-    }
+void VlcPlayer::SetWindowOnTop(bool onTop) {
+    if (!child_window_created_ || !child_hwnd_) return;
+
+    printf("[VLC] SetWindowOnTop: %s\n", onTop ? "true" : "false");
+    fflush(stdout);
+
+    SetWindowPos(
+        child_hwnd_,
+        onTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+        0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+    );
+}
+
+void VlcPlayer::SetWindowVisible(bool visible) {
+    if (!child_window_created_ || !child_hwnd_) return;
+
+    printf("[VLC] SetWindowVisible: %s\n", visible ? "true" : "false");
+    fflush(stdout);
+
+    ::ShowWindow(child_hwnd_, visible ? SW_SHOW : SW_HIDE);
+}
+
+void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable) {
+    if (!child_window_created_ || !child_hwnd_) return;
+
+    printf("[VLC] SetWindowStyle: border=%d, titlebar=%d, resizable=%d\n", border, titlebar, resizable);
+    fflush(stdout);
+
+    DWORD style = WS_POPUP | WS_VISIBLE;
+    if (border) style |= WS_BORDER;
+    if (titlebar) style |= WS_CAPTION | WS_SYSMENU;
+    if (resizable) style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
+
+    SetWindowLongPtr(child_hwnd_, GWL_STYLE, style);
+    SetWindowPos(child_hwnd_, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+}
+
+void VlcPlayer::GetWindowBounds(WindowState* state) {
+    if (!child_window_created_ || !child_hwnd_ || !state) return;
+
+    RECT rect;
+    GetWindowRect(child_hwnd_, &rect);
+
+    state->x = rect.left;
+    state->y = rect.top;
+    state->width = rect.right - rect.left;
+    state->height = rect.bottom - rect.top;
+
+    LONG style = GetWindowLongPtr(child_hwnd_, GWL_STYLE);
+    state->has_border = (style & WS_BORDER) != 0;
+    state->has_titlebar = (style & WS_CAPTION) != 0;
+    state->is_resizable = (style & WS_THICKFRAME) != 0;
+}
+
 #endif
-
-    return Napi::Boolean::New(env, false);
-}
-
-Napi::Value VlcPlayer::ShowWindow(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (!child_window_created_) {
-        return Napi::Boolean::New(env, false);
-    }
-
-#ifdef _WIN32
-    if (child_hwnd_) {
-        ::ShowWindow(child_hwnd_, SW_SHOW);
-        return Napi::Boolean::New(env, true);
-    }
-#endif
-
-    return Napi::Boolean::New(env, false);
-}
-
-Napi::Value VlcPlayer::HideWindow(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (!child_window_created_) {
-        return Napi::Boolean::New(env, false);
-    }
-
-#ifdef _WIN32
-    if (child_hwnd_) {
-        ::ShowWindow(child_hwnd_, SW_HIDE);
-        return Napi::Boolean::New(env, true);
-    }
-#endif
-
-    return Napi::Boolean::New(env, false);
-}

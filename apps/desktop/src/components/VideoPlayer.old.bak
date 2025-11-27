@@ -44,18 +44,28 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
   const { getNextEpisode, saveWatchProgress } = useContentStore();
   const { autoPlayNext, defaultVolume } = useSettingsStore();
 
-  // Track if child window has been created (using ref to avoid re-renders)
-  const childWindowCreatedRef = useRef(false);
+  // Track if child window has been created (local state since removed from hook)
+  const [isChildWindowCreated, setIsChildWindowCreated] = useState(false);
   const isCreatingWindowRef = useRef(false);
+
+  // Track retry count to prevent infinite loops
+  const retryCountRef = useRef(0);
+
+  // Reset retry count when item changes
+  useEffect(() => {
+    retryCountRef.current = 0;
+  }, [currentItem?.Url]);
 
   // Create child window and start playback - combined to ensure correct order
   useEffect(() => {
     if (!vlc.isInitialized || !currentItem || !videoAreaRef.current) {
-      console.log('[VLC VideoPlayer] Skipping - conditions not met:', {
-        isInitialized: vlc.isInitialized,
-        hasCurrentItem: !!currentItem,
-        hasVideoAreaRef: !!videoAreaRef.current
-      });
+      return;
+    }
+
+    // Prevent infinite loops if window creation fails repeatedly
+    if (retryCountRef.current >= 3) {
+      console.error('[VLC VideoPlayer] Max retries reached for window creation/playback');
+      setState('error');
       return;
     }
 
@@ -64,16 +74,10 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
       if (!element) return;
 
       // Step 1: Create child window if not already created
-      if (!childWindowCreatedRef.current && !isCreatingWindowRef.current) {
+      if (!isChildWindowCreated && !isCreatingWindowRef.current) {
         isCreatingWindowRef.current = true;
 
         const rect = element.getBoundingClientRect();
-
-        // The native window handle includes the title bar, so we need to account for:
-        // - The window's client area offset from the full window (title bar height)
-        // - The element's position within the client area
-        // getBoundingClientRect gives position relative to viewport (which IS the client area in Electron)
-        // So rect.x and rect.y are already the correct offsets from the client area origin
         const bounds = {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
@@ -88,23 +92,24 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
         }
 
         console.log('[VLC VideoPlayer] Step 1: Creating child window with bounds:', bounds);
-        console.log('[VLC VideoPlayer] Element rect:', rect);
 
         try {
-          const result = await window.electron.vlc.createChildWindow(
-            bounds.x, bounds.y, bounds.width, bounds.height
-          );
-          console.log('[VLC VideoPlayer] Child window creation result:', result);
-          childWindowCreatedRef.current = result.success;
+          // Use unified window API
+          const success = await vlc.window({ resize: bounds, visible: true });
+          console.log('[VLC VideoPlayer] Child window creation result:', success);
 
-          if (!result.success) {
-            console.error('[VLC VideoPlayer] Failed to create child window:', result.error);
+          if (success) {
+            setIsChildWindowCreated(true);
+          } else {
+            console.error('[VLC VideoPlayer] Failed to create child window');
             isCreatingWindowRef.current = false;
+            retryCountRef.current++;
             return;
           }
         } catch (err) {
           console.error('[VLC VideoPlayer] Exception creating child window:', err);
           isCreatingWindowRef.current = false;
+          retryCountRef.current++;
           return;
         }
 
@@ -115,19 +120,18 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
       }
 
       // Step 2: Start playback AFTER child window is ready
-      if (childWindowCreatedRef.current) {
+      if (isChildWindowCreated) {
         console.log('[VLC VideoPlayer] Step 2: Starting playback for:', currentItem.Url);
         setState('loading');
 
         try {
-          await vlc.setVolume(defaultVolume * 100);
-          const success = await vlc.play(currentItem.Url);
-          console.log('[VLC VideoPlayer] Play result:', success);
+          await vlc.audio({ volume: defaultVolume * 100 });
+          await vlc.open(currentItem.Url);
+          await vlc.playback({ action: 'play' });
+          console.log('[VLC VideoPlayer] Playback started successfully');
 
-          if (!success) {
-            setState('error');
-            return;
-          }
+          // Success - reset retries
+          retryCountRef.current = 0;
 
           // Handle resume from watch progress
           if (currentItem.userData?.watchProgress && currentItem.userData.watchProgress > 0) {
@@ -136,7 +140,7 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
               if (vlc.duration > 0) {
                 const position = (progressPercent / 100) * vlc.duration;
                 if (position > 0 && position < vlc.duration - 10000) {
-                  await vlc.seek(position);
+                  await vlc.playback({ time: position });
                 }
               }
             }, 1000);
@@ -144,6 +148,7 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
         } catch (err) {
           console.error('[VLC VideoPlayer] Playback error:', err);
           setState('error');
+          retryCountRef.current++;
         }
       }
     };
@@ -154,19 +159,19 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
     return () => {
       clearTimeout(timeoutId);
       // Stop playback when URL changes
-      vlc.stop();
+      // vlc.stop(); // Don't stop here, let the unmount handler or next play handle it
     };
-  }, [vlc.isInitialized, currentItem?.Url]); // Trigger on URL change
+  }, [vlc.isInitialized, currentItem?.Url, isChildWindowCreated]); // Trigger on URL change or window creation state change
 
   // Handle resize - update bounds when container size changes
   useEffect(() => {
-    if (!vlc.isInitialized || !videoAreaRef.current || !childWindowCreatedRef.current) {
+    if (!vlc.isInitialized || !videoAreaRef.current || !isChildWindowCreated) {
       return;
     }
 
     const updateBounds = async () => {
       const element = videoAreaRef.current;
-      if (!element || !childWindowCreatedRef.current) return;
+      if (!element || !isChildWindowCreated) return;
 
       const rect = element.getBoundingClientRect();
       const bounds = {
@@ -177,7 +182,7 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
       };
 
       if (bounds.width > 0 && bounds.height > 0) {
-        await window.electron.vlc.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+        await vlc.window({ resize: bounds });
       }
     };
 
@@ -195,19 +200,19 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
       }
       window.removeEventListener('resize', updateBounds);
     };
-  }, [vlc.isInitialized]);
+  }, [vlc.isInitialized, isChildWindowCreated]);
 
   // Cleanup child window only when component unmounts
   useEffect(() => {
     return () => {
-      if (childWindowCreatedRef.current) {
-        console.log('[VLC VideoPlayer] Destroying child window on unmount');
-        window.electron.vlc.stop().then(() => {
-          window.electron.vlc.destroyChildWindow();
-          childWindowCreatedRef.current = false;
+      console.log('[VLC VideoPlayer] Stopping playback on unmount');
+      if (vlc.isAvailable) {
+        vlc.playback({ action: 'stop' }).catch(err => {
+          console.error('[VLC VideoPlayer] Failed to stop on unmount:', err);
         });
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync VLC state with player store
@@ -226,11 +231,11 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
       unknown: 'idle',
     };
 
-    const mappedState = stateMap[vlc.state] || 'idle';
+    const mappedState = stateMap[vlc.playerState] || 'idle';
     if (mappedState !== state) {
       setState(mappedState);
     }
-  }, [vlc.state, vlc.isInitialized, state, setState]);
+  }, [vlc.playerState, vlc.isInitialized, state, setState]);
 
   // Sync time updates
   useEffect(() => {
@@ -248,17 +253,17 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
 
   // Handle end of playback
   useEffect(() => {
-    if (vlc.state === 'ended' && autoPlayNext && currentItem) {
+    if (vlc.playerState === 'ended' && autoPlayNext && currentItem) {
       const nextEpisode = getNextEpisode(currentItem);
       if (nextEpisode) {
         setTimeout(() => playItem(nextEpisode), 500);
       }
     }
-  }, [vlc.state, autoPlayNext, currentItem, getNextEpisode, playItem]);
+  }, [vlc.playerState, autoPlayNext, currentItem, getNextEpisode, playItem]);
 
   // Auto-save watch progress
   useEffect(() => {
-    if (!vlc.isInitialized || !currentItem || vlc.state !== 'playing') return;
+    if (!vlc.isInitialized || !currentItem || vlc.playerState !== 'playing') return;
 
     const saveInterval = setInterval(async () => {
       if (vlc.duration > 0) {
@@ -281,11 +286,11 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
           .catch(err => console.error('Failed to save watch progress on unmount:', err));
       }
     };
-  }, [currentItem, vlc.state, vlc.time, vlc.duration, vlc.isInitialized, saveWatchProgress]);
+  }, [currentItem, vlc.playerState, vlc.time, vlc.duration, vlc.isInitialized, saveWatchProgress]);
 
   // Auto-hide controls
   useEffect(() => {
-    if (showControls && vlc.state === 'playing') {
+    if (showControls && vlc.playerState === 'playing') {
       if (hideControlsTimeoutRef.current) {
         clearTimeout(hideControlsTimeoutRef.current);
       }
@@ -299,7 +304,7 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
         clearTimeout(hideControlsTimeoutRef.current);
       }
     };
-  }, [showControls, vlc.state]);
+  }, [showControls, vlc.playerState]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -310,19 +315,26 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
         case ' ':
         case 'k':
           e.preventDefault();
-          if (vlc.state === 'playing') {
-            await vlc.pause();
-          } else if (vlc.state === 'paused') {
-            await vlc.resume();
+          if (vlc.playerState === 'playing') {
+            await vlc.playback({ action: 'pause' });
+          } else if (vlc.playerState === 'stopped' || vlc.playerState === 'ended' || vlc.playerState === 'idle') {
+            // If stopped/ended/idle, need to re-open and play
+            if (currentItem) {
+              await vlc.open(currentItem.Url);
+              await vlc.playback({ action: 'play' });
+            }
+          } else {
+            // Paused state - just resume
+            await vlc.playback({ action: 'resume' });
           }
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          await vlc.seek(Math.max(0, vlc.time - 10000));
+          await vlc.playback({ time: Math.max(0, vlc.time - 10000) });
           break;
         case 'ArrowRight':
           e.preventDefault();
-          await vlc.seek(Math.min(vlc.duration, vlc.time + 10000));
+          await vlc.playback({ time: Math.min(vlc.duration, vlc.time + 10000) });
           break;
         case 'f':
           e.preventDefault();
@@ -330,7 +342,7 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
           break;
         case 'm':
           e.preventDefault();
-          await vlc.toggleMute();
+          await vlc.audio({ mute: !vlc.isMuted });
           break;
       }
     };
@@ -358,17 +370,25 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
   const handleClick = async () => {
     if (!vlc.isInitialized) return;
 
-    if (vlc.state === 'playing') {
-      await vlc.pause();
-    } else if (vlc.state === 'paused') {
-      await vlc.resume();
+    if (vlc.playerState === 'playing') {
+      await vlc.playback({ action: 'pause' });
+    } else if (vlc.playerState === 'stopped' || vlc.playerState === 'ended' || vlc.playerState === 'idle') {
+      // If stopped/ended/idle, need to re-open and play
+      if (currentItem) {
+        await vlc.open(currentItem.Url);
+        await vlc.playback({ action: 'play' });
+      }
+    } else {
+      // Paused state - just resume
+      await vlc.playback({ action: 'resume' });
     }
   };
 
   const handleRetry = async () => {
     if (!currentItem) return;
-    await vlc.stop();
-    await vlc.play(currentItem.Url);
+    await vlc.playback({ action: 'stop' });
+    await vlc.open(currentItem.Url);
+    await vlc.playback({ action: 'play' });
   };
 
   // No content selected
@@ -404,14 +424,14 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
       {/* Overlay container - sits above VLC child window */}
       <div className="absolute inset-0 z-10 pointer-events-none">
         {/* Loading spinner */}
-        {(vlc.state === 'opening' || vlc.state === 'buffering' || state === 'loading') && (
+        {(vlc.playerState === 'opening' || vlc.playerState === 'buffering' || state === 'loading') && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
             <Loader2 className="w-16 h-16 text-primary animate-spin" />
           </div>
         )}
 
         {/* Error message */}
-        {vlc.state === 'error' && (
+        {vlc.playerState === 'error' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/90 pointer-events-auto">
             <div className="text-center max-w-lg px-6">
               <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-destructive" />
@@ -434,7 +454,7 @@ function VlcVideoPlayerImpl({ vlc }: { vlc: ReturnType<typeof useVlcPlayer> }) {
         )}
 
         {/* Track info overlay */}
-        {vlc.state === 'playing' && vlc.audioTracks.length > 0 && showControls && (
+        {vlc.playerState === 'playing' && vlc.audioTracks.length > 0 && showControls && (
           <div className="absolute top-4 right-4 bg-black/70 rounded-lg px-3 py-2 text-sm pointer-events-auto">
             <div className="text-white/60">
               Audio: {vlc.audioTracks.find(t => t.id === vlc.currentAudioTrack)?.name || 'Default'}
@@ -469,8 +489,8 @@ function Html5VideoPlayer() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string>('');
-  const hideControlsTimeoutRef = useRef<NodeJS.Timeout>();
-  const retryTimeoutRef = useRef<NodeJS.Timeout>();
+  const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     currentItem,

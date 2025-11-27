@@ -13,6 +13,7 @@ typedef SSIZE_T ssize_t;
 #include <vlc/vlc.h>
 #include <string>
 #include <vector>
+#include <map>
 #include <mutex>
 #include <atomic>
 
@@ -48,13 +49,26 @@ public:
     HWND parent_hwnd_;
 #elif defined(__linux__)
     Display* display_;
-    Window child_window_;
-    Window parent_window_;
+    ::Window child_window_;  // Use :: to avoid conflict with Window() method
+    ::Window parent_window_;
 #elif defined(__APPLE__)
     void* child_nsview_;
     void* parent_nsview_;
 #endif
     bool child_window_created_;
+
+    // Window state management
+    struct WindowState {
+        int x;
+        int y;
+        int width;
+        int height;
+        bool has_border;
+        bool has_titlebar;
+        bool is_resizable;
+    };
+    WindowState saved_window_state_;
+    bool is_fullscreen_;
 
     // Video memory (vmem) callback support
     unsigned int video_width_;
@@ -65,56 +79,53 @@ public:
     bool frame_ready_;
 
 private:
-    // Core VLC methods
-    Napi::Value Play(const Napi::CallbackInfo& info);
-    Napi::Value Pause(const Napi::CallbackInfo& info);
-    Napi::Value Resume(const Napi::CallbackInfo& info);
-    Napi::Value Stop(const Napi::CallbackInfo& info);
-    Napi::Value SetMedia(const Napi::CallbackInfo& info);
+    // Unified API Methods
+    Napi::Value Open(const Napi::CallbackInfo& info);
+    Napi::Value Playback(const Napi::CallbackInfo& info);
+    Napi::Value Audio(const Napi::CallbackInfo& info);
+    Napi::Value Video(const Napi::CallbackInfo& info);
+    Napi::Value Subtitle(const Napi::CallbackInfo& info);
+    /**
+     * Get comprehensive media information (tracks, duration, seekability)
+     * Returns: { duration, isSeekable, audioTracks, subtitleTracks, currentAudioTrack, currentSubtitleTrack }
+     */
+    Napi::Value GetMediaInfo(const Napi::CallbackInfo& info);
 
-    // Playback control
+    /**
+     * Get current player state information (time, length, state, isPlaying)
+     * Returns: { time, length, state, isPlaying }
+     */
+    Napi::Value GetPlayerInfo(const Napi::CallbackInfo& info);
+
+    // Internal storage for media options (applied on Open)
+    std::map<std::string, std::string> media_options_;
+
+    // Playback control setters (used by unified APIs)
     Napi::Value Seek(const Napi::CallbackInfo& info);
     Napi::Value SetVolume(const Napi::CallbackInfo& info);
-    Napi::Value GetVolume(const Napi::CallbackInfo& info);
     Napi::Value SetMute(const Napi::CallbackInfo& info);
-    Napi::Value GetMute(const Napi::CallbackInfo& info);
     Napi::Value SetRate(const Napi::CallbackInfo& info);
-    Napi::Value GetRate(const Napi::CallbackInfo& info);
-
-    // Time/Position
-    Napi::Value GetTime(const Napi::CallbackInfo& info);
-    Napi::Value GetLength(const Napi::CallbackInfo& info);
-    Napi::Value GetPosition(const Napi::CallbackInfo& info);
-    Napi::Value SetPosition(const Napi::CallbackInfo& info);
-
-    // State
-    Napi::Value GetState(const Napi::CallbackInfo& info);
-    Napi::Value IsPlaying(const Napi::CallbackInfo& info);
-    Napi::Value IsSeekable(const Napi::CallbackInfo& info);
-
-    // Audio tracks
-    Napi::Value GetAudioTracks(const Napi::CallbackInfo& info);
-    Napi::Value GetAudioTrack(const Napi::CallbackInfo& info);
     Napi::Value SetAudioTrack(const Napi::CallbackInfo& info);
-
-    // Subtitle tracks
-    Napi::Value GetSubtitleTracks(const Napi::CallbackInfo& info);
-    Napi::Value GetSubtitleTrack(const Napi::CallbackInfo& info);
     Napi::Value SetSubtitleTrack(const Napi::CallbackInfo& info);
     Napi::Value SetSubtitleDelay(const Napi::CallbackInfo& info);
 
-    // Video tracks
+    // Track list getters (used by getMediaInfo)
+    Napi::Value GetAudioTracks(const Napi::CallbackInfo& info);
+    Napi::Value GetSubtitleTracks(const Napi::CallbackInfo& info);
     Napi::Value GetVideoTracks(const Napi::CallbackInfo& info);
 
-    // Window embedding (legacy - sets VLC to render on given window)
-    Napi::Value SetWindow(const Napi::CallbackInfo& info);
+    // Unified Window API (declared before internal methods to avoid X11 Window typedef conflict)
+    Napi::Value Window(const Napi::CallbackInfo& info);
 
-    // Child window embedding (new - creates native child window for VLC)
-    Napi::Value CreateChildWindow(const Napi::CallbackInfo& info);
-    Napi::Value DestroyChildWindow(const Napi::CallbackInfo& info);
-    Napi::Value SetBounds(const Napi::CallbackInfo& info);
-    Napi::Value ShowWindow(const Napi::CallbackInfo& info);
-    Napi::Value HideWindow(const Napi::CallbackInfo& info);
+    // Internal window management methods (platform-specific implementations)
+    void CreateChildWindowInternal(int width = 1280, int height = 720);
+    void DestroyChildWindowInternal();
+    void SetWindowBounds(int x, int y, int width, int height);
+    void SetWindowFullscreen(bool fullscreen);
+    void SetWindowOnTop(bool onTop);
+    void SetWindowVisible(bool visible);
+    void SetWindowStyle(bool border, bool titlebar, bool resizable);
+    void GetWindowBounds(WindowState* state);
 
     // Event callbacks
     Napi::Value On(const Napi::CallbackInfo& info);

@@ -87,367 +87,81 @@ function registerVlcHandlers(mainWindow) {
     }
   });
 
-  // Create child window for VLC rendering
-  // Create standalone VLC window
-  ipcMain.handle('vlc:createChildWindow', async (_, x, y, width, height) => {
-    console.log('[VLC] createChildWindow called with:', { x, y, width, height });
-
+  // Unified Window API
+  ipcMain.handle('vlc:window', async (_, options) => {
     try {
       const manager = await getVlcManager();
-
-      // Call createWindow on standalone process
-      // Parent handle is always 0 (standalone window, not embedded)
-      const result = await manager.call('createWindow', x, y, width, height);
-
-      console.log('[VLC] Standalone window created:', result);
-      return { success: result };
+      return await manager.call('window', options);
     } catch (error) {
-      console.error('[VLC] CreateChildWindow error:', error);
-      return { success: false, error: error.message };
+      console.error('[VLC] Window error:', error);
+      return false;
     }
   });
 
-  // Destroy child window
-  ipcMain.handle('vlc:destroyChildWindow', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return { success: false };
-
-    try {
-      // No-op: window managed by standalone process
-      return { success: result };
-    } catch (error) {
-      console.error('[VLC] DestroyChildWindow error:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // Update window bounds (for position/size sync)
-  ipcMain.handle('vlc:setBounds', async (_, x, y, width, height) => {
+  // Unified API
+  ipcMain.handle('vlc:open', async (_, options) => {
     try {
       const manager = await getVlcManager();
-      return await manager.call('setBounds', x, y, width, height);
+      return await manager.call('open', options);
     } catch (error) {
-      console.error('[VLC] SetBounds error:', error);
+      console.error('[VLC] Open error:', error);
       return false;
     }
   });
 
-  // Show child window
-  ipcMain.handle('vlc:showWindow', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
-
-    try {
-      // No-op: window managed by standalone process
-      return true;
-    } catch (error) {
-      console.error('[VLC] ShowWindow error:', error);
-      return false;
-    }
-  });
-
-  // Hide child window
-  ipcMain.handle('vlc:hideWindow', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
-
-    try {
-      // No-op: window managed by standalone process
-      return true;
-    } catch (error) {
-      console.error('[VLC] HideWindow error:', error);
-      return false;
-    }
-  });
-
-  // Playback control
-  ipcMain.handle('vlc:play', async (_, url) => {
+  ipcMain.handle('vlc:playback', async (_, options) => {
     try {
       const manager = await getVlcManager();
-      return await manager.call('play', url);
+      return await manager.call('playback', options);
     } catch (error) {
-      console.error('[VLC] Play error:', error);
-      return false;
+      console.error('[VLC] Playback error:', error);
     }
   });
 
-  ipcMain.handle('vlc:pause', async () => {
+  ipcMain.handle('vlc:audio', async (_, options) => {
     try {
       const manager = await getVlcManager();
-      await manager.call('pause');
+      return await manager.call('audio', options);
     } catch (error) {
-      console.error('[VLC] Pause error:', error);
+      console.error('[VLC] Audio error:', error);
     }
   });
 
-  ipcMain.handle('vlc:resume', async () => {
+  ipcMain.handle('vlc:video', async (_, options) => {
     try {
       const manager = await getVlcManager();
-      // VLC doesn't have separate resume, just call pause again to toggle
-      await manager.call('pause');
+      return await manager.call('video', options);
     } catch (error) {
-      console.error('[VLC] Resume error:', error);
+      console.error('[VLC] Video error:', error);
     }
   });
 
-  ipcMain.handle('vlc:stop', async () => {
+  ipcMain.handle('vlc:subtitle', async (_, options) => {
     try {
       const manager = await getVlcManager();
-      await manager.call('stop');
+      return await manager.call('subtitle', options);
     } catch (error) {
-      console.error('[VLC] Stop error:', error);
+      console.error('[VLC] Subtitle error:', error);
     }
   });
 
-  ipcMain.handle('vlc:seek', async (_, time) => {
+  ipcMain.handle('vlc:getMediaInfo', async () => {
     try {
       const manager = await getVlcManager();
-      await manager.call('seek', time);
+      return await manager.call('getMediaInfo');
     } catch (error) {
-      console.error('[VLC] Seek error:', error);
+      console.error('[VLC] GetMediaInfo error:', error);
+      return null;
     }
   });
 
-  // Volume control
-  ipcMain.handle('vlc:setVolume', async (_, volume) => {
-    const manager = await getVlcManager();
-    if (!manager) return;
-
+  ipcMain.handle('vlc:getPlayerInfo', async () => {
     try {
-      await manager.call('setVolume', volume);
+      const manager = await getVlcManager();
+      return await manager.call('getPlayerInfo');
     } catch (error) {
-      console.error('[VLC] SetVolume error:', error);
-    }
-  });
-
-  ipcMain.handle('vlc:getVolume', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 0;
-
-    try {
-      return await manager.call('getVolume', );
-    } catch (error) {
-      console.error('[VLC] GetVolume error:', error);
-      return 0;
-    }
-  });
-
-  ipcMain.handle('vlc:setMute', async (_, mute) => {
-    const manager = await getVlcManager();
-    if (!manager) return;
-
-    try {
-      await manager.call('setMute', mute);
-    } catch (error) {
-      console.error('[VLC] SetMute error:', error);
-    }
-  });
-
-  ipcMain.handle('vlc:getMute', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
-
-    try {
-      return await manager.call('getMute', );
-    } catch (error) {
-      console.error('[VLC] GetMute error:', error);
-      return false;
-    }
-  });
-
-  // Time/Position
-  ipcMain.handle('vlc:getTime', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 0;
-
-    try {
-      return await manager.call('getTime');
-    } catch (error) {
-      return 0;
-    }
-  });
-
-  ipcMain.handle('vlc:getLength', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 0;
-
-    try {
-      return await manager.call('getLength', );
-    } catch (error) {
-      return 0;
-    }
-  });
-
-  ipcMain.handle('vlc:getPosition', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 0;
-
-    try {
-      return await manager.call('getPosition');
-    } catch (error) {
-      return 0;
-    }
-  });
-
-  ipcMain.handle('vlc:setPosition', async (_, position) => {
-    const manager = await getVlcManager();
-    if (!manager) return;
-
-    try {
-      await manager.call('setPosition', position);
-    } catch (error) {
-      console.error('[VLC] SetPosition error:', error);
-    }
-  });
-
-  // State
-  ipcMain.handle('vlc:getState', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 'idle';
-
-    try {
-      return await manager.call('getState', );
-    } catch (error) {
-      return 'error';
-    }
-  });
-
-  ipcMain.handle('vlc:isPlaying', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
-
-    try {
-      return await manager.call('isPlaying');
-    } catch (error) {
-      return false;
-    }
-  });
-
-  ipcMain.handle('vlc:isSeekable', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
-
-    try {
-      return await manager.call('isSeekable');
-    } catch (error) {
-      return false;
-    }
-  });
-
-  // Audio tracks
-  ipcMain.handle('vlc:getAudioTracks', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return [];
-
-    try {
-      return await manager.call('getAudioTracks');
-    } catch (error) {
-      return [];
-    }
-  });
-
-  ipcMain.handle('vlc:getAudioTrack', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return -1;
-
-    try {
-      return await manager.call('getAudioTrack');
-    } catch (error) {
-      return -1;
-    }
-  });
-
-  ipcMain.handle('vlc:setAudioTrack', async (_, trackId) => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
-
-    try {
-      return await manager.call('setAudioTrack', trackId);
-    } catch (error) {
-      console.error('[VLC] SetAudioTrack error:', error);
-      return false;
-    }
-  });
-
-  // Subtitle tracks
-  ipcMain.handle('vlc:getSubtitleTracks', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return [];
-
-    try {
-      return await manager.call('getSubtitleTracks');
-    } catch (error) {
-      return [];
-    }
-  });
-
-  ipcMain.handle('vlc:getSubtitleTrack', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return -1;
-
-    try {
-      return await manager.call('getSubtitleTrack');
-    } catch (error) {
-      return -1;
-    }
-  });
-
-  ipcMain.handle('vlc:setSubtitleTrack', async (_, trackId) => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
-
-    try {
-      return await manager.call('setSubtitleTrack', trackId);
-    } catch (error) {
-      console.error('[VLC] SetSubtitleTrack error:', error);
-      return false;
-    }
-  });
-
-  ipcMain.handle('vlc:setSubtitleDelay', async (_, delay) => {
-    const manager = await getVlcManager();
-    if (!manager) return false;
-
-    try {
-      return await manager.call('setSubtitleDelay', delay);
-    } catch (error) {
-      console.error('[VLC] SetSubtitleDelay error:', error);
-      return false;
-    }
-  });
-
-  // Video tracks
-  ipcMain.handle('vlc:getVideoTracks', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return [];
-
-    try {
-      return await manager.call('getVideoTracks');
-    } catch (error) {
-      return [];
-    }
-  });
-
-  // Playback rate
-  ipcMain.handle('vlc:setRate', async (_, rate) => {
-    const manager = await getVlcManager();
-    if (!manager) return;
-
-    try {
-      await manager.call('setRate', rate);
-    } catch (error) {
-      console.error('[VLC] SetRate error:', error);
-    }
-  });
-
-  ipcMain.handle('vlc:getRate', async () => {
-    const manager = await getVlcManager();
-    if (!manager) return 1.0;
-
-    try {
-      return await manager.call('getRate', );
-    } catch (error) {
-      return 1.0;
+      console.error('[VLC] GetPlayerInfo error:', error);
+      return null;
     }
   });
 

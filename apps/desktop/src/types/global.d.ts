@@ -22,60 +22,40 @@ declare global {
 
       vlc: {
         isAvailable: () => Promise<boolean>;
-        // Initialize VLC player (returns MessagePort for frame transfer in canvas mode)
         init: () => Promise<{ success: boolean; framePort?: MessagePort; error?: string }>;
 
-        // Window mode: Child window management
-        createChildWindow: (x: number, y: number, width: number, height: number) => Promise<{ success: boolean; error?: string }>;
-        destroyChildWindow: () => Promise<{ success: boolean; error?: string }>;
-        setBounds: (x: number, y: number, width: number, height: number) => Promise<boolean>;
-        showWindow: () => Promise<boolean>;
-        hideWindow: () => Promise<boolean>;
-
-        // Canvas mode: Setup video callback for frame rendering
-        setupVideoCallback: (width: number, height: number) => Promise<{ success: boolean; error?: string }>;
-
-        // Playback control
-        play: (url?: string) => Promise<boolean>;
-        pause: () => Promise<void>;
-        resume: () => Promise<void>;
-        stop: () => Promise<void>;
-        seek: (time: number) => Promise<void>;
-
-        // Volume
-        setVolume: (volume: number) => Promise<void>;
-        getVolume: () => Promise<number>;
-        setMute: (mute: boolean) => Promise<void>;
-        getMute: () => Promise<boolean>;
-
-        // Time/Position
-        getTime: () => Promise<number>;
-        getLength: () => Promise<number>;
-        getPosition: () => Promise<number>;
-        setPosition: (position: number) => Promise<void>;
-
-        // State
-        getState: () => Promise<VlcPlayerState>;
-        isPlaying: () => Promise<boolean>;
-        isSeekable: () => Promise<boolean>;
-
-        // Audio tracks
-        getAudioTracks: () => Promise<VlcTrack[]>;
-        getAudioTrack: () => Promise<number>;
-        setAudioTrack: (trackId: number) => Promise<boolean>;
-
-        // Subtitle tracks
-        getSubtitleTracks: () => Promise<VlcTrack[]>;
-        getSubtitleTrack: () => Promise<number>;
-        setSubtitleTrack: (trackId: number) => Promise<boolean>;
-        setSubtitleDelay: (delay: number) => Promise<boolean>;
-
-        // Video tracks
-        getVideoTracks: () => Promise<VlcTrack[]>;
-
-        // Playback rate
-        setRate: (rate: number) => Promise<void>;
-        getRate: () => Promise<number>;
+        // Unified API
+        open: (options: { file: string }) => Promise<void>;
+        playback: (options: {
+          action?: 'play' | 'pause' | 'resume' | 'stop';
+          time?: number;
+          position?: number;
+          rate?: number;
+        }) => Promise<void>;
+        audio: (options: { volume?: number; mute?: boolean; track?: number; delay?: number }) => Promise<void>;
+        video: (options: { track?: number }) => Promise<void>;
+        subtitle: (options: { track?: number; delay?: number }) => Promise<void>;
+        window: (options: {
+          resize?: { x: number; y: number; width: number; height: number };
+          fullscreen?: boolean;
+          onTop?: boolean;
+          visible?: boolean;
+          style?: { border?: boolean; titleBar?: boolean; resizable?: boolean };
+        }) => Promise<boolean>;
+        getMediaInfo: () => Promise<{
+          duration: number;
+          isSeekable: boolean;
+          audioTracks: Array<{ id: number; name: string }>;
+          subtitleTracks: Array<{ id: number; name: string }>;
+          currentAudioTrack: number;
+          currentSubtitleTrack: number;
+        } | null>;
+        getPlayerInfo: () => Promise<{
+          time: number;
+          length: number;
+          state: VlcPlayerState;
+          isPlaying: boolean;
+        } | null>;
 
         // Event listeners
         onTimeChanged: (callback: (time: number) => void) => void;
@@ -103,4 +83,4 @@ declare global {
     | 'unknown';
 }
 
-export {};
+export { };

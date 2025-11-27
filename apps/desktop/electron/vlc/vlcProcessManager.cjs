@@ -208,38 +208,18 @@ class VlcProcessManager extends EventEmitter {
   }
 
   /**
-   * Update window position (for position sync)
-   * @param {number} x - X coordinate
-   * @param {number} y - Y coordinate
+   * Update window bounds using unified API
+   * @param {Object} options - Window options
+   * @returns {Promise<boolean>}
    */
-  async updateWindowPosition(x, y) {
-    if (!this.ready) return;
+  async updateWindow(options) {
+    if (!this.ready) return false;
 
     try {
-      // Get current window size (we don't want to change it)
-      // For now, just update position with fixed size
-      // TODO: Track current window size
-      await this.call('setBounds', x, y, 800, 600);
+      return await this.call('window', options);
     } catch (error) {
-      console.error('[VLC Manager] Failed to update position:', error);
-    }
-  }
-
-  /**
-   * Update window size (for size sync)
-   * @param {number} width - Width
-   * @param {number} height - Height
-   */
-  async updateWindowSize(width, height) {
-    if (!this.ready) return;
-
-    try {
-      // Get current window position (we don't want to change it)
-      // For now, just update size with fixed position
-      // TODO: Track current window position
-      await this.call('setBounds', 0, 0, width, height);
-    } catch (error) {
-      console.error('[VLC Manager] Failed to update size:', error);
+      console.error('[VLC Manager] Failed to update window:', error);
+      return false;
     }
   }
 
