@@ -140,6 +140,11 @@ function setupEventListeners() {
     sendEvent('error', message);
   });
 
+  // Keyboard shortcut
+  player.on('shortcut', (action) => {
+    sendEvent('shortcut', action);
+  });
+
   // Audio volume
   player.on('audioVolume', (volume) => {
     sendEvent('audioVolume', volume);
@@ -208,6 +213,12 @@ function handleMessage(message) {
         if (!player) throw new Error('Player not initialized');
         result = player.subtitle(args[0]);
         sendLog('debug', `Subtitle called with options: ${JSON.stringify(args[0])}`);
+        break;
+
+      case 'shortcut':
+        if (!player) throw new Error('Player not initialized');
+        result = player.shortcut(args[0]);
+        sendLog('debug', `Shortcut called with options: ${JSON.stringify(args[0])}`);
         break;
 
       case 'getMediaInfo':

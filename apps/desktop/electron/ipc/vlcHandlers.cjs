@@ -81,6 +81,28 @@ function registerVlcHandlers(mainWindow) {
         }
       });
 
+      manager.on('shortcut', (action) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('vlc:shortcut', action);
+        }
+      });
+
+      // Trigger initial window position event for sticky mode
+      // This will be handled by windowHandlers if registered
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const { screen } = require('electron');
+        const bounds = mainWindow.getBounds();
+        const contentBounds = mainWindow.getContentBounds();
+        const display = screen.getDisplayMatching(bounds);
+
+        mainWindow.webContents.send('window:positionChanged', {
+          x: contentBounds.x,
+          y: contentBounds.y,
+          scaleFactor: display.scaleFactor,
+          minimized: mainWindow.isMinimized(),
+        });
+      }
+
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -94,6 +116,17 @@ function registerVlcHandlers(mainWindow) {
       return await manager.call('window', options);
     } catch (error) {
       console.error('[VLC] Window error:', error);
+      return false;
+    }
+  });
+
+  // Unified Shortcut API
+  ipcMain.handle('vlc:shortcut', async (_, options) => {
+    try {
+      const manager = await getVlcManager();
+      return await manager.call('shortcut', options);
+    } catch (error) {
+      console.error('[VLC] Shortcut error:', error);
       return false;
     }
   });

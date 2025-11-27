@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld('electron', {
     video: (options) => ipcRenderer.invoke('vlc:video', options),
     subtitle: (options) => ipcRenderer.invoke('vlc:subtitle', options),
     window: (options) => ipcRenderer.invoke('vlc:window', options),
+    shortcut: (options) => ipcRenderer.invoke('vlc:shortcut', options),
     getMediaInfo: () => ipcRenderer.invoke('vlc:getMediaInfo'),
     getPlayerInfo: () => ipcRenderer.invoke('vlc:getPlayerInfo'),
 
@@ -85,5 +86,11 @@ contextBridge.exposeInMainWorld('electron', {
     onStateChanged: (callback) => ipcRenderer.on('vlc:stateChanged', (_, state) => callback(state)),
     onEndReached: (callback) => ipcRenderer.on('vlc:endReached', () => callback()),
     onError: (callback) => ipcRenderer.on('vlc:error', (_, message) => callback(message)),
+    onShortcut: (callback) => ipcRenderer.on('vlc:shortcut', (_, action) => callback(action)),
+  },
+
+  // Window API
+  window: {
+    onPositionChanged: (callback) => ipcRenderer.on('window:positionChanged', (_, data) => callback(data)),
   },
 });

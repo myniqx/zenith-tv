@@ -33,6 +33,7 @@ function App() {
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [lastProfileLoaded, setLastProfileLoaded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const stickyContainerRef = useRef<HTMLDivElement>(null);
 
   const [p2pEnabled, setP2pEnabled] = useState(false);
   const [p2pDeviceInfo, setP2pDeviceInfo] = useState<unknown>(null);
@@ -222,6 +223,7 @@ function App() {
     setPairingRequest(null);
   };
 
+
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
       <HeaderBar />
@@ -325,7 +327,7 @@ function App() {
               <div className="flex-1 overflow-hidden">
                 <PanelGroup direction="horizontal" autoSaveId="content-layout">
                   <Panel
-                    defaultSize={100}
+                    defaultSize={70}
                     minSize={30}
                     onResize={(size) => {
                       setUserData(userData => ({
@@ -340,11 +342,28 @@ function App() {
                       <ContentGrid />
                     </div>
                   </Panel>
+
+                  <ResizeHandle className="w-1.5" />
+
+                  {/* Sticky Video Container */}
+                  <Panel defaultSize={30} minSize={20} maxSize={50}>
+                    <div
+                      ref={stickyContainerRef}
+                      className="h-full bg-red-500/30 border-4 border-red-500 rounded-md flex items-center justify-center"
+                    >
+                      <div className="text-white text-sm text-center p-4 bg-black/50 rounded">
+                        <p className="font-medium">VLC BURAYA OTURMALI</p>
+                        <p className="text-xs mt-2">
+                          Select "Sticky" mode from Video Controller
+                        </p>
+                      </div>
+                    </div>
+                  </Panel>
                 </PanelGroup>
               </div>
 
               {/* Video Controller */}
-              <VideoController />
+              <VideoController stickyContainerRef={stickyContainerRef} />
             </div>
           </Panel>
         </PanelGroup>

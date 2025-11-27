@@ -11,6 +11,8 @@ export type VlcState =
   | 'error'
   | 'unknown';
 
+export type ScreenMode = 'free' | 'sticky' | 'fullscreen';
+
 export interface VlcTrack {
   id: number;
   name: string;
@@ -55,6 +57,7 @@ export interface WindowStyleOptions {
   border?: boolean;
   titleBar?: boolean;
   resizable?: boolean;
+  taskbar?: boolean;
 }
 
 export interface WindowOptions {
@@ -63,6 +66,10 @@ export interface WindowOptions {
   onTop?: boolean;
   visible?: boolean;
   style?: WindowStyleOptions;
+}
+
+export interface ShortcutOptions {
+  shortcuts: Record<string, string>; // { "Space": "playPause", "Escape": "exitFullscreen" }
 }
 
 // Unified API Response Types
@@ -98,6 +105,11 @@ export interface UseVlcPlayerReturn {
   currentSubtitleTrack: number;
   error: string | null;
 
+  // Screen mode
+  screenMode: ScreenMode;
+  setScreenMode: (mode: ScreenMode) => void;
+  setStickyElement: (element: HTMLElement | null) => void;
+
   // Unified API
   open: (options: OpenOptions | string) => Promise<void>;
   playback: (options: PlaybackOptions) => Promise<void>;
@@ -105,6 +117,7 @@ export interface UseVlcPlayerReturn {
   video: (options: VideoOptions) => Promise<void>;
   subtitle: (options: SubtitleOptions) => Promise<void>;
   window: (options: WindowOptions) => Promise<boolean>;
+  shortcut: (options: ShortcutOptions) => Promise<void>;
   getMediaInfo: () => Promise<MediaInfo | null>;
   getPlayerInfo: () => Promise<PlayerInfo | null>;
 }

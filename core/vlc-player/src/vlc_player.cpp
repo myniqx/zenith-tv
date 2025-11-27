@@ -9,6 +9,7 @@ Napi::Object VlcPlayer::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("video", &VlcPlayer::Video),
         InstanceMethod("subtitle", &VlcPlayer::Subtitle),
         InstanceMethod("window", &VlcPlayer::Window),
+        InstanceMethod("shortcut", &VlcPlayer::Shortcut),
         InstanceMethod("getMediaInfo", &VlcPlayer::GetMediaInfo),
         InstanceMethod("getPlayerInfo", &VlcPlayer::GetPlayerInfo),
 
@@ -258,6 +259,10 @@ Napi::Value VlcPlayer::On(const Napi::CallbackInfo& info) {
         tsfn_error_ = Napi::ThreadSafeFunction::New(
             env, callback, "Error", 0, 1
         );
+    } else if (event == "shortcut") {
+        tsfn_shortcut_ = Napi::ThreadSafeFunction::New(
+            env, callback, "Shortcut", 0, 1
+        );
     }
 
     return env.Undefined();
@@ -279,6 +284,8 @@ Napi::Value VlcPlayer::Off(const Napi::CallbackInfo& info) {
         tsfn_state_changed_.Release();
     } else if (event == "endReached" && tsfn_end_reached_) {
         tsfn_end_reached_.Release();
+    } else if (event == "shortcut" && tsfn_shortcut_) {
+        tsfn_shortcut_.Release();
     } else if (event == "error" && tsfn_error_) {
         tsfn_error_.Release();
     }

@@ -1,4 +1,5 @@
 import type { IPCBridge } from './ipc';
+import type { OpenOptions, PlaybackOptions, AudioOptions, VideoOptions, SubtitleOptions, WindowOptions, ShortcutOptions, MediaInfo, PlayerInfo, VlcPlayerState } from './types';
 
 declare global {
   interface Window {
@@ -25,62 +26,27 @@ declare global {
         init: () => Promise<{ success: boolean; framePort?: MessagePort; error?: string }>;
 
         // Unified API
-        open: (options: { file: string }) => Promise<void>;
-        playback: (options: {
-          action?: 'play' | 'pause' | 'resume' | 'stop';
-          time?: number;
-          position?: number;
-          rate?: number;
-        }) => Promise<void>;
-        audio: (options: { volume?: number; mute?: boolean; track?: number; delay?: number }) => Promise<void>;
-        video: (options: { track?: number }) => Promise<void>;
-        subtitle: (options: { track?: number; delay?: number }) => Promise<void>;
-        window: (options: {
-          resize?: { x: number; y: number; width: number; height: number };
-          fullscreen?: boolean;
-          onTop?: boolean;
-          visible?: boolean;
-          style?: { border?: boolean; titleBar?: boolean; resizable?: boolean };
-        }) => Promise<boolean>;
-        getMediaInfo: () => Promise<{
-          duration: number;
-          isSeekable: boolean;
-          audioTracks: Array<{ id: number; name: string }>;
-          subtitleTracks: Array<{ id: number; name: string }>;
-          currentAudioTrack: number;
-          currentSubtitleTrack: number;
-        } | null>;
-        getPlayerInfo: () => Promise<{
-          time: number;
-          length: number;
-          state: VlcPlayerState;
-          isPlaying: boolean;
-        } | null>;
+        open: (options: OpenOptions | string) => Promise<void>;
+        playback: (options: PlaybackOptions) => Promise<void>;
+        audio: (options: AudioOptions) => Promise<void>;
+        video: (options: VideoOptions) => Promise<void>;
+        subtitle: (options: SubtitleOptions) => Promise<void>;
+        window: (options: WindowOptions) => Promise<boolean>;
+        shortcut: (options: ShortcutOptions) => Promise<void>;
+        getMediaInfo: () => Promise<MediaInfo | null>;
+        getPlayerInfo: () => Promise<PlayerInfo | null>;
 
-        // Event listeners
         onTimeChanged: (callback: (time: number) => void) => void;
         onStateChanged: (callback: (state: VlcPlayerState) => void) => void;
         onEndReached: (callback: () => void) => void;
         onError: (callback: (message: string) => void) => void;
+        onShortcut: (callback: (action: string) => void) => void;
+      };
+      window: {
+        onPositionChanged: (callback: (data: { x: number; y: number; scaleFactor: number; minimized: boolean }) => void) => void;
       };
     };
   }
-
-  interface VlcTrack {
-    id: number;
-    name: string;
-  }
-
-  type VlcPlayerState =
-    | 'idle'
-    | 'opening'
-    | 'buffering'
-    | 'playing'
-    | 'paused'
-    | 'stopped'
-    | 'ended'
-    | 'error'
-    | 'unknown';
 }
 
 export { };

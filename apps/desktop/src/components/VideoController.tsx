@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, RefObject } from 'react';
 import { usePlayerStore } from '@zenith-tv/ui/stores/player';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
-import { useVlcPlayer } from '../hooks/useVlcPlayer';
+import { useVlcPlayerStore } from '../stores/vlcPlayer';
 import { Button } from '@zenith-tv/ui/button';
 import { Slider } from '@zenith-tv/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zenith-tv/ui/select';
@@ -31,8 +31,12 @@ import { Settings as SettingsIcon } from 'lucide-react';
 
 type ScreenType = 'free' | 'sticky' | 'fullscreen';
 
-export function VideoController() {
-  const { defaultVolume, autoPlayNext } = useSettingsStore();
+interface VideoControllerProps {
+  stickyContainerRef: RefObject<HTMLDivElement>;
+}
+
+export function VideoController({ stickyContainerRef }: VideoControllerProps) {
+  const { defaultVolume, autoPlayNext, keyboardShortcuts } = useSettingsStore();
   const {
     currentItem,
     state,
@@ -44,41 +48,47 @@ export function VideoController() {
   } = usePlayerStore();
 
   const { getNextEpisode } = useContentStore();
-  const vlc = useVlcPlayer();
+
+  // Initialize VLC store on mount
+  const vlc = useVlcPlayerStore();
+
+  useEffect(() => {
+    vlc.init();
+  }, []);
 
   const [screenType, setScreenType] = useState<ScreenType>('free');
   const [isMuted, setIsMuted] = useState(false);
   const [localVolume, setLocalVolume] = useState(defaultVolume * 100);
 
-  // Refs for window management
-  // const childWindowCreatedRef = useRef(false);
-  // const isCreatingWindowRef = useRef(false);
-
-  // Initialize VLC and Window Management
-  // Create child window on mount
-  // Initialize VLC and Window Management
-  // Window creation is handled by VideoPlayer.tsx
-  /*
+  // Set sticky element for VLC window synchronization
   useEffect(() => {
-    const initWindow = async () => {
-      if (!childWindowCreatedRef.current && !isCreatingWindowRef.current) {
-        isCreatingWindowRef.current = true;
-        try {
-          const result = await vlc.createChildWindow({ x: 100, y: 100, width: 800, height: 600 });
-          if (result) {
-            childWindowCreatedRef.current = true;
-            await vlc.showWindow();
-          }
-        } catch (error) {
-          console.error('[VideoController] Failed to create child window:', error);
-        } finally {
-          isCreatingWindowRef.current = false;
-        }
-      }
+    if (stickyContainerRef.current) {
+      vlc.setStickyElement(stickyContainerRef.current);
+    }
+
+    return () => {
+      vlc.setStickyElement(null);
     };
-    initWindow();
-  }, [vlc]);
-  */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Setup keyboard shortcuts for VLC native window
+  useEffect(() => {
+    if (!vlc.isAvailable) return;
+
+    // Map settings shortcuts to VLC format: { "Space": "playPause", "Escape": "exitFullscreen" }
+    const vlcShortcuts: Record<string, string> = {};
+
+    Object.entries(keyboardShortcuts).forEach(([action, keyCombo]) => {
+      // Convert "ctrl+KeyF" to just "KeyF" for VLC (modifiers not supported in native yet)
+      const key = keyCombo.split('+').pop() || keyCombo;
+      vlcShortcuts[key] = action;
+    });
+
+    vlc.shortcut({ shortcuts: vlcShortcuts }).catch(err => {
+      console.error('[VLC] Failed to setup shortcuts:', err);
+    });
+  }, [vlc.isAvailable, keyboardShortcuts, vlc]);
 
   // Initialize VLC and Window Management
   useEffect(() => {
@@ -156,6 +166,8 @@ export function VideoController() {
     }
   }, [vlc.playerState, autoPlayNext, currentItem, getNextEpisode, playItem]);
 
+
+
   // Handlers
   const handlePlayPause = async () => {
     if (vlc.playerState === 'playing') {
@@ -193,19 +205,85 @@ export function VideoController() {
     setIsMuted(!isMuted);
   };
 
-  const handleScreenTypeChange = async (type: ScreenType) => {
+  const handleScreenTypeChange = (type: ScreenType) => {
     setScreenType(type);
-
-    if (type === 'fullscreen') {
-      await vlc.window({ fullscreen: true });
-    } else if (type === 'free') {
-      await vlc.window({ fullscreen: false });
-    }
-    // 'sticky' mode için şimdilik fullscreen'den çık
-    else if (type === 'sticky') {
-      await vlc.window({ fullscreen: false, onTop: true });
-    }
+    vlc.setScreenMode(type);
   };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle shortcuts when typing in input fields
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const modifiers: string[] = [];
+      if (e.ctrlKey) modifiers.push('ctrl');
+      if (e.altKey) modifiers.push('alt');
+      if (e.shiftKey) modifiers.push('shift');
+      if (e.metaKey) modifiers.push('meta');
+
+      const key = e.code;
+      const fullKey = [...modifiers, key].join('+');
+
+      // Check which shortcut was pressed
+      if (fullKey === keyboardShortcuts.playPause) {
+        e.preventDefault();
+        handlePlayPause();
+      } else if (fullKey === keyboardShortcuts.seekForward) {
+        e.preventDefault();
+        const newTime = Math.min(vlc.time + 10000, vlc.duration);
+        vlc.playback({ time: newTime });
+      } else if (fullKey === keyboardShortcuts.seekBackward) {
+        e.preventDefault();
+        const newTime = Math.max(vlc.time - 10000, 0);
+        vlc.playback({ time: newTime });
+      } else if (fullKey === keyboardShortcuts.seekForwardSmall) {
+        e.preventDefault();
+        const newTime = Math.min(vlc.time + 3000, vlc.duration);
+        vlc.playback({ time: newTime });
+      } else if (fullKey === keyboardShortcuts.seekBackwardSmall) {
+        e.preventDefault();
+        const newTime = Math.max(vlc.time - 3000, 0);
+        vlc.playback({ time: newTime });
+      } else if (fullKey === keyboardShortcuts.volumeUp) {
+        e.preventDefault();
+        const newVol = Math.min(localVolume + 5, 100);
+        setLocalVolume(newVol);
+        setStoreVolume(newVol / 100);
+        vlc.audio({ volume: newVol });
+      } else if (fullKey === keyboardShortcuts.volumeDown) {
+        e.preventDefault();
+        const newVol = Math.max(localVolume - 5, 0);
+        setLocalVolume(newVol);
+        setStoreVolume(newVol / 100);
+        vlc.audio({ volume: newVol });
+      } else if (fullKey === keyboardShortcuts.toggleMute) {
+        e.preventDefault();
+        toggleMute();
+      } else if (fullKey === keyboardShortcuts.toggleFullscreen) {
+        e.preventDefault();
+        setScreenType(screenType === 'fullscreen' ? 'free' : 'fullscreen');
+        vlc.setScreenMode(screenType === 'fullscreen' ? 'free' : 'fullscreen');
+      } else if (fullKey === keyboardShortcuts.exitFullscreen) {
+        e.preventDefault();
+        setScreenType('free');
+        vlc.setScreenMode('free');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    keyboardShortcuts,
+    vlc,
+    screenType,
+    localVolume,
+    setStoreVolume,
+    handlePlayPause,
+    toggleMute,
+  ]);
 
   const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000);

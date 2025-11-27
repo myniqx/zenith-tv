@@ -51,6 +51,9 @@ public:
     Display* display_;
     ::Window child_window_;  // Use :: to avoid conflict with Window() method
     ::Window parent_window_;
+    std::atomic<bool> event_loop_running_{false};
+    void StartEventLoop();
+    void StopEventLoop();
 #elif defined(__APPLE__)
     void* child_nsview_;
     void* parent_nsview_;
@@ -117,6 +120,9 @@ private:
     // Unified Window API (declared before internal methods to avoid X11 Window typedef conflict)
     Napi::Value Window(const Napi::CallbackInfo& info);
 
+    // Unified Shortcut API
+    Napi::Value Shortcut(const Napi::CallbackInfo& info);
+
     // Internal window management methods (platform-specific implementations)
     void CreateChildWindowInternal(int width = 1280, int height = 720);
     void DestroyChildWindowInternal();
@@ -124,7 +130,8 @@ private:
     void SetWindowFullscreen(bool fullscreen);
     void SetWindowOnTop(bool onTop);
     void SetWindowVisible(bool visible);
-    void SetWindowStyle(bool border, bool titlebar, bool resizable);
+    void SetWindowStyle(bool border, bool titlebar, bool resizable, bool taskbar);
+    void SetWindowMinSizeInternal(int min_width, int min_height);
     void GetWindowBounds(WindowState* state);
 
     // Event callbacks
@@ -139,6 +146,11 @@ private:
     Napi::ThreadSafeFunction tsfn_state_changed_;
     Napi::ThreadSafeFunction tsfn_end_reached_;
     Napi::ThreadSafeFunction tsfn_error_;
+    Napi::ThreadSafeFunction tsfn_shortcut_;
+
+    // Keyboard shortcut mapping (key code -> action name)
+    std::map<std::string, std::string> keyboard_shortcuts_;
+    void ProcessKeyPress(const std::string& key_code);
 
     // Event manager
     libvlc_event_manager_t* event_manager_;

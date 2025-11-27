@@ -672,14 +672,79 @@ Napi::Value VlcPlayer::Window(const Napi::CallbackInfo& info) {
         bool border = style.Has("border") ? style.Get("border").As<Napi::Boolean>().Value() : saved_window_state_.has_border;
         bool titleBar = style.Has("titleBar") ? style.Get("titleBar").As<Napi::Boolean>().Value() : saved_window_state_.has_titlebar;
         bool resizable = style.Has("resizable") ? style.Get("resizable").As<Napi::Boolean>().Value() : saved_window_state_.is_resizable;
+        bool taskbar = style.Has("taskbar") ? style.Get("taskbar").As<Napi::Boolean>().Value() : true;
 
-        SetWindowStyle(border, titleBar, resizable);
+        SetWindowStyle(border, titleBar, resizable, taskbar);
 
         // Update saved state
         saved_window_state_.has_border = border;
         saved_window_state_.has_titlebar = titleBar;
         saved_window_state_.is_resizable = resizable;
+
+        // If taskbar is false, also remove minimum size constraints for sticky mode
+        if (!taskbar) {
+            SetWindowMinSizeInternal(0, 0);
+        } else {
+            // Restore default minimum size
+            SetWindowMinSizeInternal(320, 240);
+        }
     }
 
     return Napi::Boolean::New(env, true);
+}
+
+// =================================================================================================
+// Keyboard Shortcut API
+// =================================================================================================
+
+Napi::Value VlcPlayer::Shortcut(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+
+    if (info.Length() < 1 || !info[0].IsObject()) {
+        Napi::TypeError::New(env, "Options object expected").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    Napi::Object options = info[0].As<Napi::Object>();
+
+    if (!options.Has("shortcuts") || !options.Get("shortcuts").IsObject()) {
+        Napi::Error::New(env, "shortcuts object is required").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    Napi::Object shortcuts = options.Get("shortcuts").As<Napi::Object>();
+    Napi::Array keys = shortcuts.GetPropertyNames();
+
+    // Clear existing shortcuts
+    keyboard_shortcuts_.clear();
+
+    // Build shortcut map: { "Space": "playPause", "Escape": "exitFullscreen", ... }
+    for (uint32_t i = 0; i < keys.Length(); i++) {
+        std::string key = keys.Get(i).As<Napi::String>().Utf8Value();
+        std::string action = shortcuts.Get(key).As<Napi::String>().Utf8Value();
+        keyboard_shortcuts_[key] = action;
+        printf("[VLC] Registered shortcut: %s -> %s\n", key.c_str(), action.c_str());
+        fflush(stdout);
+    }
+
+    return env.Undefined();
+}
+
+// Process key press from platform-specific window event handlers
+void VlcPlayer::ProcessKeyPress(const std::string& key_code) {
+    // Check if this key is mapped to an action
+    auto it = keyboard_shortcuts_.find(key_code);
+    if (it != keyboard_shortcuts_.end()) {
+        std::string action = it->second;
+        printf("[VLC] Key pressed: %s -> Action: %s\n", key_code.c_str(), action.c_str());
+        fflush(stdout);
+
+        // Emit shortcut event to JavaScript
+        if (tsfn_shortcut_) {
+            auto callback = [action](Napi::Env env, Napi::Function jsCallback) {
+                jsCallback.Call({Napi::String::New(env, action)});
+            };
+            tsfn_shortcut_.NonBlockingCall(callback);
+        }
+    }
 }

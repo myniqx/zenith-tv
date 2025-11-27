@@ -11,13 +11,13 @@ import { Input } from '@zenith-tv/ui/input';
 import { Switch } from '@zenith-tv/ui/switch';
 import { Separator } from '@zenith-tv/ui/separator';
 import { MonitorPlay, Type, Timer, Volume2, Play } from 'lucide-react';
-import { useVlcPlayer } from '../../hooks/useVlcPlayer';
+import { useVlcPlayerStore } from '../../stores/vlcPlayer';
 import { useSettingsStore } from '../../stores/settings';
 import { SettingsSection } from './SettingsSection';
 import { SettingRow } from './SettingRow';
 
 export function VideoSettings() {
-  const vlc = useVlcPlayer();
+  const vlc = useVlcPlayerStore();
   const {
     defaultVolume,
     autoPlayNext,

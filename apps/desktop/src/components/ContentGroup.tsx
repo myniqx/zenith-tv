@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useMemo } from 'react';
+import { memo, useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { GroupObject } from '@/m3u/group';
 import { WatchableObject } from '@/m3u/watchable';
 import { GroupCard } from './GroupCard';
@@ -55,6 +55,27 @@ export const ContentGroup = memo(function ContentGroup({ title, items, type }: C
 
   const startItem = currentPage * pageSize + 1;
   const endItem = Math.min((currentPage + 1) * pageSize, totalItems);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [gridCols, setGridCols] = useState(2);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width;
+        // Minimum card width of 160px + 16px gap
+        const minCardWidth = 160;
+        const gap = 16;
+        const cols = Math.floor((width + gap) / (minCardWidth + gap));
+        setGridCols(Math.max(2, cols));
+      }
+    });
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <section className="flex flex-col border-1 border-gray-700 rounded-md">
@@ -134,8 +155,11 @@ export const ContentGroup = memo(function ContentGroup({ title, items, type }: C
       </div>
 
       {/* Content Grid */}
-      <div className="p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <div className="p-4" ref={containerRef}>
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+        >
           {type === 'groups' ? (
             (paginatedItems as GroupObject[]).map((group, index) => (
               <div key={group.Name || index} >

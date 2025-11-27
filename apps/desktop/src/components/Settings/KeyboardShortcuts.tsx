@@ -13,10 +13,13 @@ const shortcutLabels: Record<keyof KeyboardShortcutsType, string> = {
   playPause: 'Play / Pause',
   seekForward: 'Seek Forward (+10s)',
   seekBackward: 'Seek Backward (-10s)',
+  seekForwardSmall: 'Seek Forward (+3s)',
+  seekBackwardSmall: 'Seek Backward (-3s)',
   volumeUp: 'Volume Up',
   volumeDown: 'Volume Down',
   toggleMute: 'Toggle Mute',
   toggleFullscreen: 'Toggle Fullscreen',
+  exitFullscreen: 'Exit Fullscreen / Free Mode',
   openSearch: 'Open Search',
   openSettings: 'Open Settings',
   openProfileManager: 'Open Profile Manager',
@@ -26,10 +29,13 @@ const playerShortcuts: (keyof KeyboardShortcutsType)[] = [
   'playPause',
   'seekForward',
   'seekBackward',
+  'seekForwardSmall',
+  'seekBackwardSmall',
   'volumeUp',
   'volumeDown',
   'toggleMute',
   'toggleFullscreen',
+  'exitFullscreen',
 ];
 
 const navigationShortcuts: (keyof KeyboardShortcutsType)[] = [
@@ -52,6 +58,8 @@ function formatKeyDisplay(key: string): string {
         return 'Win';
       case 'space':
         return 'Space';
+      case 'escape':
+        return 'Esc';
       case 'arrowup':
         return '\u2191';
       case 'arrowdown':

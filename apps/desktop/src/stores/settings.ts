@@ -11,10 +11,13 @@ export interface KeyboardShortcuts {
   playPause: string;
   seekForward: string;
   seekBackward: string;
+  seekForwardSmall: string;
+  seekBackwardSmall: string;
   volumeUp: string;
   volumeDown: string;
   toggleMute: string;
   toggleFullscreen: string;
+  exitFullscreen: string;
   // Navigation
   openSearch: string;
   openSettings: string;
@@ -69,10 +72,13 @@ export const defaultKeyboardShortcuts: KeyboardShortcuts = {
   playPause: 'Space',
   seekForward: 'ArrowRight',
   seekBackward: 'ArrowLeft',
+  seekForwardSmall: 'shift+ArrowRight',
+  seekBackwardSmall: 'shift+ArrowLeft',
   volumeUp: 'ArrowUp',
   volumeDown: 'ArrowDown',
   toggleMute: 'KeyM',
   toggleFullscreen: 'KeyF',
+  exitFullscreen: 'Escape',
   // Navigation
   openSearch: 'ctrl+KeyF',
   openSettings: 'ctrl+Comma',

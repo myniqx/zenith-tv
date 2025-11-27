@@ -2,6 +2,8 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
+#include <X11/keysym.h>
+#include <thread>
 
 // =================================================================================================
 // Internal Window Management Methods
@@ -93,6 +95,9 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
 
     child_window_created_ = true;
 
+    // Start event loop for keyboard shortcuts
+    StartEventLoop();
+
     // Initialize window state
     XWindowAttributes wa;
     XGetWindowAttributes(display_, child_window_, &wa);
@@ -116,6 +121,9 @@ void VlcPlayer::DestroyChildWindowInternal() {
 
     printf("[VLC] Destroying child window: window=0x%lx\n", child_window_);
     fflush(stdout);
+
+    // Stop event loop before destroying window
+    StopEventLoop();
 
     if (display_ && child_window_) {
         XDestroyWindow(display_, child_window_);
@@ -214,10 +222,10 @@ void VlcPlayer::SetWindowVisible(bool visible) {
     XFlush(display_);
 }
 
-void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable) {
+void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable, bool taskbar) {
     if (!child_window_created_ || !display_ || !child_window_) return;
 
-    printf("[VLC] SetWindowStyle: border=%d, titlebar=%d, resizable=%d\n", border, titlebar, resizable);
+    printf("[VLC] SetWindowStyle: border=%d, titlebar=%d, resizable=%d, taskbar=%d\n", border, titlebar, resizable, taskbar);
     fflush(stdout);
 
     // Use Motif hints to control window decorations
@@ -249,6 +257,63 @@ void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable) {
 
     XChangeProperty(display_, child_window_, motif_hints, motif_hints, 32,
                     PropModeReplace, (unsigned char*)&hints, 5);
+
+    // Control taskbar visibility
+    Atom state_atom = XInternAtom(display_, "_NET_WM_STATE", False);
+    Atom skip_taskbar = XInternAtom(display_, "_NET_WM_STATE_SKIP_TASKBAR", False);
+
+    if (!taskbar) {
+        // Add skip taskbar hint
+        XChangeProperty(display_, child_window_, state_atom, XA_ATOM, 32,
+                       PropModeAppend, (unsigned char*)&skip_taskbar, 1);
+    } else {
+        // Remove skip taskbar hint
+        Atom* atoms = nullptr;
+        Atom actual_type;
+        int actual_format;
+        unsigned long nitems, bytes_after;
+
+        if (XGetWindowProperty(display_, child_window_, state_atom, 0, 1024, False,
+                              XA_ATOM, &actual_type, &actual_format, &nitems,
+                              &bytes_after, (unsigned char**)&atoms) == Success) {
+            if (atoms) {
+                // Filter out skip_taskbar
+                Atom new_atoms[nitems];
+                int new_count = 0;
+                for (unsigned long i = 0; i < nitems; i++) {
+                    if (atoms[i] != skip_taskbar) {
+                        new_atoms[new_count++] = atoms[i];
+                    }
+                }
+                XChangeProperty(display_, child_window_, state_atom, XA_ATOM, 32,
+                               PropModeReplace, (unsigned char*)new_atoms, new_count);
+                XFree(atoms);
+            }
+        }
+    }
+
+    XFlush(display_);
+}
+
+void VlcPlayer::SetWindowMinSizeInternal(int min_width, int min_height) {
+    if (!child_window_created_ || !display_ || !child_window_) return;
+
+    printf("[VLC] SetWindowMinSizeInternal: min_width=%d, min_height=%d\n", min_width, min_height);
+    fflush(stdout);
+
+    XSizeHints* size_hints = XAllocSizeHints();
+    if (size_hints) {
+        if (min_width > 0 || min_height > 0) {
+            size_hints->flags = PMinSize;
+            size_hints->min_width = min_width > 0 ? min_width : 1;
+            size_hints->min_height = min_height > 0 ? min_height : 1;
+        } else {
+            // Remove minimum size constraints
+            size_hints->flags = 0;
+        }
+        XSetWMNormalHints(display_, child_window_, size_hints);
+        XFree(size_hints);
+    }
     XFlush(display_);
 }
 
@@ -267,4 +332,125 @@ void VlcPlayer::GetWindowBounds(WindowState* state) {
     state->has_border = saved_window_state_.has_border;
     state->has_titlebar = saved_window_state_.has_titlebar;
     state->is_resizable = saved_window_state_.is_resizable;
+}
+
+// =================================================================================================
+// X11 Event Loop for Keyboard Shortcuts
+// =================================================================================================
+
+// Helper function to convert X11 KeySym to JavaScript key code string
+static std::string KeySymToKeyCode(KeySym keysym) {
+    // Map X11 KeySym to JavaScript KeyboardEvent.code format
+    switch (keysym) {
+        // Alphabet keys
+        case XK_a: case XK_A: return "KeyA";
+        case XK_b: case XK_B: return "KeyB";
+        case XK_c: case XK_C: return "KeyC";
+        case XK_d: case XK_D: return "KeyD";
+        case XK_e: case XK_E: return "KeyE";
+        case XK_f: case XK_F: return "KeyF";
+        case XK_g: case XK_G: return "KeyG";
+        case XK_h: case XK_H: return "KeyH";
+        case XK_i: case XK_I: return "KeyI";
+        case XK_j: case XK_J: return "KeyJ";
+        case XK_k: case XK_K: return "KeyK";
+        case XK_l: case XK_L: return "KeyL";
+        case XK_m: case XK_M: return "KeyM";
+        case XK_n: case XK_N: return "KeyN";
+        case XK_o: case XK_O: return "KeyO";
+        case XK_p: case XK_P: return "KeyP";
+        case XK_q: case XK_Q: return "KeyQ";
+        case XK_r: case XK_R: return "KeyR";
+        case XK_s: case XK_S: return "KeyS";
+        case XK_t: case XK_T: return "KeyT";
+        case XK_u: case XK_U: return "KeyU";
+        case XK_v: case XK_V: return "KeyV";
+        case XK_w: case XK_W: return "KeyW";
+        case XK_x: case XK_X: return "KeyX";
+        case XK_y: case XK_Y: return "KeyY";
+        case XK_z: case XK_Z: return "KeyZ";
+
+        // Arrow keys
+        case XK_Left: return "ArrowLeft";
+        case XK_Right: return "ArrowRight";
+        case XK_Up: return "ArrowUp";
+        case XK_Down: return "ArrowDown";
+
+        // Special keys
+        case XK_space: return "Space";
+        case XK_Escape: return "Escape";
+        case XK_Return: return "Enter";
+        case XK_Tab: return "Tab";
+        case XK_BackSpace: return "Backspace";
+
+        // Function keys
+        case XK_F1: return "F1";
+        case XK_F2: return "F2";
+        case XK_F3: return "F3";
+        case XK_F4: return "F4";
+        case XK_F5: return "F5";
+        case XK_F6: return "F6";
+        case XK_F7: return "F7";
+        case XK_F8: return "F8";
+        case XK_F9: return "F9";
+        case XK_F10: return "F10";
+        case XK_F11: return "F11";
+        case XK_F12: return "F12";
+
+        // Digit keys
+        case XK_0: return "Digit0";
+        case XK_1: return "Digit1";
+        case XK_2: return "Digit2";
+        case XK_3: return "Digit3";
+        case XK_4: return "Digit4";
+        case XK_5: return "Digit5";
+        case XK_6: return "Digit6";
+        case XK_7: return "Digit7";
+        case XK_8: return "Digit8";
+        case XK_9: return "Digit9";
+
+        default: return "";
+    }
+}
+
+void VlcPlayer::StartEventLoop() {
+    if (event_loop_running_) return;
+    event_loop_running_ = true;
+
+    printf("[VLC] Starting X11 event loop thread\n");
+    fflush(stdout);
+
+    std::thread([this]() {
+        XEvent event;
+        while (event_loop_running_ && display_ && child_window_) {
+            // Check for pending events without blocking
+            if (XPending(display_) > 0) {
+                XNextEvent(display_, &event);
+
+                if (event.type == KeyPress) {
+                    KeySym keysym = XLookupKeysym(&event.xkey, 0);
+                    std::string keyCode = KeySymToKeyCode(keysym);
+
+                    if (!keyCode.empty()) {
+                        printf("[VLC] X11 KeyPress: KeySym=0x%lx, Code=%s\n", keysym, keyCode.c_str());
+                        fflush(stdout);
+
+                        // Process through unified shortcut handler
+                        ProcessKeyPress(keyCode);
+                    }
+                }
+            } else {
+                // Sleep to avoid busy-waiting
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        }
+        printf("[VLC] X11 event loop thread exiting\n");
+        fflush(stdout);
+    }).detach();
+}
+
+void VlcPlayer::StopEventLoop() {
+    event_loop_running_ = false;
+    printf("[VLC] Stopping X11 event loop\n");
+    fflush(stdout);
 }
