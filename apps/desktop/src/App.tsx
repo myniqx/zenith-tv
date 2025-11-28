@@ -11,12 +11,14 @@ import { useContentStore } from './stores/content';
 import { useProfilesStore } from './stores/profiles';
 import { usePlayerStore } from '@zenith-tv/ui/stores/player';
 import { useSettingsStore } from './stores/settings';
+import { useVlcPlayerStore } from './stores/vlcPlayer';
 import { useDebounce } from './hooks/useDebounce';
 import { Button } from '@zenith-tv/ui/button';
 import { Input } from '@zenith-tv/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zenith-tv/ui/select';
 import { X, Search, ChevronUp, ChevronDown, GripVertical, Layers } from 'lucide-react';
 import type { GroupBy } from './stores/content';
+import { VideoPlaceholder } from './components/Video/VideoPlaceholder';
 
 function ResizeHandle({ className = '' }: { className?: string }) {
   return (
@@ -33,7 +35,6 @@ function App() {
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [lastProfileLoaded, setLastProfileLoaded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const stickyContainerRef = useRef<HTMLDivElement>(null);
 
   const [p2pEnabled, setP2pEnabled] = useState(false);
   const [p2pDeviceInfo, setP2pDeviceInfo] = useState<unknown>(null);
@@ -62,6 +63,7 @@ function App() {
   } = useSettingsStore();
 
   const { profiles, selectProfile } = useProfilesStore();
+  const isStickyPanelVisible = useVlcPlayerStore(state => state.shouldStickyPanelVisible());
 
   // Auto-load last profile on startup
   useEffect(() => {
@@ -230,142 +232,143 @@ function App() {
 
       <main className="flex-1 overflow-hidden" role="main">
         <PanelGroup direction="horizontal" autoSaveId="main-layout">
-          {/* Category Browser Panel - Collapsible */}
-          <Panel
-            collapsible
-            defaultSize={18}
-            minSize={4}
-            maxSize={30}
-            onCollapse={() => setIsCategoryCollapsed(true)}
-            onExpand={() => setIsCategoryCollapsed(false)}
-            onResize={(size) => {
-              setUserData(userData => ({
-                ...userData,
-                layoutData: {
-                  ...userData.layoutData,
-                  categoryPanelSize: size,
-                },
-              }));
-            }}
-          >
-            <CategoryBrowser isCollapsed={isCategoryCollapsed} />
-          </Panel>
-
-          <ResizeHandle className="w-1.5" />
-
-          {/* Main Content Panel */}
-          <Panel minSize={50}>
+          {/* Left Section: Category Browser + Content Grid + Video Controller */}
+          <Panel defaultSize={75} minSize={40}>
             <div className="h-full flex flex-col overflow-hidden">
-              {/* Toolbar */}
-              <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-border gap-4" role="toolbar" aria-label="Content controls">
-                <div className="flex-1 max-w-md relative" role="search">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    ref={searchInputRef}
-                    type="text"
-                    value={localSearchQuery}
-                    onChange={(e) => setLocalSearchQuery(e.target.value)}
-                    placeholder="Search by title or group... (Ctrl+F)"
-                    className="pl-10 pr-10"
-                    aria-label="Search content by title or group"
-                  />
-                  {localSearchQuery && (
+              {/* Top Section: Toolbar + Category Browser + Content Grid */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Toolbar */}
+                <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-border gap-4" role="toolbar" aria-label="Content controls">
+                  <div className="flex-1 max-w-md relative" role="search">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      ref={searchInputRef}
+                      type="text"
+                      value={localSearchQuery}
+                      onChange={(e) => setLocalSearchQuery(e.target.value)}
+                      placeholder="Search by title or group... (Ctrl+F)"
+                      className="pl-10 pr-10"
+                      aria-label="Search content by title or group"
+                    />
+                    {localSearchQuery && (
+                      <Button
+                        onClick={() => setLocalSearchQuery('')}
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                        aria-label="Clear search"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Select value={groupBy} onValueChange={(value) => setGroupBy(value as GroupBy)}>
+                      <SelectTrigger className="w-[140px]" aria-label="Group content by">
+                        <Layers className="w-4 h-4 mr-2" />
+                        <SelectValue placeholder="Group by..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Grouping</SelectItem>
+                        <SelectItem value="group">By Group</SelectItem>
+                        <SelectItem value="year">By Year</SelectItem>
+                        <SelectItem value="alphabetic">Alphabetic</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'name' | 'date' | 'recent')}>
+                      <SelectTrigger className="w-[150px]" aria-label="Sort content by">
+                        <SelectValue placeholder="Sort by..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="name">Sort by Name</SelectItem>
+                        <SelectItem value="date">Sort by Date</SelectItem>
+                        <SelectItem value="recent">Sort by Recent</SelectItem>
+                      </SelectContent>
+                    </Select>
+
                     <Button
-                      onClick={() => setLocalSearchQuery('')}
+                      onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
                       variant="ghost"
                       size="icon"
-                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                      aria-label="Clear search"
+                      title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                      aria-label={`Sort order: ${sortOrder === 'asc' ? 'ascending' : 'descending'}. Click to toggle`}
                     >
-                      <X className="w-4 h-4" />
+                      {sortOrder === 'asc' ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
                     </Button>
-                  )}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Select value={groupBy} onValueChange={(value) => setGroupBy(value as GroupBy)}>
-                    <SelectTrigger className="w-[140px]" aria-label="Group content by">
-                      <Layers className="w-4 h-4 mr-2" />
-                      <SelectValue placeholder="Group by..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No Grouping</SelectItem>
-                      <SelectItem value="group">By Group</SelectItem>
-                      <SelectItem value="year">By Year</SelectItem>
-                      <SelectItem value="alphabetic">Alphabetic</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'name' | 'date' | 'recent')}>
-                    <SelectTrigger className="w-[150px]" aria-label="Sort content by">
-                      <SelectValue placeholder="Sort by..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Sort by Name</SelectItem>
-                      <SelectItem value="date">Sort by Date</SelectItem>
-                      <SelectItem value="recent">Sort by Recent</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Button
-                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                    variant="ghost"
-                    size="icon"
-                    title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-                    aria-label={`Sort order: ${sortOrder === 'asc' ? 'ascending' : 'descending'}. Click to toggle`}
-                  >
-                    {sortOrder === 'asc' ? (
-                      <ChevronUp className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Content Grid */}
-              <div className="flex-1 overflow-hidden">
-                <PanelGroup direction="horizontal" autoSaveId="content-layout">
-                  <Panel
-                    defaultSize={70}
-                    minSize={30}
-                    onResize={(size) => {
-                      setUserData(userData => ({
-                        ...userData,
-                        layoutData: {
-                          ...userData.layoutData,
-                          contentPanelSize: size,
-                        },
-                      }));
-                    }}>
-                    <div className="h-full overflow-hidden">
-                      <ContentGrid />
-                    </div>
-                  </Panel>
-
-                  <ResizeHandle className="w-1.5" />
-
-                  {/* Sticky Video Container */}
-                  <Panel defaultSize={30} minSize={20} maxSize={50}>
-                    <div
-                      ref={stickyContainerRef}
-                      className="h-full bg-red-500/30 border-4 border-red-500 rounded-md flex items-center justify-center"
+                {/* Category Browser + Content Grid (Horizontal) */}
+                <div className="flex-1 overflow-hidden">
+                  <PanelGroup direction="horizontal" autoSaveId="content-category-layout">
+                    {/* Category Browser Panel - Collapsible */}
+                    <Panel
+                      collapsible
+                      defaultSize={18}
+                      minSize={4}
+                      maxSize={30}
+                      onCollapse={() => setIsCategoryCollapsed(true)}
+                      onExpand={() => setIsCategoryCollapsed(false)}
+                      onResize={(size) => {
+                        setUserData(userData => ({
+                          ...userData,
+                          layoutData: {
+                            ...userData.layoutData,
+                            categoryPanelSize: size,
+                          },
+                        }));
+                      }}
                     >
-                      <div className="text-white text-sm text-center p-4 bg-black/50 rounded">
-                        <p className="font-medium">VLC BURAYA OTURMALI</p>
-                        <p className="text-xs mt-2">
-                          Select "Sticky" mode from Video Controller
-                        </p>
+                      <CategoryBrowser isCollapsed={isCategoryCollapsed} />
+                    </Panel>
+
+                    <ResizeHandle className="w-1.5" />
+
+                    {/* Content Grid Panel */}
+                    <Panel
+                      defaultSize={82}
+                      minSize={50}
+                      onResize={(size) => {
+                        setUserData(userData => ({
+                          ...userData,
+                          layoutData: {
+                            ...userData.layoutData,
+                            contentPanelSize: size,
+                          },
+                        }));
+                      }}
+                    >
+                      <div className="h-full overflow-hidden">
+                        <ContentGrid />
                       </div>
-                    </div>
-                  </Panel>
-                </PanelGroup>
+                    </Panel>
+                  </PanelGroup>
+                </div>
               </div>
 
-              {/* Video Controller */}
-              <VideoController stickyContainerRef={stickyContainerRef} />
+              {/* Video Controller - Fixed at Bottom */}
+              <div className="shrink-0">
+                <VideoController />
+              </div>
             </div>
           </Panel>
+
+          {isStickyPanelVisible && (
+            <>
+              <ResizeHandle className="w-1.5" />
+
+              {/* Right Section: Sticky Video Placeholder */}
+              <Panel defaultSize={25} minSize={15} maxSize={50}>
+                <VideoPlaceholder />
+              </Panel>
+            </>
+          )}
         </PanelGroup>
       </main>
 

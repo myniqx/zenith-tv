@@ -81,12 +81,8 @@ contextBridge.exposeInMainWorld('electron', {
     getMediaInfo: () => ipcRenderer.invoke('vlc:getMediaInfo'),
     getPlayerInfo: () => ipcRenderer.invoke('vlc:getPlayerInfo'),
 
-    // Event listeners
-    onTimeChanged: (callback) => ipcRenderer.on('vlc:timeChanged', (_, time) => callback(time)),
-    onStateChanged: (callback) => ipcRenderer.on('vlc:stateChanged', (_, state) => callback(state)),
-    onEndReached: (callback) => ipcRenderer.on('vlc:endReached', () => callback()),
-    onError: (callback) => ipcRenderer.on('vlc:error', (_, message) => callback(message)),
-    onShortcut: (callback) => ipcRenderer.on('vlc:shortcut', (_, action) => callback(action)),
+    // Unified event listener
+    onEvent: (callback) => ipcRenderer.on('vlc:event', (_, eventData) => callback(eventData)),
   },
 
   // Window API

@@ -56,34 +56,10 @@ function registerVlcHandlers(mainWindow) {
       // Initialize player in standalone process
       await manager.call('init');
 
-      // Setup event forwarding to renderer
-      manager.on('timeChanged', (time) => {
+      // Setup unified event forwarding to renderer
+      manager.on('vlcEvent', (eventData) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('vlc:timeChanged', time);
-        }
-      });
-
-      manager.on('stateChanged', (state) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('vlc:stateChanged', state);
-        }
-      });
-
-      manager.on('endReached', () => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('vlc:endReached');
-        }
-      });
-
-      manager.on('error', (message) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('vlc:error', message);
-        }
-      });
-
-      manager.on('shortcut', (action) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('vlc:shortcut', action);
+          mainWindow.webContents.send('vlc:event', eventData);
         }
       });
 

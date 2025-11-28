@@ -101,53 +101,10 @@ function initializePlayer() {
 function setupEventListeners() {
   if (!player) return;
 
-  // Time changed (throttled to 250ms)
-  player.on('timeChanged', (time) => {
-    const now = Date.now();
-    if (now - lastTimeUpdate >= THROTTLE_MS) {
-      sendEvent('timeChanged', time);
-      lastTimeUpdate = now;
-    }
-  });
-
-  // State changed
-  player.on('stateChanged', (state) => {
-    sendEvent('stateChanged', state);
-  });
-
-  // Duration changed
-  player.on('durationChanged', (duration) => {
-    sendEvent('durationChanged', duration);
-  });
-
-  // Position changed (throttled)
-  let lastPositionUpdate = 0;
-  player.on('positionChanged', (position) => {
-    const now = Date.now();
-    if (now - lastPositionUpdate >= THROTTLE_MS) {
-      sendEvent('positionChanged', position);
-      lastPositionUpdate = now;
-    }
-  });
-
-  // End reached
-  player.on('endReached', () => {
-    sendEvent('endReached', null);
-  });
-
-  // Error
-  player.on('error', (message) => {
-    sendEvent('error', message);
-  });
-
-  // Keyboard shortcut
-  player.on('shortcut', (action) => {
-    sendEvent('shortcut', action);
-  });
-
-  // Audio volume
-  player.on('audioVolume', (volume) => {
-    sendEvent('audioVolume', volume);
+  // Use unified event callback - forward entire event data to parent
+  player.setEventCallback((eventData) => {
+    // Forward the unified event structure directly
+    sendEvent('vlcEvent', eventData);
   });
 }
 

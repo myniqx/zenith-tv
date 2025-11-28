@@ -14,8 +14,7 @@ Napi::Object VlcPlayer::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("getPlayerInfo", &VlcPlayer::GetPlayerInfo),
 
         // Events
-        InstanceMethod("on", &VlcPlayer::On),
-        InstanceMethod("off", &VlcPlayer::Off),
+        InstanceMethod("setEventCallback", &VlcPlayer::SetEventCallback),
 
         // Frame retrieval (memory rendering mode)
         InstanceMethod("getFrame", &VlcPlayer::GetFrame),
@@ -164,6 +163,7 @@ void VlcPlayer::SetupEventCallbacks() {
         libvlc_event_attach(event_manager_, libvlc_MediaPlayerStopped, HandleStateChanged, this);
         libvlc_event_attach(event_manager_, libvlc_MediaPlayerEndReached, HandleEndReached, this);
         libvlc_event_attach(event_manager_, libvlc_MediaPlayerEncounteredError, HandleError, this);
+        libvlc_event_attach(event_manager_, libvlc_MediaPlayerLengthChanged, HandleLengthChanged, this);
     }
 }
 
@@ -175,30 +175,59 @@ void VlcPlayer::CleanupEventCallbacks() {
         libvlc_event_detach(event_manager_, libvlc_MediaPlayerStopped, HandleStateChanged, this);
         libvlc_event_detach(event_manager_, libvlc_MediaPlayerEndReached, HandleEndReached, this);
         libvlc_event_detach(event_manager_, libvlc_MediaPlayerEncounteredError, HandleError, this);
+        libvlc_event_detach(event_manager_, libvlc_MediaPlayerLengthChanged, HandleLengthChanged, this);
         event_manager_ = nullptr;
     }
 
-    // Release thread-safe functions
-    if (tsfn_time_changed_) tsfn_time_changed_.Release();
-    if (tsfn_state_changed_) tsfn_state_changed_.Release();
-    if (tsfn_end_reached_) tsfn_end_reached_.Release();
-    if (tsfn_error_) tsfn_error_.Release();
+    // Release thread-safe function
+    if (tsfn_events_) tsfn_events_.Release();
+}
+
+// Unified Event Registration
+Napi::Value VlcPlayer::SetEventCallback(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+
+    if (info.Length() < 1 || !info[0].IsFunction()) {
+        Napi::TypeError::New(env, "Callback function expected").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    // Release existing if any
+    if (tsfn_events_) {
+        tsfn_events_.Release();
+    }
+
+    tsfn_events_ = Napi::ThreadSafeFunction::New(
+        env,
+        info[0].As<Napi::Function>(),
+        "VlcEvents",
+        0,
+        1
+    );
+
+    return env.Undefined();
 }
 
 // Static event handlers
 void VlcPlayer::HandleTimeChanged(const libvlc_event_t* event, void* data) {
     VlcPlayer* player = static_cast<VlcPlayer*>(data);
-    if (player->disposed_ || !player->tsfn_time_changed_) return;
+    if (player->disposed_ || !player->tsfn_events_) return;
 
     int64_t time = event->u.media_player_time_changed.new_time;
-    player->tsfn_time_changed_.NonBlockingCall([time](Napi::Env env, Napi::Function callback) {
-        callback.Call({Napi::Number::New(env, static_cast<double>(time))});
+    
+    player->tsfn_events_.NonBlockingCall([time](Napi::Env env, Napi::Function callback) {
+        Napi::Object payload = Napi::Object::New(env);
+        Napi::Object currentVideo = Napi::Object::New(env);
+        currentVideo.Set("time", Napi::Number::New(env, static_cast<double>(time)));
+        payload.Set("currentVideo", currentVideo);
+        
+        callback.Call({payload});
     });
 }
 
 void VlcPlayer::HandleStateChanged(const libvlc_event_t* event, void* data) {
     VlcPlayer* player = static_cast<VlcPlayer*>(data);
-    if (player->disposed_ || !player->tsfn_state_changed_) return;
+    if (player->disposed_ || !player->tsfn_events_) return;
 
     std::string state;
     switch (event->type) {
@@ -208,89 +237,58 @@ void VlcPlayer::HandleStateChanged(const libvlc_event_t* event, void* data) {
         default: state = "unknown"; break;
     }
 
-    player->tsfn_state_changed_.NonBlockingCall([state](Napi::Env env, Napi::Function callback) {
-        callback.Call({Napi::String::New(env, state)});
+    player->tsfn_events_.NonBlockingCall([state](Napi::Env env, Napi::Function callback) {
+        Napi::Object payload = Napi::Object::New(env);
+        Napi::Object currentVideo = Napi::Object::New(env);
+        currentVideo.Set("state", Napi::String::New(env, state));
+        payload.Set("currentVideo", currentVideo);
+
+        callback.Call({payload});
     });
 }
 
 void VlcPlayer::HandleEndReached(const libvlc_event_t* event, void* data) {
     VlcPlayer* player = static_cast<VlcPlayer*>(data);
-    if (player->disposed_ || !player->tsfn_end_reached_) return;
+    if (player->disposed_ || !player->tsfn_events_) return;
 
-    player->tsfn_end_reached_.NonBlockingCall([](Napi::Env env, Napi::Function callback) {
-        callback.Call({});
+    player->tsfn_events_.NonBlockingCall([](Napi::Env env, Napi::Function callback) {
+        Napi::Object payload = Napi::Object::New(env);
+        Napi::Object currentVideo = Napi::Object::New(env);
+        currentVideo.Set("endReached", Napi::Boolean::New(env, true));
+        currentVideo.Set("state", Napi::String::New(env, "ended"));
+        payload.Set("currentVideo", currentVideo);
+
+        callback.Call({payload});
     });
 }
 
 void VlcPlayer::HandleError(const libvlc_event_t* event, void* data) {
     VlcPlayer* player = static_cast<VlcPlayer*>(data);
-    if (player->disposed_ || !player->tsfn_error_) return;
+    if (player->disposed_ || !player->tsfn_events_) return;
 
-    player->tsfn_error_.NonBlockingCall([](Napi::Env env, Napi::Function callback) {
-        callback.Call({Napi::String::New(env, "Playback error occurred")});
+    player->tsfn_events_.NonBlockingCall([](Napi::Env env, Napi::Function callback) {
+        Napi::Object payload = Napi::Object::New(env);
+        Napi::Object currentVideo = Napi::Object::New(env);
+        currentVideo.Set("error", Napi::String::New(env, "Playback error occurred"));
+        payload.Set("currentVideo", currentVideo);
+
+        callback.Call({payload});
     });
 }
 
-// Event registration
-Napi::Value VlcPlayer::On(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
+void VlcPlayer::HandleLengthChanged(const libvlc_event_t* event, void* data) {
+    VlcPlayer* player = static_cast<VlcPlayer*>(data);
+    if (player->disposed_ || !player->tsfn_events_) return;
 
-    if (info.Length() < 2 || !info[0].IsString() || !info[1].IsFunction()) {
-        Napi::TypeError::New(env, "Event name and callback expected").ThrowAsJavaScriptException();
-        return env.Undefined();
-    }
+    player->tsfn_events_.NonBlockingCall([player](Napi::Env env, Napi::Function callback) {
+        if (player->disposed_ || !player->media_player_) return;
 
-    std::string event = info[0].As<Napi::String>().Utf8Value();
-    Napi::Function callback = info[1].As<Napi::Function>();
+        Napi::Object payload = Napi::Object::New(env);
+        Napi::Object mediaInfo = player->GetMediaInfoObject(env);
+        payload.Set("mediaInfo", mediaInfo);
 
-    if (event == "timeChanged") {
-        tsfn_time_changed_ = Napi::ThreadSafeFunction::New(
-            env, callback, "TimeChanged", 0, 1
-        );
-    } else if (event == "stateChanged") {
-        tsfn_state_changed_ = Napi::ThreadSafeFunction::New(
-            env, callback, "StateChanged", 0, 1
-        );
-    } else if (event == "endReached") {
-        tsfn_end_reached_ = Napi::ThreadSafeFunction::New(
-            env, callback, "EndReached", 0, 1
-        );
-    } else if (event == "error") {
-        tsfn_error_ = Napi::ThreadSafeFunction::New(
-            env, callback, "Error", 0, 1
-        );
-    } else if (event == "shortcut") {
-        tsfn_shortcut_ = Napi::ThreadSafeFunction::New(
-            env, callback, "Shortcut", 0, 1
-        );
-    }
-
-    return env.Undefined();
-}
-
-Napi::Value VlcPlayer::Off(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    if (info.Length() < 1 || !info[0].IsString()) {
-        Napi::TypeError::New(env, "Event name expected").ThrowAsJavaScriptException();
-        return env.Undefined();
-    }
-
-    std::string event = info[0].As<Napi::String>().Utf8Value();
-
-    if (event == "timeChanged" && tsfn_time_changed_) {
-        tsfn_time_changed_.Release();
-    } else if (event == "stateChanged" && tsfn_state_changed_) {
-        tsfn_state_changed_.Release();
-    } else if (event == "endReached" && tsfn_end_reached_) {
-        tsfn_end_reached_.Release();
-    } else if (event == "shortcut" && tsfn_shortcut_) {
-        tsfn_shortcut_.Release();
-    } else if (event == "error" && tsfn_error_) {
-        tsfn_error_.Release();
-    }
-
-    return env.Undefined();
+        callback.Call({payload});
+    });
 }
 
 // Cleanup

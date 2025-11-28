@@ -1,4 +1,4 @@
-import { useState, useEffect, RefObject } from 'react';
+import { useState, useEffect } from 'react';
 import { usePlayerStore } from '@zenith-tv/ui/stores/player';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
@@ -31,11 +31,8 @@ import { Settings as SettingsIcon } from 'lucide-react';
 
 type ScreenType = 'free' | 'sticky' | 'fullscreen';
 
-interface VideoControllerProps {
-  stickyContainerRef: RefObject<HTMLDivElement>;
-}
 
-export function VideoController({ stickyContainerRef }: VideoControllerProps) {
+export function VideoController() {
   const { defaultVolume, autoPlayNext, keyboardShortcuts } = useSettingsStore();
   const {
     currentItem,
@@ -59,18 +56,6 @@ export function VideoController({ stickyContainerRef }: VideoControllerProps) {
   const [screenType, setScreenType] = useState<ScreenType>('free');
   const [isMuted, setIsMuted] = useState(false);
   const [localVolume, setLocalVolume] = useState(defaultVolume * 100);
-
-  // Set sticky element for VLC window synchronization
-  useEffect(() => {
-    if (stickyContainerRef.current) {
-      vlc.setStickyElement(stickyContainerRef.current);
-    }
-
-    return () => {
-      vlc.setStickyElement(null);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Setup keyboard shortcuts for VLC native window
   useEffect(() => {

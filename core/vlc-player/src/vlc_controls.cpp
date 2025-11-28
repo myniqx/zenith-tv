@@ -26,7 +26,7 @@ Napi::Value VlcPlayer::Open(const Napi::CallbackInfo& info) {
 
     // Check for subtitle options
     if (options.Has("subtitle")) {
-        Napi::Object subOpts = options.Get("subtitle").As<Napi::Object>();
+        // Napi::Object subOpts = options.Get("subtitle").As<Napi::Object>();
         // Add subtitle options to media_options_ map if needed for libvlc_media_add_option
         // For now, we handle them via Subtitle() method after media is playing,
         // but some might need to be set here if they are media-level options.
@@ -255,7 +255,39 @@ Napi::Value VlcPlayer::Video(const Napi::CallbackInfo& info) {
         libvlc_video_set_track(media_player_, track);
     }
     
-    // Future: scale, crop, aspect ratio
+    // Scale
+    if (options.Has("scale")) {
+        float scale = options.Get("scale").As<Napi::Number>().FloatValue();
+        libvlc_video_set_scale(media_player_, scale);
+    }
+
+    // Aspect Ratio
+    if (options.Has("aspectRatio")) {
+        std::string ar = options.Get("aspectRatio").As<Napi::String>().Utf8Value();
+        libvlc_video_set_aspect_ratio(media_player_, ar.empty() ? nullptr : ar.c_str());
+    }
+
+    // Crop
+    if (options.Has("crop")) {
+        std::string crop = options.Get("crop").As<Napi::String>().Utf8Value();
+        libvlc_video_set_crop_geometry(media_player_, crop.empty() ? nullptr : crop.c_str());
+    }
+
+    // Deinterlace
+    if (options.Has("deinterlace")) {
+        std::string mode = options.Get("deinterlace").As<Napi::String>().Utf8Value();
+        if (mode == "off") {
+            libvlc_video_set_deinterlace(media_player_, nullptr);
+        } else {
+            libvlc_video_set_deinterlace(media_player_, mode.c_str());
+        }
+    }
+
+    // Teletext
+    if (options.Has("teletext")) {
+        int page = options.Get("teletext").As<Napi::Number>().Int32Value();
+        libvlc_video_set_teletext(media_player_, page);
+    }
 
     return env.Undefined();
 }
@@ -284,9 +316,19 @@ Napi::Value VlcPlayer::Subtitle(const Napi::CallbackInfo& info) {
 
 Napi::Value VlcPlayer::GetMediaInfo(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
+    std::lock_guard<std::mutex> lock(mutex_);
+    return GetMediaInfoObject(env);
+}
+
+Napi::Object VlcPlayer::GetMediaInfoObject(Napi::Env env) {
     Napi::Object result = Napi::Object::New(env);
     
-    std::lock_guard<std::mutex> lock(mutex_);
+    // Note: mutex_ should be locked by caller if needed, but here we access libvlc functions which are thread-safe 
+    // or we should lock. Since this is called from JS (GetMediaInfo) and Event Thread (HandleLengthChanged), 
+    // we need to be careful. 
+    // However, GetMediaInfo locks mutex_. HandleLengthChanged doesn't lock mutex_ but runs on VLC thread.
+    // libvlc functions are generally thread-safe.
+    
     if (!media_player_) return result;
 
     // Duration
@@ -416,6 +458,17 @@ Napi::Value VlcPlayer::SetVolume(const Napi::CallbackInfo& info) {
         printf("[VLC] CALL: libvlc_audio_set_volume(volume=%d)\n", volume);
         libvlc_audio_set_volume(media_player_, volume);
         fflush(stdout);
+
+        // Emit PlayerInfo event
+        if (tsfn_events_) {
+            tsfn_events_.NonBlockingCall([volume](Napi::Env env, Napi::Function callback) {
+                Napi::Object payload = Napi::Object::New(env);
+                Napi::Object playerInfo = Napi::Object::New(env);
+                playerInfo.Set("volume", Napi::Number::New(env, volume));
+                payload.Set("playerInfo", playerInfo);
+                callback.Call({payload});
+            });
+        }
     }
 
     return env.Undefined();
@@ -435,6 +488,17 @@ Napi::Value VlcPlayer::SetMute(const Napi::CallbackInfo& info) {
 
     if (media_player_) {
         libvlc_audio_set_mute(media_player_, mute ? 1 : 0);
+
+        // Emit PlayerInfo event
+        if (tsfn_events_) {
+            tsfn_events_.NonBlockingCall([mute](Napi::Env env, Napi::Function callback) {
+                Napi::Object payload = Napi::Object::New(env);
+                Napi::Object playerInfo = Napi::Object::New(env);
+                playerInfo.Set("muted", Napi::Boolean::New(env, mute));
+                payload.Set("playerInfo", playerInfo);
+                callback.Call({payload});
+            });
+        }
     }
 
     return env.Undefined();
@@ -455,6 +519,17 @@ Napi::Value VlcPlayer::SetRate(const Napi::CallbackInfo& info) {
 
     if (media_player_) {
         libvlc_media_player_set_rate(media_player_, rate);
+
+        // Emit PlayerInfo event
+        if (tsfn_events_) {
+            tsfn_events_.NonBlockingCall([rate](Napi::Env env, Napi::Function callback) {
+                Napi::Object payload = Napi::Object::New(env);
+                Napi::Object playerInfo = Napi::Object::New(env);
+                playerInfo.Set("rate", Napi::Number::New(env, rate));
+                payload.Set("playerInfo", playerInfo);
+                callback.Call({payload});
+            });
+        }
     }
 
     return env.Undefined();
@@ -740,11 +815,13 @@ void VlcPlayer::ProcessKeyPress(const std::string& key_code) {
         fflush(stdout);
 
         // Emit shortcut event to JavaScript
-        if (tsfn_shortcut_) {
+        if (tsfn_events_) {
             auto callback = [action](Napi::Env env, Napi::Function jsCallback) {
-                jsCallback.Call({Napi::String::New(env, action)});
+                Napi::Object payload = Napi::Object::New(env);
+                payload.Set("shortcut", Napi::String::New(env, action));
+                jsCallback.Call({payload});
             };
-            tsfn_shortcut_.NonBlockingCall(callback);
+            tsfn_events_.NonBlockingCall(callback);
         }
     }
 }

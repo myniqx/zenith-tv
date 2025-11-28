@@ -35,6 +35,8 @@ interface SettingsState {
 
   autoResume: boolean;
   autoPlayNext: boolean;
+  preferredAudioLanguage: string | null;
+  preferredSubtitleLanguage: string | null;
 
   // Startup
   autoLoadLastProfile: boolean;
@@ -56,6 +58,8 @@ interface SettingsState {
   setDefaultVolume: (volume: number) => void;
   setAutoResume: (enabled: boolean) => void;
   setAutoPlayNext: (enabled: boolean) => void;
+  setPreferredAudioLanguage: (language: string | null) => void;
+  setPreferredSubtitleLanguage: (language: string | null) => void;
 
   setAutoLoadLastProfile: (enabled: boolean) => void;
   setRememberLayout: (enabled: boolean) => void;
@@ -91,6 +95,8 @@ const defaultSettings = {
   defaultVolume: 0.7,
   autoResume: true,
   autoPlayNext: true,
+  preferredAudioLanguage: null as string | null,
+  preferredSubtitleLanguage: null as string | null,
   autoLoadLastProfile: false,
   rememberLayout: false,
   lastProfileUsername: null as string | null,
@@ -114,6 +120,8 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setAutoResume: (enabled) => set({ autoResume: enabled }),
       setAutoPlayNext: (enabled) => set({ autoPlayNext: enabled }),
+      setPreferredAudioLanguage: (language) => set({ preferredAudioLanguage: language }),
+      setPreferredSubtitleLanguage: (language) => set({ preferredSubtitleLanguage: language }),
 
       setAutoLoadLastProfile: (enabled) => set({ autoLoadLastProfile: enabled }),
 

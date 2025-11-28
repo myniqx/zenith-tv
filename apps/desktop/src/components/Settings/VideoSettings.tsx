@@ -22,9 +22,13 @@ export function VideoSettings() {
     defaultVolume,
     autoPlayNext,
     autoResume,
+    preferredAudioLanguage,
+    preferredSubtitleLanguage,
     setDefaultVolume,
     setAutoPlayNext,
     setAutoResume,
+    setPreferredAudioLanguage,
+    setPreferredSubtitleLanguage,
   } = useSettingsStore();
 
   const handleRateChange = (value: string) => {
@@ -103,6 +107,63 @@ export function VideoSettings() {
             onCheckedChange={setAutoPlayNext}
           />
         </SettingRow>
+      </SettingsSection>
+
+      <Separator />
+
+      {/* Preferred Languages */}
+      <SettingsSection title="Preferred Languages" icon={<Type className="w-5 h-5" />}>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Audio Language</Label>
+            <Select
+              value={preferredAudioLanguage || "none"}
+              onValueChange={(val) => setPreferredAudioLanguage(val === "none" ? null : val)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select language" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None (Auto)</SelectItem>
+                <SelectItem value="English">English</SelectItem>
+                <SelectItem value="Turkish">Turkish</SelectItem>
+                <SelectItem value="German">German</SelectItem>
+                <SelectItem value="French">French</SelectItem>
+                <SelectItem value="Spanish">Spanish</SelectItem>
+                <SelectItem value="Italian">Italian</SelectItem>
+                <SelectItem value="Russian">Russian</SelectItem>
+                <SelectItem value="Japanese">Japanese</SelectItem>
+                <SelectItem value="Korean">Korean</SelectItem>
+                <SelectItem value="Chinese">Chinese</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Subtitle Language</Label>
+            <Select
+              value={preferredSubtitleLanguage || "none"}
+              onValueChange={(val) => setPreferredSubtitleLanguage(val === "none" ? null : val)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select language" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None (Auto)</SelectItem>
+                <SelectItem value="English">English</SelectItem>
+                <SelectItem value="Turkish">Turkish</SelectItem>
+                <SelectItem value="German">German</SelectItem>
+                <SelectItem value="French">French</SelectItem>
+                <SelectItem value="Spanish">Spanish</SelectItem>
+                <SelectItem value="Italian">Italian</SelectItem>
+                <SelectItem value="Russian">Russian</SelectItem>
+                <SelectItem value="Japanese">Japanese</SelectItem>
+                <SelectItem value="Korean">Korean</SelectItem>
+                <SelectItem value="Chinese">Chinese</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </SettingsSection>
 
       <Separator />

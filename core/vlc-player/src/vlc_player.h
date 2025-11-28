@@ -123,6 +123,9 @@ private:
     // Unified Shortcut API
     Napi::Value Shortcut(const Napi::CallbackInfo& info);
 
+    // Unified Event Callback
+    Napi::Value SetEventCallback(const Napi::CallbackInfo& info);
+
     // Internal window management methods (platform-specific implementations)
     void CreateChildWindowInternal(int width = 1280, int height = 720);
     void DestroyChildWindowInternal();
@@ -134,19 +137,11 @@ private:
     void SetWindowMinSizeInternal(int min_width, int min_height);
     void GetWindowBounds(WindowState* state);
 
-    // Event callbacks
-    Napi::Value On(const Napi::CallbackInfo& info);
-    Napi::Value Off(const Napi::CallbackInfo& info);
-
     // Cleanup
     Napi::Value Dispose(const Napi::CallbackInfo& info);
 
     // Event handling
-    Napi::ThreadSafeFunction tsfn_time_changed_;
-    Napi::ThreadSafeFunction tsfn_state_changed_;
-    Napi::ThreadSafeFunction tsfn_end_reached_;
-    Napi::ThreadSafeFunction tsfn_error_;
-    Napi::ThreadSafeFunction tsfn_shortcut_;
+    Napi::ThreadSafeFunction tsfn_events_;
 
     // Keyboard shortcut mapping (key code -> action name)
     std::map<std::string, std::string> keyboard_shortcuts_;
@@ -163,6 +158,10 @@ private:
     static void HandleStateChanged(const libvlc_event_t* event, void* data);
     static void HandleEndReached(const libvlc_event_t* event, void* data);
     static void HandleError(const libvlc_event_t* event, void* data);
+    static void HandleLengthChanged(const libvlc_event_t* event, void* data);
+
+    // Helpers
+    Napi::Object GetMediaInfoObject(Napi::Env env);
 
     // Video memory callbacks
     void SetupVideoCallbacks();

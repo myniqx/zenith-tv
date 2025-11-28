@@ -39,6 +39,11 @@ export interface AudioOptions {
 
 export interface VideoOptions {
   track?: number;
+  scale?: number;
+  aspectRatio?: string;
+  crop?: string;
+  deinterlace?: string;
+  teletext?: number;
 }
 
 export interface SubtitleOptions {
@@ -87,6 +92,28 @@ export interface PlayerInfo {
   length: number;
   state: VlcState;
   isPlaying: boolean;
+}
+
+export interface PlayerSettings {
+  volume?: number;
+  muted?: boolean;
+  rate?: number;
+}
+
+export interface CurrentVideoState {
+  time?: number;
+  state?: VlcState;
+  endReached?: boolean;
+  error?: string;
+  length?: number;
+}
+
+// Unified Event Data Structure
+export interface VlcEventData {
+  mediaInfo?: MediaInfo;
+  playerInfo?: PlayerSettings;
+  currentVideo?: CurrentVideoState;
+  shortcut?: string;
 }
 
 // Hook Return Type

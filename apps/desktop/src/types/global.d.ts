@@ -1,5 +1,5 @@
 import type { IPCBridge } from './ipc';
-import type { OpenOptions, PlaybackOptions, AudioOptions, VideoOptions, SubtitleOptions, WindowOptions, ShortcutOptions, MediaInfo, PlayerInfo, VlcPlayerState } from './types';
+import type { OpenOptions, PlaybackOptions, AudioOptions, VideoOptions, SubtitleOptions, WindowOptions, ShortcutOptions, MediaInfo, PlayerInfo, VlcPlayerState, VlcEventData } from './types';
 
 declare global {
   interface Window {
@@ -36,11 +36,8 @@ declare global {
         getMediaInfo: () => Promise<MediaInfo | null>;
         getPlayerInfo: () => Promise<PlayerInfo | null>;
 
-        onTimeChanged: (callback: (time: number) => void) => void;
-        onStateChanged: (callback: (state: VlcPlayerState) => void) => void;
-        onEndReached: (callback: () => void) => void;
-        onError: (callback: (message: string) => void) => void;
-        onShortcut: (callback: (action: string) => void) => void;
+        // Unified event listener
+        onEvent: (callback: (eventData: VlcEventData) => void) => void;
       };
       window: {
         onPositionChanged: (callback: (data: { x: number; y: number; scaleFactor: number; minimized: boolean }) => void) => void;

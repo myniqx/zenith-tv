@@ -12,7 +12,9 @@ import type {
   MediaInfo,
   PlayerInfo,
   ShortcutOptions,
+  VlcEventData,
 } from '../types/types';
+import { useSettingsStore } from './settings';
 
 // Event listeners state - module scope (singleton)
 let listenersInitialized = false;
@@ -60,6 +62,9 @@ interface VlcPlayerState {
   _setupStickyMode: () => void;
   _cleanupStickyMode: () => void;
   _syncWindowBounds: (windowPos: { x: number; y: number; scaleFactor: number }) => void;
+
+  // Helpers
+  shouldStickyPanelVisible: () => boolean;
 }
 
 /* bilinen buglar
@@ -130,26 +135,162 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   _setupEventListeners: () => {
     if (listenersInitialized) return;
 
-    const handleTimeChanged = (newTime: number) => {
-      set({ time: newTime });
-    };
+    // Unified event handler
+    const handleVlcEvent = (eventData: VlcEventData) => {
+      const state = get();
 
-    const handleStateChanged = (newState: string) => {
-      set({ playerState: newState as VlcState });
+      // Handle MediaInfo updates
+      if (eventData.mediaInfo) {
+        console.log('[VLC] MediaInfo event received:', eventData.mediaInfo);
+        const info = eventData.mediaInfo;
+        const { preferredAudioLanguage, preferredSubtitleLanguage } = useSettingsStore.getState();
 
-      // Auto-fetch info when playing starts
-      if (newState === 'playing') {
-        get().getMediaInfo();
+        let audioTrackId = info.currentAudioTrack;
+        let subtitleTrackId = info.currentSubtitleTrack;
+
+        // Helper to match track name with language
+        const matchTrack = (trackName: string, language: string) => {
+          return trackName.toLowerCase().includes(language.toLowerCase());
+        };
+
+        // Auto-select audio track
+        if (preferredAudioLanguage) {
+          const matchedAudio = info.audioTracks.find(t => matchTrack(t.name, preferredAudioLanguage));
+          if (matchedAudio && matchedAudio.id !== -1) {
+            audioTrackId = matchedAudio.id;
+            if (audioTrackId !== info.currentAudioTrack) {
+              state.audio({ track: audioTrackId });
+            }
+          }
+        }
+
+        // Auto-select subtitle track
+        if (preferredSubtitleLanguage) {
+          const matchedSubtitle = info.subtitleTracks.find(t => matchTrack(t.name, preferredSubtitleLanguage));
+          if (matchedSubtitle && matchedSubtitle.id !== -1) {
+            subtitleTrackId = matchedSubtitle.id;
+            if (subtitleTrackId !== info.currentSubtitleTrack) {
+              state.subtitle({ track: subtitleTrackId });
+            }
+          }
+        }
+
+        set({
+          audioTracks: info.audioTracks,
+          subtitleTracks: info.subtitleTracks,
+          currentAudioTrack: audioTrackId,
+          currentSubtitleTrack: subtitleTrackId,
+          duration: info.duration,
+        });
       }
-    };
 
-    const handleEndReached = () => {
-      set({ playerState: 'ended' });
-    };
+      // Handle PlayerInfo updates
+      if (eventData.playerInfo) {
+        console.log('[VLC] PlayerInfo event received:', eventData.playerInfo);
+        const updates: Partial<VlcPlayerState> = {};
 
-    const handleError = (message: string) => {
-      console.error('[VLC] Error:', message);
-      set({ error: message, playerState: 'error' });
+        if (eventData.playerInfo.volume !== undefined) updates.volume = eventData.playerInfo.volume;
+        if (eventData.playerInfo.muted !== undefined) updates.isMuted = eventData.playerInfo.muted;
+
+        if (Object.keys(updates).length > 0) {
+          set(updates);
+        }
+      }
+
+      // Handle CurrentVideo updates
+      if (eventData.currentVideo) {
+        const cv = eventData.currentVideo;
+
+        // Time updates
+        if (cv.time !== undefined) {
+          set({ time: cv.time });
+        }
+
+        // State updates
+        if (cv.state !== undefined) {
+          set({ playerState: cv.state as VlcState });
+
+          // Auto-fetch info when playing starts
+          if (cv.state === 'playing') {
+            state.getMediaInfo();
+          }
+        }
+
+        // End reached
+        if (cv.endReached) {
+          set({ playerState: 'ended' });
+        }
+
+        // Error
+        if (cv.error) {
+          console.error('[VLC] Error:', cv.error);
+          set({ error: cv.error, playerState: 'error' });
+        }
+
+        // Duration updates
+        if (cv.length !== undefined) {
+          set({ duration: cv.length });
+        }
+      }
+
+      // Handle Shortcut events
+      if (eventData.shortcut) {
+        console.log('[VLC] Shortcut received:', eventData.shortcut);
+        const action = eventData.shortcut;
+
+        // Execute action based on shortcut
+        switch (action) {
+          case 'playPause':
+            if (state.playerState === 'playing') {
+              state.playback({ action: 'pause' });
+            } else {
+              state.playback({ action: 'resume' });
+            }
+            break;
+
+          case 'seekForward':
+            state.playback({ time: Math.min(state.time + 10000, state.duration) });
+            break;
+
+          case 'seekBackward':
+            state.playback({ time: Math.max(state.time - 10000, 0) });
+            break;
+
+          case 'seekForwardSmall':
+            state.playback({ time: Math.min(state.time + 3000, state.duration) });
+            break;
+
+          case 'seekBackwardSmall':
+            state.playback({ time: Math.max(state.time - 3000, 0) });
+            break;
+
+          case 'volumeUp':
+            state.audio({ volume: Math.min(state.volume + 5, 100) });
+            break;
+
+          case 'volumeDown':
+            state.audio({ volume: Math.max(state.volume - 5, 0) });
+            break;
+
+          case 'toggleMute':
+            state.audio({ mute: !state.isMuted });
+            break;
+
+          case 'toggleFullscreen':
+            const newMode = state.screenMode === 'fullscreen' ? 'free' : 'fullscreen';
+            set({ screenMode: newMode });
+            state.window({ fullscreen: newMode === 'fullscreen' });
+            break;
+
+          case 'exitFullscreen':
+            set({ screenMode: 'free' });
+            state.window({ fullscreen: false });
+            break;
+
+          default:
+            console.warn('[VLC] Unknown shortcut action:', action);
+        }
+      }
     };
 
     // Handle window position changes for sticky mode
@@ -199,71 +340,8 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
       }
     };
 
-    // Handle keyboard shortcuts from native VLC window
-    const handleShortcut = (action: string) => {
-      console.log('[VLC] Shortcut received:', action);
-      const state = get();
-
-      // Execute action based on shortcut
-      switch (action) {
-        case 'playPause':
-          if (state.playerState === 'playing') {
-            state.playback({ action: 'pause' });
-          } else {
-            state.playback({ action: 'resume' });
-          }
-          break;
-
-        case 'seekForward':
-          state.playback({ time: Math.min(state.time + 10000, state.duration) });
-          break;
-
-        case 'seekBackward':
-          state.playback({ time: Math.max(state.time - 10000, 0) });
-          break;
-
-        case 'seekForwardSmall':
-          state.playback({ time: Math.min(state.time + 3000, state.duration) });
-          break;
-
-        case 'seekBackwardSmall':
-          state.playback({ time: Math.max(state.time - 3000, 0) });
-          break;
-
-        case 'volumeUp':
-          state.audio({ volume: Math.min(state.volume + 5, 100) });
-          break;
-
-        case 'volumeDown':
-          state.audio({ volume: Math.max(state.volume - 5, 0) });
-          break;
-
-        case 'toggleMute':
-          state.audio({ mute: !state.isMuted });
-          break;
-
-        case 'toggleFullscreen':
-          const newMode = state.screenMode === 'fullscreen' ? 'free' : 'fullscreen';
-          set({ screenMode: newMode });
-          state.window({ fullscreen: newMode === 'fullscreen' });
-          break;
-
-        case 'exitFullscreen':
-          set({ screenMode: 'free' });
-          state.window({ fullscreen: false });
-          break;
-
-        default:
-          console.warn('[VLC] Unknown shortcut action:', action);
-      }
-    };
-
-    // Register VLC event listeners
-    window.electron.vlc.onTimeChanged(handleTimeChanged);
-    window.electron.vlc.onStateChanged(handleStateChanged);
-    window.electron.vlc.onEndReached(handleEndReached);
-    window.electron.vlc.onError(handleError);
-    window.electron.vlc.onShortcut(handleShortcut);
+    // Register unified VLC event listener
+    window.electron.vlc.onEvent(handleVlcEvent);
 
     // Register window event listener (for sticky mode)
     window.electron.window.onPositionChanged(handlePositionChanged);
@@ -483,11 +561,45 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
     const info = await window.electron.vlc.getMediaInfo();
     if (info) {
+      const { preferredAudioLanguage, preferredSubtitleLanguage } = useSettingsStore.getState();
+
+      let audioTrackId = info.currentAudioTrack;
+      let subtitleTrackId = info.currentSubtitleTrack;
+
+      // Helper to match track name with language
+      const matchTrack = (trackName: string, language: string) => {
+        return trackName.toLowerCase().includes(language.toLowerCase());
+      };
+
+      // Auto-select audio track
+      if (preferredAudioLanguage) {
+        const matchedAudio = info.audioTracks.find(t => matchTrack(t.name, preferredAudioLanguage));
+        if (matchedAudio && matchedAudio.id !== -1) {
+          audioTrackId = matchedAudio.id;
+          // Apply selection if different from current
+          if (audioTrackId !== info.currentAudioTrack) {
+            get().audio({ track: audioTrackId });
+          }
+        }
+      }
+
+      // Auto-select subtitle track
+      if (preferredSubtitleLanguage) {
+        const matchedSubtitle = info.subtitleTracks.find(t => matchTrack(t.name, preferredSubtitleLanguage));
+        if (matchedSubtitle && matchedSubtitle.id !== -1) {
+          subtitleTrackId = matchedSubtitle.id;
+          // Apply selection if different from current
+          if (subtitleTrackId !== info.currentSubtitleTrack) {
+            get().subtitle({ track: subtitleTrackId });
+          }
+        }
+      }
+
       set({
         audioTracks: info.audioTracks,
         subtitleTracks: info.subtitleTracks,
-        currentAudioTrack: info.currentAudioTrack,
-        currentSubtitleTrack: info.currentSubtitleTrack,
+        currentAudioTrack: audioTrackId,
+        currentSubtitleTrack: subtitleTrackId,
         duration: info.duration,
       });
     }
@@ -500,5 +612,12 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     if (!isAvailable) return null;
 
     return await window.electron.vlc.getPlayerInfo();
+  },
+
+  // Helper: Check if sticky panel should be visible
+  shouldStickyPanelVisible: () => {
+    const { playerState, screenMode } = get();
+    const isPlayingOrPaused = playerState === 'playing' || playerState === 'paused' || playerState === 'buffering' || playerState === 'opening';
+    return isPlayingOrPaused && screenMode === 'sticky';
   },
 }));
