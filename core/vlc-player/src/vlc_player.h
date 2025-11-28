@@ -147,6 +147,23 @@ private:
     std::map<std::string, std::string> keyboard_shortcuts_;
     void ProcessKeyPress(const std::string& key_code);
 
+    // Context Menu Infrastructure
+    struct MenuItem {
+        std::string label;
+        std::string action;        // Action name to trigger via ProcessKeyPress
+        std::string shortcut;      // Keyboard shortcut display (e.g., "F11", "Space")
+        bool enabled;
+        bool separator;
+        std::vector<MenuItem> submenu;
+        
+        MenuItem() : enabled(true), separator(false) {}
+    };
+    
+    std::vector<MenuItem> BuildContextMenu();
+    void ShowContextMenu(int x, int y);
+    void ExecuteMenuAction(const std::string& action);
+
+
     // Event manager
     libvlc_event_manager_t* event_manager_;
 

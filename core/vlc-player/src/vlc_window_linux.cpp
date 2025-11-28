@@ -40,7 +40,7 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
     attrs.colormap = cmap;
     attrs.background_pixel = BlackPixel(display_, screen);
     attrs.border_pixel = WhitePixel(display_, screen);
-    attrs.event_mask = ExposureMask | StructureNotifyMask | KeyPressMask | ButtonPressMask;
+    attrs.event_mask = ExposureMask | StructureNotifyMask | KeyPressMask | ButtonPressMask | ButtonReleaseMask;
 
     printf("[VLC] CALL: XCreateWindow(parent=root, x=100, y=100, w=%d, h=%d)\n", width, height);
     child_window_ = XCreateWindow(
@@ -437,6 +437,16 @@ void VlcPlayer::StartEventLoop() {
 
                         // Process through unified shortcut handler
                         ProcessKeyPress(keyCode);
+                    }
+                } else if (event.type == ButtonPress) {
+                    // Right-click (Button3) shows context menu
+                    if (event.xbutton.button == 3) {
+                        printf("[VLC] X11 Right-click detected at (%d, %d)\n", 
+                               event.xbutton.x_root, event.xbutton.y_root);
+                        fflush(stdout);
+                        
+                        // Show context menu at cursor position
+                        ShowContextMenu(event.xbutton.x_root, event.xbutton.y_root);
                     }
                 }
             } else {
