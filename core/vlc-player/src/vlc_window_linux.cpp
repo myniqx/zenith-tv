@@ -439,12 +439,24 @@ void VlcPlayer::StartEventLoop() {
                         ProcessKeyPress(keyCode);
                     }
                 } else if (event.type == ButtonPress) {
+                    // Mouse Left (Button1) -> playPause
+                    if (event.xbutton.button == 1) {
+                        printf("[VLC] X11 Left-click detected\n");
+                        fflush(stdout);
+                        ProcessKeyPress("MouseLeft");
+                    }
+                    // Mouse Middle (Button2) -> toggleFullscreen
+                    else if (event.xbutton.button == 2) {
+                        printf("[VLC] X11 Middle-click detected\n");
+                        fflush(stdout);
+                        ProcessKeyPress("MouseMiddle");
+                    }
                     // Right-click (Button3) shows context menu
-                    if (event.xbutton.button == 3) {
-                        printf("[VLC] X11 Right-click detected at (%d, %d)\n", 
+                    else if (event.xbutton.button == 3) {
+                        printf("[VLC] X11 Right-click detected at (%d, %d)\n",
                                event.xbutton.x_root, event.xbutton.y_root);
                         fflush(stdout);
-                        
+
                         // Show context menu at cursor position
                         ShowContextMenu(event.xbutton.x_root, event.xbutton.y_root);
                     }

@@ -73,8 +73,27 @@ export interface WindowOptions {
   style?: WindowStyleOptions;
 }
 
+// Shortcut action types
+export type ShortcutAction =
+  | 'playPause'
+  | 'stop'
+  | 'seekForward'        // +10s
+  | 'seekBackward'       // -10s
+  | 'seekForwardSmall'   // +3s
+  | 'seekBackwardSmall'  // -3s
+  | 'volumeUp'           // +5
+  | 'volumeDown'         // -5
+  | 'toggleMute'
+  | 'toggleFullscreen'
+  | 'exitFullscreen'
+  | 'stickyMode'
+  | 'freeScreenMode'
+  | 'subtitleDelayPlus'  // +100ms
+  | 'subtitleDelayMinus' // -100ms
+  | 'subtitleDisable';
+
 export interface ShortcutOptions {
-  shortcuts: Record<string, string>; // { "Space": "playPause", "Escape": "exitFullscreen" }
+  shortcuts: Record<ShortcutAction, string | string[]>; // { "playPause": ["Space", "KeyK"], "volumeUp": ["ArrowUp"] }
 }
 
 // Unified API Response Types
@@ -83,8 +102,10 @@ export interface MediaInfo {
   isSeekable: boolean;
   audioTracks: VlcTrack[];
   subtitleTracks: VlcTrack[];
+  videoTracks: VlcTrack[];
   currentAudioTrack: number;
   currentSubtitleTrack: number;
+  currentVideoTrack: number;
 }
 
 export interface PlayerInfo {
@@ -101,11 +122,26 @@ export interface PlayerSettings {
 }
 
 export interface CurrentVideoState {
+  // Playback info
   time?: number;
   state?: VlcState;
   endReached?: boolean;
   error?: string;
   length?: number;
+  position?: number;           // 0.0 - 1.0 (normalized position)
+  buffering?: number;          // 0.0 - 100.0 (buffering progress, only when buffering)
+  rate?: number;               // Playback rate (1.0 = normal)
+  isSeekable?: boolean;        // Real-time seekability
+
+  // Video settings (set on video load + when changed)
+  aspectRatio?: string | null;
+  crop?: string | null;
+  scale?: number;
+  deinterlace?: string | null;
+
+  // Delay settings (absolute values in microseconds)
+  audioDelay?: number;
+  subtitleDelay?: number;
 }
 
 // Unified Event Data Structure
@@ -113,7 +149,7 @@ export interface VlcEventData {
   mediaInfo?: MediaInfo;
   playerInfo?: PlayerSettings;
   currentVideo?: CurrentVideoState;
-  shortcut?: string;
+  shortcut?: ShortcutAction;
 }
 
 // Hook Return Type
@@ -128,9 +164,27 @@ export interface UseVlcPlayerReturn {
   isMuted: boolean;
   audioTracks: VlcTrack[];
   subtitleTracks: VlcTrack[];
+  videoTracks: VlcTrack[];
   currentAudioTrack: number;
   currentSubtitleTrack: number;
+  currentVideoTrack: number;
   error: string | null;
+
+  // Playback info
+  position: number;
+  buffering: number;
+  rate: number;
+  isSeekable: boolean;
+
+  // Video settings
+  aspectRatio: string | null;
+  crop: string | null;
+  scale: number;
+  deinterlace: string | null;
+
+  // Delay settings (microseconds)
+  audioDelay: number;
+  subtitleDelay: number;
 
   // Screen mode
   screenMode: ScreenMode;

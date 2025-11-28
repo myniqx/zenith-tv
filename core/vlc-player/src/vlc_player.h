@@ -80,6 +80,7 @@ public:
     std::vector<uint8_t> frame_buffer_;
     std::mutex frame_mutex_;
     bool frame_ready_;
+    std::atomic<float> buffering_progress_{0.0f};
 
 private:
     // Unified API Methods
@@ -143,8 +144,9 @@ private:
     // Event handling
     Napi::ThreadSafeFunction tsfn_events_;
 
-    // Keyboard shortcut mapping (key code -> action name)
-    std::map<std::string, std::string> keyboard_shortcuts_;
+    // Keyboard shortcut mapping (action -> keys[])
+    // New format: { "playPause": ["Space", "KeyK"], "volumeUp": ["ArrowUp", "Equal"] }
+    std::map<std::string, std::vector<std::string>> action_to_keys_;
     void ProcessKeyPress(const std::string& key_code);
 
     // Context Menu Infrastructure
@@ -176,6 +178,13 @@ private:
     static void HandleEndReached(const libvlc_event_t* event, void* data);
     static void HandleError(const libvlc_event_t* event, void* data);
     static void HandleLengthChanged(const libvlc_event_t* event, void* data);
+    static void HandleBuffering(const libvlc_event_t* event, void* data);
+
+    // Shortcut management
+    void InitializeDefaultShortcuts();
+    std::string GetFirstKeyForAction(const std::string& action);
+    bool HasKeyForAction(const std::string& action);
+    bool IsKnownAction(const std::string& action);
 
     // Helpers
     Napi::Object GetMediaInfoObject(Napi::Env env);

@@ -24,23 +24,17 @@ std::vector<VlcPlayer::MenuItem> VlcPlayer::BuildContextMenu() {
     
     // Play/Pause (dynamic based on state)
     MenuItem playPause;
-    if (isPlaying) {
-        playPause.label = "Pause";
-        playPause.action = "playPause";
-        playPause.shortcut = "Space";
-    } else {
-        playPause.label = "Play";
-        playPause.action = "playPause";
-        playPause.shortcut = "Space";
-    }
+    playPause.label = isPlaying ? "Pause" : "Play";
+    playPause.action = "playPause";
+    playPause.shortcut = GetFirstKeyForAction("playPause");
     playPause.enabled = hasMedia;
     menu.push_back(playPause);
-    
+
     // Stop
     MenuItem stop;
     stop.label = "Stop";
     stop.action = "stop";
-    stop.shortcut = "S";
+    stop.shortcut = GetFirstKeyForAction("stop");
     stop.enabled = hasMedia;
     menu.push_back(stop);
     
@@ -49,35 +43,35 @@ std::vector<VlcPlayer::MenuItem> VlcPlayer::BuildContextMenu() {
     sep1.separator = true;
     menu.push_back(sep1);
     
-    // Forward +1s
-    MenuItem forward1;
-    forward1.label = "Forward +1s";
-    forward1.action = "forward1";
-    forward1.shortcut = "→";
-    forward1.enabled = hasMedia;
-    menu.push_back(forward1);
-    
+    // Forward +3s (Small)
+    MenuItem forward3;
+    forward3.label = "Forward +3s";
+    forward3.action = "seekForwardSmall";
+    forward3.shortcut = GetFirstKeyForAction("seekForwardSmall");
+    forward3.enabled = hasMedia;
+    menu.push_back(forward3);
+
     // Forward +10s
     MenuItem forward10;
     forward10.label = "Forward +10s";
-    forward10.action = "forward10";
-    forward10.shortcut = "Shift+→";
+    forward10.action = "seekForward";
+    forward10.shortcut = GetFirstKeyForAction("seekForward");
     forward10.enabled = hasMedia;
     menu.push_back(forward10);
-    
-    // Backward -1s
-    MenuItem backward1;
-    backward1.label = "Backward -1s";
-    backward1.action = "backward1";
-    backward1.shortcut = "←";
-    backward1.enabled = hasMedia;
-    menu.push_back(backward1);
-    
+
+    // Backward -3s (Small)
+    MenuItem backward3;
+    backward3.label = "Backward -3s";
+    backward3.action = "seekBackwardSmall";
+    backward3.shortcut = GetFirstKeyForAction("seekBackwardSmall");
+    backward3.enabled = hasMedia;
+    menu.push_back(backward3);
+
     // Backward -10s
     MenuItem backward10;
     backward10.label = "Backward -10s";
-    backward10.action = "backward10";
-    backward10.shortcut = "Shift+←";
+    backward10.action = "seekBackward";
+    backward10.shortcut = GetFirstKeyForAction("seekBackward");
     backward10.enabled = hasMedia;
     menu.push_back(backward10);
     
@@ -93,24 +87,24 @@ std::vector<VlcPlayer::MenuItem> VlcPlayer::BuildContextMenu() {
     // Fullscreen
     MenuItem fullscreen;
     fullscreen.label = is_fullscreen_ ? "Exit Fullscreen" : "Fullscreen";
-    fullscreen.action = "fullscreen";
-    fullscreen.shortcut = "F11";
+    fullscreen.action = is_fullscreen_ ? "exitFullscreen" : "toggleFullscreen";
+    fullscreen.shortcut = GetFirstKeyForAction(is_fullscreen_ ? "exitFullscreen" : "toggleFullscreen");
     fullscreen.enabled = child_window_created_;
     menu.push_back(fullscreen);
-    
+
     // Sticky Mode (always on top, no taskbar)
     MenuItem sticky;
     sticky.label = "Sticky Mode";
     sticky.action = "stickyMode";
-    sticky.shortcut = "T";
+    sticky.shortcut = GetFirstKeyForAction("stickyMode");
     sticky.enabled = child_window_created_;
     menu.push_back(sticky);
-    
+
     // Free Screen Mode (borderless, no decorations)
     MenuItem freeScreen;
     freeScreen.label = "Free Screen Mode";
     freeScreen.action = "freeScreenMode";
-    freeScreen.shortcut = "B";
+    freeScreen.shortcut = GetFirstKeyForAction("freeScreenMode");
     freeScreen.enabled = child_window_created_;
     menu.push_back(freeScreen);
     
@@ -131,14 +125,14 @@ std::vector<VlcPlayer::MenuItem> VlcPlayer::BuildContextMenu() {
     MenuItem subDelayPlus;
     subDelayPlus.label = "Delay +100ms";
     subDelayPlus.action = "subtitleDelayPlus";
-    subDelayPlus.shortcut = "H";
+    subDelayPlus.shortcut = GetFirstKeyForAction("subtitleDelayPlus");
     subtitleMenu.submenu.push_back(subDelayPlus);
-    
+
     // Delay -100ms
     MenuItem subDelayMinus;
     subDelayMinus.label = "Delay -100ms";
     subDelayMinus.action = "subtitleDelayMinus";
-    subDelayMinus.shortcut = "G";
+    subDelayMinus.shortcut = GetFirstKeyForAction("subtitleDelayMinus");
     subtitleMenu.submenu.push_back(subDelayMinus);
     
     // Separator in submenu
@@ -173,7 +167,7 @@ std::vector<VlcPlayer::MenuItem> VlcPlayer::BuildContextMenu() {
     MenuItem disableSub;
     disableSub.label = "Disable";
     disableSub.action = "subtitleDisable";
-    disableSub.shortcut = "V";
+    disableSub.shortcut = GetFirstKeyForAction("subtitleDisable");
     subtitleMenu.submenu.push_back(disableSub);
     
     menu.push_back(subtitleMenu);
@@ -190,21 +184,21 @@ std::vector<VlcPlayer::MenuItem> VlcPlayer::BuildContextMenu() {
     MenuItem volUp;
     volUp.label = "Volume Up";
     volUp.action = "volumeUp";
-    volUp.shortcut = "↑";
+    volUp.shortcut = GetFirstKeyForAction("volumeUp");
     audioMenu.submenu.push_back(volUp);
-    
+
     // Volume Down
     MenuItem volDown;
     volDown.label = "Volume Down";
     volDown.action = "volumeDown";
-    volDown.shortcut = "↓";
+    volDown.shortcut = GetFirstKeyForAction("volumeDown");
     audioMenu.submenu.push_back(volDown);
-    
+
     // Mute
     MenuItem mute;
     mute.label = "Mute";
-    mute.action = "mute";
-    mute.shortcut = "M";
+    mute.action = "toggleMute";
+    mute.shortcut = GetFirstKeyForAction("toggleMute");
     audioMenu.submenu.push_back(mute);
     
     // Separator

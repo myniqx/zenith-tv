@@ -12,9 +12,11 @@ import type {
   MediaInfo,
   PlayerInfo,
   ShortcutOptions,
+  ShortcutAction,
   VlcEventData,
 } from '../types/types';
 import { useSettingsStore } from './settings';
+import { shortcutActions } from './helpers/shortcutAction';
 
 // Event listeners state - module scope (singleton)
 let listenersInitialized = false;
@@ -32,9 +34,27 @@ interface VlcPlayerState {
   isMuted: boolean;
   audioTracks: VlcTrack[];
   subtitleTracks: VlcTrack[];
+  videoTracks: VlcTrack[];
   currentAudioTrack: number;
   currentSubtitleTrack: number;
+  currentVideoTrack: number;
   error: string | null;
+
+  // Playback info
+  position: number;
+  buffering: number;
+  rate: number;
+  isSeekable: boolean;
+
+  // Video settings
+  aspectRatio: string | null;
+  crop: string | null;
+  scale: number;
+  deinterlace: string | null;
+
+  // Delay settings (microseconds)
+  audioDelay: number;
+  subtitleDelay: number;
 
   // Screen mode
   screenMode: ScreenMode;
@@ -92,9 +112,21 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   isMuted: false,
   audioTracks: [],
   subtitleTracks: [],
+  videoTracks: [],
   currentAudioTrack: -1,
   currentSubtitleTrack: -1,
+  currentVideoTrack: -1,
   error: null,
+  position: 0,
+  buffering: 0,
+  rate: 1.0,
+  isSeekable: false,
+  aspectRatio: null,
+  crop: null,
+  scale: 0,
+  deinterlace: null,
+  audioDelay: 0,
+  subtitleDelay: 0,
   screenMode: 'sticky',
   stickyElement: null,
   wasPlayingBeforeMinimize: false,
@@ -178,8 +210,10 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         set({
           audioTracks: info.audioTracks,
           subtitleTracks: info.subtitleTracks,
+          videoTracks: info.videoTracks,
           currentAudioTrack: audioTrackId,
           currentSubtitleTrack: subtitleTrackId,
+          currentVideoTrack: info.currentVideoTrack,
           duration: info.duration,
         });
       }
@@ -200,15 +234,16 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
       // Handle CurrentVideo updates
       if (eventData.currentVideo) {
         const cv = eventData.currentVideo;
+        const updates: Partial<VlcPlayerState> = {};
 
         // Time updates
-        if (cv.time !== undefined) {
-          set({ time: cv.time });
-        }
+        if (cv.time !== undefined) updates.time = cv.time;
+        if (cv.position !== undefined) updates.position = cv.position;
+        if (cv.buffering !== undefined) updates.buffering = cv.buffering;
 
         // State updates
         if (cv.state !== undefined) {
-          set({ playerState: cv.state as VlcState });
+          updates.playerState = cv.state as VlcState;
 
           // Auto-fetch info when playing starts
           if (cv.state === 'playing') {
@@ -216,20 +251,36 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
           }
         }
 
+        // Playback info
+        if (cv.rate !== undefined) updates.rate = cv.rate;
+        if (cv.isSeekable !== undefined) updates.isSeekable = cv.isSeekable;
+        if (cv.length !== undefined) updates.duration = cv.length;
+
+        // Video settings
+        if (cv.aspectRatio !== undefined) updates.aspectRatio = cv.aspectRatio;
+        if (cv.crop !== undefined) updates.crop = cv.crop;
+        if (cv.scale !== undefined) updates.scale = cv.scale;
+        if (cv.deinterlace !== undefined) updates.deinterlace = cv.deinterlace;
+
+        // Delay settings
+        if (cv.audioDelay !== undefined) updates.audioDelay = cv.audioDelay;
+        if (cv.subtitleDelay !== undefined) updates.subtitleDelay = cv.subtitleDelay;
+
         // End reached
         if (cv.endReached) {
-          set({ playerState: 'ended' });
+          updates.playerState = 'ended';
         }
 
         // Error
         if (cv.error) {
           console.error('[VLC] Error:', cv.error);
-          set({ error: cv.error, playerState: 'error' });
+          updates.error = cv.error;
+          updates.playerState = 'error';
         }
 
-        // Duration updates
-        if (cv.length !== undefined) {
-          set({ duration: cv.length });
+        // Apply all updates at once
+        if (Object.keys(updates).length > 0) {
+          set(updates);
         }
       }
 
@@ -238,58 +289,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         console.log('[VLC] Shortcut received:', eventData.shortcut);
         const action = eventData.shortcut;
 
-        // Execute action based on shortcut
-        switch (action) {
-          case 'playPause':
-            if (state.playerState === 'playing') {
-              state.playback({ action: 'pause' });
-            } else {
-              state.playback({ action: 'resume' });
-            }
-            break;
-
-          case 'seekForward':
-            state.playback({ time: Math.min(state.time + 10000, state.duration) });
-            break;
-
-          case 'seekBackward':
-            state.playback({ time: Math.max(state.time - 10000, 0) });
-            break;
-
-          case 'seekForwardSmall':
-            state.playback({ time: Math.min(state.time + 3000, state.duration) });
-            break;
-
-          case 'seekBackwardSmall':
-            state.playback({ time: Math.max(state.time - 3000, 0) });
-            break;
-
-          case 'volumeUp':
-            state.audio({ volume: Math.min(state.volume + 5, 100) });
-            break;
-
-          case 'volumeDown':
-            state.audio({ volume: Math.max(state.volume - 5, 0) });
-            break;
-
-          case 'toggleMute':
-            state.audio({ mute: !state.isMuted });
-            break;
-
-          case 'toggleFullscreen':
-            const newMode = state.screenMode === 'fullscreen' ? 'free' : 'fullscreen';
-            set({ screenMode: newMode });
-            state.window({ fullscreen: newMode === 'fullscreen' });
-            break;
-
-          case 'exitFullscreen':
-            set({ screenMode: 'free' });
-            state.window({ fullscreen: false });
-            break;
-
-          default:
-            console.warn('[VLC] Unknown shortcut action:', action);
-        }
+        shortcutActions(state, action);
       }
     };
 
@@ -598,8 +598,10 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
       set({
         audioTracks: info.audioTracks,
         subtitleTracks: info.subtitleTracks,
+        videoTracks: info.videoTracks,
         currentAudioTrack: audioTrackId,
         currentSubtitleTrack: subtitleTrackId,
+        currentVideoTrack: info.currentVideoTrack,
         duration: info.duration,
       });
     }

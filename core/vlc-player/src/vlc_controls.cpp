@@ -1,4 +1,5 @@
 #include "vlc_player.h"
+#include <algorithm>
 
 // =================================================================================================
 // Unified API Implementation
@@ -232,10 +233,21 @@ Napi::Value VlcPlayer::Audio(const Napi::CallbackInfo& info) {
         int track = options.Get("track").As<Napi::Number>().Int32Value();
         libvlc_audio_set_track(media_player_, track);
     }
-    
+
     if (options.Has("delay")) {
         int64_t delay = options.Get("delay").As<Napi::Number>().Int64Value();
         libvlc_audio_set_delay(media_player_, delay);
+
+        // Emit event with new delay value
+        if (tsfn_events_) {
+            tsfn_events_.NonBlockingCall([delay](Napi::Env env, Napi::Function callback) {
+                Napi::Object payload = Napi::Object::New(env);
+                Napi::Object currentVideo = Napi::Object::New(env);
+                currentVideo.Set("audioDelay", Napi::Number::New(env, static_cast<double>(delay)));
+                payload.Set("currentVideo", currentVideo);
+                callback.Call({payload});
+            });
+        }
     }
 
     return env.Undefined();
@@ -259,18 +271,61 @@ Napi::Value VlcPlayer::Video(const Napi::CallbackInfo& info) {
     if (options.Has("scale")) {
         float scale = options.Get("scale").As<Napi::Number>().FloatValue();
         libvlc_video_set_scale(media_player_, scale);
+
+        // Emit event
+        if (tsfn_events_) {
+            tsfn_events_.NonBlockingCall([scale](Napi::Env env, Napi::Function callback) {
+                Napi::Object payload = Napi::Object::New(env);
+                Napi::Object currentVideo = Napi::Object::New(env);
+                currentVideo.Set("scale", Napi::Number::New(env, scale));
+                payload.Set("currentVideo", currentVideo);
+                callback.Call({payload});
+            });
+        }
     }
 
     // Aspect Ratio
     if (options.Has("aspectRatio")) {
         std::string ar = options.Get("aspectRatio").As<Napi::String>().Utf8Value();
         libvlc_video_set_aspect_ratio(media_player_, ar.empty() ? nullptr : ar.c_str());
+
+        // Emit event
+        if (tsfn_events_) {
+            std::string aspectRatio = ar; // Capture for lambda
+            tsfn_events_.NonBlockingCall([aspectRatio](Napi::Env env, Napi::Function callback) {
+                Napi::Object payload = Napi::Object::New(env);
+                Napi::Object currentVideo = Napi::Object::New(env);
+                if (aspectRatio.empty()) {
+                    currentVideo.Set("aspectRatio", env.Null());
+                } else {
+                    currentVideo.Set("aspectRatio", Napi::String::New(env, aspectRatio));
+                }
+                payload.Set("currentVideo", currentVideo);
+                callback.Call({payload});
+            });
+        }
     }
 
     // Crop
     if (options.Has("crop")) {
         std::string crop = options.Get("crop").As<Napi::String>().Utf8Value();
         libvlc_video_set_crop_geometry(media_player_, crop.empty() ? nullptr : crop.c_str());
+
+        // Emit event
+        if (tsfn_events_) {
+            std::string cropValue = crop; // Capture for lambda
+            tsfn_events_.NonBlockingCall([cropValue](Napi::Env env, Napi::Function callback) {
+                Napi::Object payload = Napi::Object::New(env);
+                Napi::Object currentVideo = Napi::Object::New(env);
+                if (cropValue.empty()) {
+                    currentVideo.Set("crop", env.Null());
+                } else {
+                    currentVideo.Set("crop", Napi::String::New(env, cropValue));
+                }
+                payload.Set("currentVideo", currentVideo);
+                callback.Call({payload});
+            });
+        }
     }
 
     // Deinterlace
@@ -280,6 +335,22 @@ Napi::Value VlcPlayer::Video(const Napi::CallbackInfo& info) {
             libvlc_video_set_deinterlace(media_player_, nullptr);
         } else {
             libvlc_video_set_deinterlace(media_player_, mode.c_str());
+        }
+
+        // Emit event
+        if (tsfn_events_) {
+            std::string deinterlace = mode; // Capture for lambda
+            tsfn_events_.NonBlockingCall([deinterlace](Napi::Env env, Napi::Function callback) {
+                Napi::Object payload = Napi::Object::New(env);
+                Napi::Object currentVideo = Napi::Object::New(env);
+                if (deinterlace == "off") {
+                    currentVideo.Set("deinterlace", env.Null());
+                } else {
+                    currentVideo.Set("deinterlace", Napi::String::New(env, deinterlace));
+                }
+                payload.Set("currentVideo", currentVideo);
+                callback.Call({payload});
+            });
         }
     }
 
@@ -309,6 +380,17 @@ Napi::Value VlcPlayer::Subtitle(const Napi::CallbackInfo& info) {
     if (options.Has("delay")) {
         int64_t delay = options.Get("delay").As<Napi::Number>().Int64Value();
         libvlc_video_set_spu_delay(media_player_, delay);
+
+        // Emit event with new delay value
+        if (tsfn_events_) {
+            tsfn_events_.NonBlockingCall([delay](Napi::Env env, Napi::Function callback) {
+                Napi::Object payload = Napi::Object::New(env);
+                Napi::Object currentVideo = Napi::Object::New(env);
+                currentVideo.Set("subtitleDelay", Napi::Number::New(env, static_cast<double>(delay)));
+                payload.Set("currentVideo", currentVideo);
+                callback.Call({payload});
+            });
+        }
     }
 
     return env.Undefined();
@@ -376,9 +458,27 @@ Napi::Object VlcPlayer::GetMediaInfoObject(Napi::Env env) {
     }
     result.Set("subtitleTracks", subTracks);
 
+    // Video Tracks
+    Napi::Array videoTracks = Napi::Array::New(env);
+    libvlc_track_description_t* v_tracks = libvlc_video_get_track_description(media_player_);
+    if (v_tracks) {
+        libvlc_track_description_t* t = v_tracks;
+        int i = 0;
+        while(t) {
+            Napi::Object track = Napi::Object::New(env);
+            track.Set("id", t->i_id);
+            track.Set("name", t->psz_name ? t->psz_name : "");
+            videoTracks.Set(i++, track);
+            t = t->p_next;
+        }
+        libvlc_track_description_list_release(v_tracks);
+    }
+    result.Set("videoTracks", videoTracks);
+
     // Current Tracks
     result.Set("currentAudioTrack", Napi::Number::New(env, libvlc_audio_get_track(media_player_)));
     result.Set("currentSubtitleTrack", Napi::Number::New(env, libvlc_video_get_spu(media_player_)));
+    result.Set("currentVideoTrack", Napi::Number::New(env, libvlc_video_get_track(media_player_)));
 
     return result;
 }
@@ -772,6 +872,60 @@ Napi::Value VlcPlayer::Window(const Napi::CallbackInfo& info) {
 // Keyboard Shortcut API
 // =================================================================================================
 
+// Initialize default shortcuts
+void VlcPlayer::InitializeDefaultShortcuts() {
+    action_to_keys_.clear();
+
+    // Playback controls
+    action_to_keys_["playPause"] = {"Space", "MouseLeft"};
+    action_to_keys_["stop"] = {};
+
+    // Seeking
+    action_to_keys_["seekForward"] = {"ArrowRight"};
+    action_to_keys_["seekBackward"] = {"ArrowLeft"};
+    action_to_keys_["seekForwardSmall"] = {};
+    action_to_keys_["seekBackwardSmall"] = {};
+
+    // Volume
+    action_to_keys_["volumeUp"] = {"ArrowUp"};
+    action_to_keys_["volumeDown"] = {"ArrowDown"};
+    action_to_keys_["toggleMute"] = {};
+
+    // Window modes
+    action_to_keys_["toggleFullscreen"] = {"MouseMiddle"};
+    action_to_keys_["exitFullscreen"] = {"Escape"};
+    action_to_keys_["stickyMode"] = {};
+    action_to_keys_["freeScreenMode"] = {};
+
+    // Subtitle
+    action_to_keys_["subtitleDelayPlus"] = {};
+    action_to_keys_["subtitleDelayMinus"] = {};
+    action_to_keys_["subtitleDisable"] = {};
+
+    printf("[VLC] Default shortcuts initialized\n");
+    fflush(stdout);
+}
+
+// Get first key for action (for context menu display)
+std::string VlcPlayer::GetFirstKeyForAction(const std::string& action) {
+    auto it = action_to_keys_.find(action);
+    if (it != action_to_keys_.end() && !it->second.empty()) {
+        return it->second[0];
+    }
+    return "";
+}
+
+// Check if action has any keys mapped
+bool VlcPlayer::HasKeyForAction(const std::string& action) {
+    auto it = action_to_keys_.find(action);
+    return it != action_to_keys_.end() && !it->second.empty();
+}
+
+// Check if action is in our known actions list (regardless of whether keys are mapped)
+bool VlcPlayer::IsKnownAction(const std::string& action) {
+    return action_to_keys_.find(action) != action_to_keys_.end();
+}
+
 Napi::Value VlcPlayer::Shortcut(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
@@ -788,17 +942,35 @@ Napi::Value VlcPlayer::Shortcut(const Napi::CallbackInfo& info) {
     }
 
     Napi::Object shortcuts = options.Get("shortcuts").As<Napi::Object>();
-    Napi::Array keys = shortcuts.GetPropertyNames();
+    Napi::Array actions = shortcuts.GetPropertyNames();
 
-    // Clear existing shortcuts
-    keyboard_shortcuts_.clear();
+    // Clear and rebuild map
+    action_to_keys_.clear();
 
-    // Build shortcut map: { "Space": "playPause", "Escape": "exitFullscreen", ... }
-    for (uint32_t i = 0; i < keys.Length(); i++) {
-        std::string key = keys.Get(i).As<Napi::String>().Utf8Value();
-        std::string action = shortcuts.Get(key).As<Napi::String>().Utf8Value();
-        keyboard_shortcuts_[key] = action;
-        printf("[VLC] Registered shortcut: %s -> %s\n", key.c_str(), action.c_str());
+    // Build new format: { "playPause": ["Space", "KeyK"], "volumeUp": ["ArrowUp"] }
+    for (uint32_t i = 0; i < actions.Length(); i++) {
+        std::string action = actions.Get(i).As<Napi::String>().Utf8Value();
+        Napi::Value keysValue = shortcuts.Get(action);
+
+        std::vector<std::string> keys;
+
+        // Support both array and single string
+        if (keysValue.IsArray()) {
+            Napi::Array keysArray = keysValue.As<Napi::Array>();
+            for (uint32_t j = 0; j < keysArray.Length(); j++) {
+                keys.push_back(keysArray.Get(j).As<Napi::String>().Utf8Value());
+            }
+        } else if (keysValue.IsString()) {
+            keys.push_back(keysValue.As<Napi::String>().Utf8Value());
+        }
+
+        action_to_keys_[action] = keys;
+
+        printf("[VLC] Registered shortcuts for '%s': ", action.c_str());
+        for (const auto& key : keys) {
+            printf("%s ", key.c_str());
+        }
+        printf("\n");
         fflush(stdout);
     }
 
@@ -807,21 +979,28 @@ Napi::Value VlcPlayer::Shortcut(const Napi::CallbackInfo& info) {
 
 // Process key press from platform-specific window event handlers
 void VlcPlayer::ProcessKeyPress(const std::string& key_code) {
-    // Check if this key is mapped to an action
-    auto it = keyboard_shortcuts_.find(key_code);
-    if (it != keyboard_shortcuts_.end()) {
-        std::string action = it->second;
-        printf("[VLC] Key pressed: %s -> Action: %s\n", key_code.c_str(), action.c_str());
-        fflush(stdout);
+    // Reverse lookup: key -> action
+    for (const auto& [action, keys] : action_to_keys_) {
+        // Check if this key is in the keys list for this action
+        if (std::find(keys.begin(), keys.end(), key_code) != keys.end()) {
+            printf("[VLC] Key pressed: %s -> Action: %s\n", key_code.c_str(), action.c_str());
+            fflush(stdout);
 
-        // Emit shortcut event to JavaScript
-        if (tsfn_events_) {
-            auto callback = [action](Napi::Env env, Napi::Function jsCallback) {
-                Napi::Object payload = Napi::Object::New(env);
-                payload.Set("shortcut", Napi::String::New(env, action));
-                jsCallback.Call({payload});
-            };
-            tsfn_events_.NonBlockingCall(callback);
+            // Emit shortcut event to JavaScript
+            if (tsfn_events_) {
+                auto callback = [action](Napi::Env env, Napi::Function jsCallback) {
+                    Napi::Object payload = Napi::Object::New(env);
+                    payload.Set("shortcut", Napi::String::New(env, action));
+                    jsCallback.Call({payload});
+                };
+                tsfn_events_.NonBlockingCall(callback);
+            }
+
+            return; // Execute first matching action only
         }
     }
+
+    // Key not mapped
+    printf("[VLC] Unmapped key: %s\n", key_code.c_str());
+    fflush(stdout);
 }

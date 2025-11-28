@@ -126,6 +126,9 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo& info)
         SetupVideoCallbacks();
     }
 
+    // Initialize default keyboard shortcuts
+    InitializeDefaultShortcuts();
+
     SetupEventCallbacks();
 }
 
@@ -164,6 +167,7 @@ void VlcPlayer::SetupEventCallbacks() {
         libvlc_event_attach(event_manager_, libvlc_MediaPlayerEndReached, HandleEndReached, this);
         libvlc_event_attach(event_manager_, libvlc_MediaPlayerEncounteredError, HandleError, this);
         libvlc_event_attach(event_manager_, libvlc_MediaPlayerLengthChanged, HandleLengthChanged, this);
+        libvlc_event_attach(event_manager_, libvlc_MediaPlayerBuffering, HandleBuffering, this);
     }
 }
 
@@ -176,6 +180,7 @@ void VlcPlayer::CleanupEventCallbacks() {
         libvlc_event_detach(event_manager_, libvlc_MediaPlayerEndReached, HandleEndReached, this);
         libvlc_event_detach(event_manager_, libvlc_MediaPlayerEncounteredError, HandleError, this);
         libvlc_event_detach(event_manager_, libvlc_MediaPlayerLengthChanged, HandleLengthChanged, this);
+        libvlc_event_detach(event_manager_, libvlc_MediaPlayerBuffering, HandleBuffering, this);
         event_manager_ = nullptr;
     }
 
@@ -214,13 +219,28 @@ void VlcPlayer::HandleTimeChanged(const libvlc_event_t* event, void* data) {
     if (player->disposed_ || !player->tsfn_events_) return;
 
     int64_t time = event->u.media_player_time_changed.new_time;
-    
-    player->tsfn_events_.NonBlockingCall([time](Napi::Env env, Napi::Function callback) {
+
+    player->tsfn_events_.NonBlockingCall([player, time](Napi::Env env, Napi::Function callback) {
+        if (player->disposed_ || !player->media_player_) return;
+
         Napi::Object payload = Napi::Object::New(env);
         Napi::Object currentVideo = Napi::Object::New(env);
+
+        // Time
         currentVideo.Set("time", Napi::Number::New(env, static_cast<double>(time)));
+
+        // Position (normalized 0.0 - 1.0)
+        float position = libvlc_media_player_get_position(player->media_player_);
+        currentVideo.Set("position", Napi::Number::New(env, position));
+
+        // Buffering progress (only if currently buffering)
+        libvlc_state_t state = libvlc_media_player_get_state(player->media_player_);
+        if (state == libvlc_Buffering) {
+            float bufferingProgress = player->buffering_progress_.load();
+            currentVideo.Set("buffering", Napi::Number::New(env, bufferingProgress));
+        }
+
         payload.Set("currentVideo", currentVideo);
-        
         callback.Call({payload});
     });
 }
@@ -284,11 +304,73 @@ void VlcPlayer::HandleLengthChanged(const libvlc_event_t* event, void* data) {
         if (player->disposed_ || !player->media_player_) return;
 
         Napi::Object payload = Napi::Object::New(env);
+
+        // Media Info (tracks, duration, etc.)
         Napi::Object mediaInfo = player->GetMediaInfoObject(env);
         payload.Set("mediaInfo", mediaInfo);
 
+        // Current Video State (initial values for all video-specific settings)
+        Napi::Object currentVideo = Napi::Object::New(env);
+
+        // Length
+        int64_t length = libvlc_media_player_get_length(player->media_player_);
+        currentVideo.Set("length", Napi::Number::New(env, static_cast<double>(length)));
+
+        // Rate
+        float rate = libvlc_media_player_get_rate(player->media_player_);
+        currentVideo.Set("rate", Napi::Number::New(env, rate));
+
+        // Is Seekable
+        bool seekable = libvlc_media_player_is_seekable(player->media_player_);
+        currentVideo.Set("isSeekable", Napi::Boolean::New(env, seekable));
+
+        // Position (initial 0.0)
+        currentVideo.Set("position", Napi::Number::New(env, 0.0));
+
+        // Video settings
+        const char* aspect = libvlc_video_get_aspect_ratio(player->media_player_);
+        if (aspect) {
+            currentVideo.Set("aspectRatio", Napi::String::New(env, aspect));
+        } else {
+            currentVideo.Set("aspectRatio", env.Null());
+        }
+
+        const char* crop = libvlc_video_get_crop_geometry(player->media_player_);
+        if (crop) {
+            currentVideo.Set("crop", Napi::String::New(env, crop));
+        } else {
+            currentVideo.Set("crop", env.Null());
+        }
+
+        float scale = libvlc_video_get_scale(player->media_player_);
+        currentVideo.Set("scale", Napi::Number::New(env, scale));
+
+        // Note: libvlc doesn't have get_deinterlace, we'll emit null initially
+        currentVideo.Set("deinterlace", env.Null());
+
+        // Delay settings
+        int64_t audioDelay = libvlc_audio_get_delay(player->media_player_);
+        currentVideo.Set("audioDelay", Napi::Number::New(env, static_cast<double>(audioDelay)));
+
+        int64_t subtitleDelay = libvlc_video_get_spu_delay(player->media_player_);
+        currentVideo.Set("subtitleDelay", Napi::Number::New(env, static_cast<double>(subtitleDelay)));
+
+        payload.Set("currentVideo", currentVideo);
+
         callback.Call({payload});
     });
+}
+
+void VlcPlayer::HandleBuffering(const libvlc_event_t* event, void* data) {
+    VlcPlayer* player = static_cast<VlcPlayer*>(data);
+    if (player->disposed_) return;
+
+    // Store buffering progress
+    float cache = event->u.media_player_buffering.new_cache;
+    player->buffering_progress_.store(cache);
+
+    // Note: We don't emit buffering here separately
+    // It will be sent with the next TimeChanged event if state is buffering
 }
 
 // Cleanup
