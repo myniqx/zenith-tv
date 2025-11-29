@@ -79,7 +79,6 @@ contextBridge.exposeInMainWorld('electron', {
     window: (options) => ipcRenderer.invoke('vlc:window', options),
     shortcut: (options) => ipcRenderer.invoke('vlc:shortcut', options),
     getMediaInfo: () => ipcRenderer.invoke('vlc:getMediaInfo'),
-    getPlayerInfo: () => ipcRenderer.invoke('vlc:getPlayerInfo'),
 
     // Unified event listener
     onEvent: (callback) => ipcRenderer.on('vlc:event', (_, eventData) => callback(eventData)),

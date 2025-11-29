@@ -184,12 +184,6 @@ function handleMessage(message) {
         sendLog('debug', 'GetMediaInfo called');
         break;
 
-      case 'getPlayerInfo':
-        if (!player) throw new Error('Player not initialized');
-        result = player.getPlayerInfo();
-        sendLog('debug', 'GetPlayerInfo called');
-        break;
-
       default:
         throw new Error(`Unknown method: ${method}`);
     }

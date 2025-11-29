@@ -1,28 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { ShortcutAction } from '@/types/types';
 
 export type Theme = 'dark' | 'light' | 'system';
 export type Language = 'en' | 'tr';
 export type BufferSize = 5 | 10 | 15 | 30;
 export type PlayerBackend = 'html5' | 'vlc' | 'auto';
-
-export interface KeyboardShortcuts {
-  // Player
-  playPause: string;
-  seekForward: string;
-  seekBackward: string;
-  seekForwardSmall: string;
-  seekBackwardSmall: string;
-  volumeUp: string;
-  volumeDown: string;
-  toggleMute: string;
-  toggleFullscreen: string;
-  exitFullscreen: string;
-  // Navigation
-  openSearch: string;
-  openSettings: string;
-  openProfileManager: string;
-}
 
 interface SettingsState {
   // Appearance
@@ -45,8 +28,8 @@ interface SettingsState {
   lastProfileUUID: string | null;
 
 
-  // Keyboard Shortcuts
-  keyboardShortcuts: KeyboardShortcuts;
+  // Keyboard Shortcuts (ShortcutAction -> string[])
+  keyboardShortcuts: Record<ShortcutAction, string[]>;
 
   // TODO: Enable when P2P is ready
   deviceName: string;
@@ -64,29 +47,41 @@ interface SettingsState {
   setAutoLoadLastProfile: (enabled: boolean) => void;
   setRememberLayout: (enabled: boolean) => void;
   setLastProfile: (username: string, uuid: string) => void;
-  setKeyboardShortcut: (action: keyof KeyboardShortcuts, key: string) => void;
+
+  // Shortcut management
+  setKeyboardShortcut: (action: ShortcutAction, keys: string[]) => void;
+  addKeyToShortcut: (action: ShortcutAction, key: string) => void;
+  removeKeyFromShortcut: (action: ShortcutAction, key: string) => void;
+  getAllShortcuts: () => Record<ShortcutAction, string[]>;
   resetKeyboardShortcuts: () => void;
+
   setDeviceName: (name: string) => void;
   setServerPort: (port: number) => void;
   resetSettings: () => void;
 }
 
-export const defaultKeyboardShortcuts: KeyboardShortcuts = {
-  // Player
-  playPause: 'Space',
-  seekForward: 'ArrowRight',
-  seekBackward: 'ArrowLeft',
-  seekForwardSmall: 'shift+ArrowRight',
-  seekBackwardSmall: 'shift+ArrowLeft',
-  volumeUp: 'ArrowUp',
-  volumeDown: 'ArrowDown',
-  toggleMute: 'KeyM',
-  toggleFullscreen: 'KeyF',
-  exitFullscreen: 'Escape',
-  // Navigation
-  openSearch: 'ctrl+KeyF',
-  openSettings: 'ctrl+Comma',
-  openProfileManager: 'ctrl+KeyP',
+export const defaultKeyboardShortcuts: Record<ShortcutAction, string[]> = {
+  // Player controls
+  playPause: ['Space', 'KeyK'],
+  stop: ['KeyS'],
+  seekForward: ['ArrowRight'],
+  seekBackward: ['ArrowLeft'],
+  seekForwardSmall: ['shift+ArrowRight'],
+  seekBackwardSmall: ['shift+ArrowLeft'],
+  volumeUp: ['ArrowUp', 'MouseWheelUp'],
+  volumeDown: ['ArrowDown', 'MouseWheelDown'],
+  toggleMute: ['KeyM'],
+
+  // Screen modes
+  toggleFullscreen: ['KeyF', 'F11'],
+  exitFullscreen: ['Escape'],
+  stickyMode: ['KeyT'],
+  freeScreenMode: ['KeyQ'],
+
+  // Subtitle controls
+  subtitleDelayPlus: ['KeyH'],
+  subtitleDelayMinus: ['KeyG'],
+  subtitleDisable: ['KeyV'],
 };
 
 const defaultSettings = {
@@ -108,7 +103,7 @@ const defaultSettings = {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...defaultSettings,
 
       setTheme: (theme) => set({ theme }),
@@ -129,13 +124,52 @@ export const useSettingsStore = create<SettingsState>()(
 
       setLastProfile: (username: string, uuid: string) => set({ lastProfileUsername: username, lastProfileUUID: uuid }),
 
-      setKeyboardShortcut: (action, key) =>
+      // Set all keys for an action (replaces existing keys)
+      setKeyboardShortcut: (action, keys) =>
         set((state) => ({
           keyboardShortcuts: {
             ...state.keyboardShortcuts,
-            [action]: key,
+            [action]: keys,
           },
         })),
+
+      // Add a key to an action (max 2 keys, removes duplicate from other actions)
+      addKeyToShortcut: (action, key) =>
+        set((state) => {
+          const newShortcuts = { ...state.keyboardShortcuts };
+
+          // Remove key from any other action that has it
+          Object.entries(newShortcuts).forEach(([otherAction, keys]) => {
+            if (otherAction !== action && keys.includes(key)) {
+              newShortcuts[otherAction as ShortcutAction] = keys.filter(k => k !== key);
+            }
+          });
+
+          // Add key to target action (max 2 keys)
+          const currentKeys = newShortcuts[action] || [];
+          if (!currentKeys.includes(key)) {
+            if (currentKeys.length >= 2) {
+              // Replace the second key if we already have 2
+              newShortcuts[action] = [currentKeys[0], key];
+            } else {
+              newShortcuts[action] = [...currentKeys, key];
+            }
+          }
+
+          return { keyboardShortcuts: newShortcuts };
+        }),
+
+      // Remove a key from an action
+      removeKeyFromShortcut: (action, key) =>
+        set((state) => ({
+          keyboardShortcuts: {
+            ...state.keyboardShortcuts,
+            [action]: state.keyboardShortcuts[action].filter(k => k !== key),
+          },
+        })),
+
+      // Get all shortcuts (for exporting to VLC player)
+      getAllShortcuts: () => get().keyboardShortcuts,
 
       resetKeyboardShortcuts: () =>
         set({ keyboardShortcuts: defaultKeyboardShortcuts }),

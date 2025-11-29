@@ -34,7 +34,6 @@ declare global {
         window: (options: WindowOptions) => Promise<boolean>;
         shortcut: (options: ShortcutOptions) => Promise<void>;
         getMediaInfo: () => Promise<MediaInfo | null>;
-        getPlayerInfo: () => Promise<PlayerInfo | null>;
 
         // Unified event listener
         onEvent: (callback: (eventData: VlcEventData) => void) => void;

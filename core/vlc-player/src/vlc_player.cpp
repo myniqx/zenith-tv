@@ -11,7 +11,6 @@ Napi::Object VlcPlayer::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("window", &VlcPlayer::Window),
         InstanceMethod("shortcut", &VlcPlayer::Shortcut),
         InstanceMethod("getMediaInfo", &VlcPlayer::GetMediaInfo),
-        InstanceMethod("getPlayerInfo", &VlcPlayer::GetPlayerInfo),
 
         // Events
         InstanceMethod("setEventCallback", &VlcPlayer::SetEventCallback),
@@ -37,6 +36,7 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo& info)
       vlc_instance_(nullptr),
       media_player_(nullptr),
       current_media_(nullptr),
+      rendering_mode_("win"), // Default to window mode
 #ifdef _WIN32
       child_hwnd_(nullptr),
       parent_hwnd_(nullptr),
@@ -53,7 +53,6 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo& info)
       video_height_(0),
       video_pitch_(0),
       frame_ready_(false),
-      rendering_mode_("win"), // Default to window mode
       event_manager_(nullptr) {
 
     Napi::Env env = info.Env();
@@ -216,15 +215,12 @@ Napi::Value VlcPlayer::SetEventCallback(const Napi::CallbackInfo& info) {
 // Static event handlers
 void VlcPlayer::HandleTimeChanged(const libvlc_event_t* event, void* data) {
     VlcPlayer* player = static_cast<VlcPlayer*>(data);
-    if (player->disposed_ || !player->tsfn_events_) return;
+    if (player->disposed_ || !player->media_player_) return;
 
     int64_t time = event->u.media_player_time_changed.new_time;
 
-    player->tsfn_events_.NonBlockingCall([player, time](Napi::Env env, Napi::Function callback) {
+    player->EmitCurrentVideo([player, time](Napi::Env env, Napi::Object& currentVideo) {
         if (player->disposed_ || !player->media_player_) return;
-
-        Napi::Object payload = Napi::Object::New(env);
-        Napi::Object currentVideo = Napi::Object::New(env);
 
         // Time
         currentVideo.Set("time", Napi::Number::New(env, static_cast<double>(time)));
@@ -239,15 +235,12 @@ void VlcPlayer::HandleTimeChanged(const libvlc_event_t* event, void* data) {
             float bufferingProgress = player->buffering_progress_.load();
             currentVideo.Set("buffering", Napi::Number::New(env, bufferingProgress));
         }
-
-        payload.Set("currentVideo", currentVideo);
-        callback.Call({payload});
     });
 }
 
 void VlcPlayer::HandleStateChanged(const libvlc_event_t* event, void* data) {
     VlcPlayer* player = static_cast<VlcPlayer*>(data);
-    if (player->disposed_ || !player->tsfn_events_) return;
+    if (player->disposed_) return;
 
     std::string state;
     switch (event->type) {
@@ -257,42 +250,27 @@ void VlcPlayer::HandleStateChanged(const libvlc_event_t* event, void* data) {
         default: state = "unknown"; break;
     }
 
-    player->tsfn_events_.NonBlockingCall([state](Napi::Env env, Napi::Function callback) {
-        Napi::Object payload = Napi::Object::New(env);
-        Napi::Object currentVideo = Napi::Object::New(env);
+    player->EmitCurrentVideo([state](Napi::Env env, Napi::Object& currentVideo) {
         currentVideo.Set("state", Napi::String::New(env, state));
-        payload.Set("currentVideo", currentVideo);
-
-        callback.Call({payload});
     });
 }
 
 void VlcPlayer::HandleEndReached(const libvlc_event_t* event, void* data) {
     VlcPlayer* player = static_cast<VlcPlayer*>(data);
-    if (player->disposed_ || !player->tsfn_events_) return;
+    if (player->disposed_) return;
 
-    player->tsfn_events_.NonBlockingCall([](Napi::Env env, Napi::Function callback) {
-        Napi::Object payload = Napi::Object::New(env);
-        Napi::Object currentVideo = Napi::Object::New(env);
+    player->EmitCurrentVideo([](Napi::Env env, Napi::Object& currentVideo) {
         currentVideo.Set("endReached", Napi::Boolean::New(env, true));
         currentVideo.Set("state", Napi::String::New(env, "ended"));
-        payload.Set("currentVideo", currentVideo);
-
-        callback.Call({payload});
     });
 }
 
 void VlcPlayer::HandleError(const libvlc_event_t* event, void* data) {
     VlcPlayer* player = static_cast<VlcPlayer*>(data);
-    if (player->disposed_ || !player->tsfn_events_) return;
+    if (player->disposed_) return;
 
-    player->tsfn_events_.NonBlockingCall([](Napi::Env env, Napi::Function callback) {
-        Napi::Object payload = Napi::Object::New(env);
-        Napi::Object currentVideo = Napi::Object::New(env);
+    player->EmitCurrentVideo([](Napi::Env env, Napi::Object& currentVideo) {
         currentVideo.Set("error", Napi::String::New(env, "Playback error occurred"));
-        payload.Set("currentVideo", currentVideo);
-
-        callback.Call({payload});
     });
 }
 
@@ -309,16 +287,19 @@ void VlcPlayer::HandleLengthChanged(const libvlc_event_t* event, void* data) {
         Napi::Object mediaInfo = player->GetMediaInfoObject(env);
         payload.Set("mediaInfo", mediaInfo);
 
+        // Player Settings (persistent across videos)
+        Napi::Object playerInfo = Napi::Object::New(env);
+        playerInfo.Set("volume", Napi::Number::New(env, libvlc_audio_get_volume(player->media_player_)));
+        playerInfo.Set("muted", Napi::Boolean::New(env, libvlc_audio_get_mute(player->media_player_)));
+        playerInfo.Set("rate", Napi::Number::New(env, libvlc_media_player_get_rate(player->media_player_)));
+        payload.Set("playerInfo", playerInfo);
+
         // Current Video State (initial values for all video-specific settings)
         Napi::Object currentVideo = Napi::Object::New(env);
 
         // Length
         int64_t length = libvlc_media_player_get_length(player->media_player_);
         currentVideo.Set("length", Napi::Number::New(env, static_cast<double>(length)));
-
-        // Rate
-        float rate = libvlc_media_player_get_rate(player->media_player_);
-        currentVideo.Set("rate", Napi::Number::New(env, rate));
 
         // Is Seekable
         bool seekable = libvlc_media_player_is_seekable(player->media_player_);
@@ -345,7 +326,6 @@ void VlcPlayer::HandleLengthChanged(const libvlc_event_t* event, void* data) {
         float scale = libvlc_video_get_scale(player->media_player_);
         currentVideo.Set("scale", Napi::Number::New(env, scale));
 
-        // Note: libvlc doesn't have get_deinterlace, we'll emit null initially
         currentVideo.Set("deinterlace", env.Null());
 
         // Delay settings
@@ -354,6 +334,11 @@ void VlcPlayer::HandleLengthChanged(const libvlc_event_t* event, void* data) {
 
         int64_t subtitleDelay = libvlc_video_get_spu_delay(player->media_player_);
         currentVideo.Set("subtitleDelay", Napi::Number::New(env, static_cast<double>(subtitleDelay)));
+
+        // Current tracks (per-video selection)
+        currentVideo.Set("audioTrack", Napi::Number::New(env, libvlc_audio_get_track(player->media_player_)));
+        currentVideo.Set("subtitleTrack", Napi::Number::New(env, libvlc_video_get_spu(player->media_player_)));
+        currentVideo.Set("videoTrack", Napi::Number::New(env, libvlc_video_get_track(player->media_player_)));
 
         payload.Set("currentVideo", currentVideo);
 

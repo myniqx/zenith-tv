@@ -4,6 +4,14 @@
 #include <windows.h>
 
 // =================================================================================================
+// Windows Constants
+// =================================================================================================
+
+// Window styles
+constexpr DWORD WS_STANDARD = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+constexpr DWORD WS_FULLSCREEN = WS_POPUP | WS_VISIBLE;
+
+// =================================================================================================
 // Windows Keyboard Hook
 // =================================================================================================
 
@@ -82,19 +90,91 @@ static std::string VKeyToKeyCode(WPARAM vkey) {
     }
 }
 
-// Window procedure for handling keyboard events
+// Window procedure for handling all events
 static LRESULT CALLBACK VlcWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     // Retrieve the VlcPlayer instance from window user data
     VlcPlayer* player = reinterpret_cast<VlcPlayer*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 
-    if (msg == WM_KEYDOWN) {
-        std::string keyCode = VKeyToKeyCode(wParam);
-        if (!keyCode.empty() && player) {
-            printf("[VLC] Win32 WM_KEYDOWN: VKey=0x%02llX, Code=%s\n", wParam, keyCode.c_str());
-            fflush(stdout);
-            player->ProcessKeyPress(keyCode);
+    switch (msg) {
+        case WM_KEYDOWN: {
+            std::string keyCode = VKeyToKeyCode(wParam);
+            if (!keyCode.empty() && player) {
+                player->ProcessKeyPress(keyCode);
+            }
+            return 0;
         }
-        return 0;
+
+        case WM_LBUTTONDOWN:
+            if (player) {
+                player->ProcessKeyPress("MouseLeft");
+            }
+            return 0;
+
+        case WM_MBUTTONDOWN:
+            if (player) {
+                player->ProcessKeyPress("MouseMiddle");
+            }
+            return 0;
+
+        case WM_RBUTTONDOWN:
+            if (player) {
+                // TODO: Show context menu when implemented
+                // For now, treat as right-click action
+                player->ProcessKeyPress("MouseRight");
+            }
+            return 0;
+
+        case WM_MOUSEWHEEL: {
+            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            if (player) {
+                if (delta > 0) {
+                    player->ProcessKeyPress("MouseWheelUp");
+                } else if (delta < 0) {
+                    player->ProcessKeyPress("MouseWheelDown");
+                }
+            }
+            return 0;
+        }
+
+        case WM_CLOSE:
+            // Close button clicked - emit stop but don't close window
+            if (player) {
+                player->EmitShortcut("stop");
+            }
+            return 0;
+
+        case WM_SIZE: {
+            if (player && wParam == SIZE_MINIMIZED) {
+                // Window minimized - smart pause
+                bool is_playing = libvlc_media_player_is_playing(player->media_player_);
+                player->was_playing_before_minimize_ = is_playing;
+
+                if (is_playing) {
+                    libvlc_media_player_pause(player->media_player_);
+                }
+            } else if (player && wParam == SIZE_RESTORED) {
+                // Window restored - smart resume
+                if (player->was_playing_before_minimize_) {
+                    libvlc_media_player_play(player->media_player_);
+                    player->was_playing_before_minimize_ = false;
+                }
+            }
+            break;
+        }
+
+        case WM_GETMINMAXINFO: {
+            if (player && (player->min_width_ > 0 || player->min_height_ > 0)) {
+                MINMAXINFO* mmi = (MINMAXINFO*)lParam;
+                if (player->min_width_ > 0) {
+                    mmi->ptMinTrackSize.x = player->min_width_;
+                }
+                if (player->min_height_ > 0) {
+                    mmi->ptMinTrackSize.y = player->min_height_;
+                }
+                return 0;
+            }
+            break;
+        }
     }
 
     // Default window procedure
@@ -107,13 +187,10 @@ static LRESULT CALLBACK VlcWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
 
 void VlcPlayer::CreateChildWindowInternal(int width, int height) {
     if (child_window_created_) {
-        return; // Already created
+        return;
     }
 
-    printf("[VLC] Creating child window: %dx%d\n", width, height);
-    fflush(stdout);
-
-    // Register custom window class with keyboard handling
+    // Register custom window class
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(WNDCLASSEXW);
     wc.lpfnWndProc = VlcWindowProc;
@@ -122,58 +199,50 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
     wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
 
-    // Register class (ignore error if already registered)
     RegisterClassExW(&wc);
 
-    // For Windows, we create a standalone top-level window (not child of Electron)
-    // This allows independent window management
     child_hwnd_ = CreateWindowExW(
         WS_EX_APPWINDOW | WS_EX_WINDOWEDGE,
-        L"VLCPlayerWindow",  // Use our custom class
+        L"VLCPlayerWindow",
         L"VLC Player",
-        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+        WS_STANDARD,
         CW_USEDEFAULT, CW_USEDEFAULT,
         width, height,
-        NULL,  // No parent (standalone)
+        NULL,
         NULL,
         GetModuleHandle(NULL),
         NULL
     );
 
-    if (child_hwnd_) {
-        // Store 'this' pointer in window user data for WndProc callback
-        SetWindowLongPtr(child_hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
-
-        libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
-        child_window_created_ = true;
-
-        // Initialize window state
-        RECT rect;
-        GetWindowRect(child_hwnd_, &rect);
-        saved_window_state_.x = rect.left;
-        saved_window_state_.y = rect.top;
-        saved_window_state_.width = rect.right - rect.left;
-        saved_window_state_.height = rect.bottom - rect.top;
-        saved_window_state_.has_border = true;
-        saved_window_state_.has_titlebar = true;
-        saved_window_state_.is_resizable = true;
-        is_fullscreen_ = false;
-
-        printf("[VLC] Child window created: hwnd=%p\n", child_hwnd_);
-        fflush(stdout);
-    } else {
+    if (!child_hwnd_) {
         printf("[VLC] ERROR: Failed to create child window\n");
         fflush(stdout);
+        return;
     }
+
+    // Store 'this' pointer for WndProc callback
+    SetWindowLongPtr(child_hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+
+    libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
+    child_window_created_ = true;
+
+    // Initialize window state
+    RECT rect;
+    GetWindowRect(child_hwnd_, &rect);
+    saved_window_state_.x = rect.left;
+    saved_window_state_.y = rect.top;
+    saved_window_state_.width = rect.right - rect.left;
+    saved_window_state_.height = rect.bottom - rect.top;
+    saved_window_state_.has_border = true;
+    saved_window_state_.has_titlebar = true;
+    saved_window_state_.is_resizable = true;
+    is_fullscreen_ = false;
 }
 
 void VlcPlayer::DestroyChildWindowInternal() {
     if (!child_window_created_) {
         return;
     }
-
-    printf("[VLC] Destroying child window: hwnd=%p\n", child_hwnd_);
-    fflush(stdout);
 
     if (child_hwnd_) {
         DestroyWindow(child_hwnd_);
@@ -187,12 +256,8 @@ void VlcPlayer::DestroyChildWindowInternal() {
 void VlcPlayer::SetWindowBounds(int x, int y, int width, int height) {
     if (!child_window_created_ || !child_hwnd_) return;
 
-    printf("[VLC] SetWindowBounds: x=%d, y=%d, w=%d, h=%d\n", x, y, width, height);
-    fflush(stdout);
-
     SetWindowPos(child_hwnd_, NULL, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
 
-    // Update saved state if not in fullscreen
     if (!is_fullscreen_) {
         saved_window_state_.x = x;
         saved_window_state_.y = y;
@@ -204,17 +269,12 @@ void VlcPlayer::SetWindowBounds(int x, int y, int width, int height) {
 void VlcPlayer::SetWindowFullscreen(bool fullscreen) {
     if (!child_window_created_ || !child_hwnd_) return;
 
-    printf("[VLC] SetWindowFullscreen: %s\n", fullscreen ? "true" : "false");
-    fflush(stdout);
-
     if (fullscreen) {
-        // Get monitor info for fullscreen
         HMONITOR monitor = MonitorFromWindow(child_hwnd_, MONITOR_DEFAULTTONEAREST);
         MONITORINFO mi = { sizeof(mi) };
         GetMonitorInfo(monitor, &mi);
 
-        // Remove window decorations and maximize
-        SetWindowLongPtr(child_hwnd_, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+        SetWindowLongPtr(child_hwnd_, GWL_STYLE, WS_FULLSCREEN);
         SetWindowPos(
             child_hwnd_,
             HWND_TOP,
@@ -225,8 +285,7 @@ void VlcPlayer::SetWindowFullscreen(bool fullscreen) {
             SWP_FRAMECHANGED
         );
     } else {
-        // Restore window decorations
-        DWORD style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+        DWORD style = WS_STANDARD;
         if (!saved_window_state_.has_border) style &= ~WS_BORDER;
         if (!saved_window_state_.has_titlebar) style &= ~WS_CAPTION;
         if (!saved_window_state_.is_resizable) style &= ~WS_THICKFRAME;
@@ -247,9 +306,6 @@ void VlcPlayer::SetWindowFullscreen(bool fullscreen) {
 void VlcPlayer::SetWindowOnTop(bool onTop) {
     if (!child_window_created_ || !child_hwnd_) return;
 
-    printf("[VLC] SetWindowOnTop: %s\n", onTop ? "true" : "false");
-    fflush(stdout);
-
     SetWindowPos(
         child_hwnd_,
         onTop ? HWND_TOPMOST : HWND_NOTOPMOST,
@@ -261,17 +317,11 @@ void VlcPlayer::SetWindowOnTop(bool onTop) {
 void VlcPlayer::SetWindowVisible(bool visible) {
     if (!child_window_created_ || !child_hwnd_) return;
 
-    printf("[VLC] SetWindowVisible: %s\n", visible ? "true" : "false");
-    fflush(stdout);
-
     ::ShowWindow(child_hwnd_, visible ? SW_SHOW : SW_HIDE);
 }
 
 void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable, bool taskbar) {
     if (!child_window_created_ || !child_hwnd_) return;
-
-    printf("[VLC] SetWindowStyle: border=%d, titlebar=%d, resizable=%d, taskbar=%d\n", border, titlebar, resizable, taskbar);
-    fflush(stdout);
 
     DWORD style = WS_POPUP | WS_VISIBLE;
     if (border) style |= WS_BORDER;
@@ -298,12 +348,10 @@ void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable, bool 
 void VlcPlayer::SetWindowMinSizeInternal(int min_width, int min_height) {
     if (!child_window_created_ || !child_hwnd_) return;
 
-    printf("[VLC] SetWindowMinSizeInternal: min_width=%d, min_height=%d\n", min_width, min_height);
-    fflush(stdout);
+    min_width_ = min_width;
+    min_height_ = min_height;
 
-    // Note: Windows doesn't have a direct API for min/max size.
-    // This would need to be enforced in WM_GETMINMAXINFO message handler.
-    // For now, we just log it. Full implementation would require window procedure changes.
+    // WM_GETMINMAXINFO in WndProc will handle the actual constraint
 }
 
 void VlcPlayer::GetWindowBounds(WindowState* state) {

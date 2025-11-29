@@ -9,10 +9,7 @@ import type {
   VideoOptions,
   SubtitleOptions,
   WindowOptions,
-  MediaInfo,
-  PlayerInfo,
   ShortcutOptions,
-  ShortcutAction,
   VlcEventData,
 } from '../types/types';
 import { useSettingsStore } from './settings';
@@ -74,14 +71,13 @@ interface VlcPlayerState {
   subtitle: (options: SubtitleOptions) => Promise<void>;
   window: (options: WindowOptions) => Promise<boolean>;
   shortcut: (options: ShortcutOptions) => Promise<void>;
-  getMediaInfo: () => Promise<MediaInfo | null>;
-  getPlayerInfo: () => Promise<PlayerInfo | null>;
 
   // Internal helpers
   _setupEventListeners: () => void;
   _setupStickyMode: () => void;
   _cleanupStickyMode: () => void;
   _syncWindowBounds: (windowPos: { x: number; y: number; scaleFactor: number }) => void;
+  _setupVlcCore: () => void;
 
   // Helpers
   shouldStickyPanelVisible: () => boolean;
@@ -127,9 +123,25 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   deinterlace: null,
   audioDelay: 0,
   subtitleDelay: 0,
-  screenMode: 'sticky',
+  screenMode: 'free',
   stickyElement: null,
   wasPlayingBeforeMinimize: false,
+
+  _setupVlcCore: async () => {
+    // Register keyboard shortcuts from settings
+    const settings = useSettingsStore.getState();
+    const shortcuts = settings.getAllShortcuts();
+    const store = get();
+    await store.shortcut({ shortcuts });
+
+    await store.audio({
+      volume: store.volume,
+    });
+
+    await store.playback({
+      rate: store.rate,
+    });
+  },
 
   // Initialize VLC player and setup event listeners
   init: async () => {
@@ -168,7 +180,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     if (listenersInitialized) return;
 
     // Unified event handler
-    const handleVlcEvent = (eventData: VlcEventData) => {
+    const handleVlcEvent = async (eventData: VlcEventData) => {
       const state = get();
 
       // Handle MediaInfo updates
@@ -176,9 +188,6 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         console.log('[VLC] MediaInfo event received:', eventData.mediaInfo);
         const info = eventData.mediaInfo;
         const { preferredAudioLanguage, preferredSubtitleLanguage } = useSettingsStore.getState();
-
-        let audioTrackId = info.currentAudioTrack;
-        let subtitleTrackId = info.currentSubtitleTrack;
 
         // Helper to match track name with language
         const matchTrack = (trackName: string, language: string) => {
@@ -189,10 +198,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         if (preferredAudioLanguage) {
           const matchedAudio = info.audioTracks.find(t => matchTrack(t.name, preferredAudioLanguage));
           if (matchedAudio && matchedAudio.id !== -1) {
-            audioTrackId = matchedAudio.id;
-            if (audioTrackId !== info.currentAudioTrack) {
-              state.audio({ track: audioTrackId });
-            }
+            state.audio({ track: matchedAudio.id });
           }
         }
 
@@ -200,10 +206,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         if (preferredSubtitleLanguage) {
           const matchedSubtitle = info.subtitleTracks.find(t => matchTrack(t.name, preferredSubtitleLanguage));
           if (matchedSubtitle && matchedSubtitle.id !== -1) {
-            subtitleTrackId = matchedSubtitle.id;
-            if (subtitleTrackId !== info.currentSubtitleTrack) {
-              state.subtitle({ track: subtitleTrackId });
-            }
+            state.subtitle({ track: matchedSubtitle.id });
           }
         }
 
@@ -211,11 +214,12 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
           audioTracks: info.audioTracks,
           subtitleTracks: info.subtitleTracks,
           videoTracks: info.videoTracks,
-          currentAudioTrack: audioTrackId,
-          currentSubtitleTrack: subtitleTrackId,
-          currentVideoTrack: info.currentVideoTrack,
           duration: info.duration,
         });
+
+        // if this function is called, that means vlc is initialized for current video
+        // so register keyboard shortcuts from settings and etc.
+        await state._setupVlcCore();
       }
 
       // Handle PlayerInfo updates
@@ -225,6 +229,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
         if (eventData.playerInfo.volume !== undefined) updates.volume = eventData.playerInfo.volume;
         if (eventData.playerInfo.muted !== undefined) updates.isMuted = eventData.playerInfo.muted;
+        if (eventData.playerInfo.rate !== undefined) updates.rate = eventData.playerInfo.rate;
 
         if (Object.keys(updates).length > 0) {
           set(updates);
@@ -244,15 +249,9 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         // State updates
         if (cv.state !== undefined) {
           updates.playerState = cv.state as VlcState;
-
-          // Auto-fetch info when playing starts
-          if (cv.state === 'playing') {
-            state.getMediaInfo();
-          }
         }
 
         // Playback info
-        if (cv.rate !== undefined) updates.rate = cv.rate;
         if (cv.isSeekable !== undefined) updates.isSeekable = cv.isSeekable;
         if (cv.length !== undefined) updates.duration = cv.length;
 
@@ -265,6 +264,11 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         // Delay settings
         if (cv.audioDelay !== undefined) updates.audioDelay = cv.audioDelay;
         if (cv.subtitleDelay !== undefined) updates.subtitleDelay = cv.subtitleDelay;
+
+        // Track changes
+        if (cv.audioTrack !== undefined) updates.currentAudioTrack = cv.audioTrack;
+        if (cv.subtitleTrack !== undefined) updates.currentSubtitleTrack = cv.subtitleTrack;
+        if (cv.videoTrack !== undefined) updates.currentVideoTrack = cv.videoTrack;
 
         // End reached
         if (cv.endReached) {
@@ -300,7 +304,6 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
       scaleFactor: number;
       minimized: boolean
     }) => {
-      console.log('[VLC Sticky] Position changed:', data);
       const state = get();
 
       // Only handle if in sticky mode
@@ -437,13 +440,19 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     // Handle mode transitions
     switch (mode) {
       case 'fullscreen':
-        windowApi({ fullscreen: true }).catch(err => {
+        windowApi({ fullscreen: true, onTop: false }).catch(err => {
           console.error('[VLC] Failed to set fullscreen:', err);
         });
         break;
 
       case 'free':
-        windowApi({ fullscreen: false }).catch(err => {
+        windowApi({
+          fullscreen: false,
+          onTop: false,
+          style: {
+            border: true, titleBar: true, resizable: true, taskbar: true
+          }
+        }).catch(err => {
           console.error('[VLC] Failed to exit fullscreen:', err);
         });
         if (prevMode === 'sticky') {
@@ -552,68 +561,6 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     if (!isAvailable) return;
 
     await window.electron.vlc.shortcut(options);
-  },
-
-  // Get media info and update state
-  getMediaInfo: async (): Promise<MediaInfo | null> => {
-    const { isAvailable } = get();
-    if (!isAvailable) return null;
-
-    const info = await window.electron.vlc.getMediaInfo();
-    if (info) {
-      const { preferredAudioLanguage, preferredSubtitleLanguage } = useSettingsStore.getState();
-
-      let audioTrackId = info.currentAudioTrack;
-      let subtitleTrackId = info.currentSubtitleTrack;
-
-      // Helper to match track name with language
-      const matchTrack = (trackName: string, language: string) => {
-        return trackName.toLowerCase().includes(language.toLowerCase());
-      };
-
-      // Auto-select audio track
-      if (preferredAudioLanguage) {
-        const matchedAudio = info.audioTracks.find(t => matchTrack(t.name, preferredAudioLanguage));
-        if (matchedAudio && matchedAudio.id !== -1) {
-          audioTrackId = matchedAudio.id;
-          // Apply selection if different from current
-          if (audioTrackId !== info.currentAudioTrack) {
-            get().audio({ track: audioTrackId });
-          }
-        }
-      }
-
-      // Auto-select subtitle track
-      if (preferredSubtitleLanguage) {
-        const matchedSubtitle = info.subtitleTracks.find(t => matchTrack(t.name, preferredSubtitleLanguage));
-        if (matchedSubtitle && matchedSubtitle.id !== -1) {
-          subtitleTrackId = matchedSubtitle.id;
-          // Apply selection if different from current
-          if (subtitleTrackId !== info.currentSubtitleTrack) {
-            get().subtitle({ track: subtitleTrackId });
-          }
-        }
-      }
-
-      set({
-        audioTracks: info.audioTracks,
-        subtitleTracks: info.subtitleTracks,
-        videoTracks: info.videoTracks,
-        currentAudioTrack: audioTrackId,
-        currentSubtitleTrack: subtitleTrackId,
-        currentVideoTrack: info.currentVideoTrack,
-        duration: info.duration,
-      });
-    }
-    return info;
-  },
-
-  // Get player info
-  getPlayerInfo: async (): Promise<PlayerInfo | null> => {
-    const { isAvailable } = get();
-    if (!isAvailable) return null;
-
-    return await window.electron.vlc.getPlayerInfo();
   },
 
   // Helper: Check if sticky panel should be visible

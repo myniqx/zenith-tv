@@ -93,7 +93,7 @@ export type ShortcutAction =
   | 'subtitleDisable';
 
 export interface ShortcutOptions {
-  shortcuts: Record<ShortcutAction, string | string[]>; // { "playPause": ["Space", "KeyK"], "volumeUp": ["ArrowUp"] }
+  shortcuts: Record<ShortcutAction, string[]>; // { "playPause": ["Space", "KeyK"], "volumeUp": ["ArrowUp"] }
 }
 
 // Unified API Response Types
@@ -103,16 +103,6 @@ export interface MediaInfo {
   audioTracks: VlcTrack[];
   subtitleTracks: VlcTrack[];
   videoTracks: VlcTrack[];
-  currentAudioTrack: number;
-  currentSubtitleTrack: number;
-  currentVideoTrack: number;
-}
-
-export interface PlayerInfo {
-  time: number;
-  length: number;
-  state: VlcState;
-  isPlaying: boolean;
 }
 
 export interface PlayerSettings {
@@ -130,7 +120,6 @@ export interface CurrentVideoState {
   length?: number;
   position?: number;           // 0.0 - 1.0 (normalized position)
   buffering?: number;          // 0.0 - 100.0 (buffering progress, only when buffering)
-  rate?: number;               // Playback rate (1.0 = normal)
   isSeekable?: boolean;        // Real-time seekability
 
   // Video settings (set on video load + when changed)
@@ -142,6 +131,11 @@ export interface CurrentVideoState {
   // Delay settings (absolute values in microseconds)
   audioDelay?: number;
   subtitleDelay?: number;
+
+  // Current tracks (per-video selection)
+  audioTrack?: number;
+  subtitleTrack?: number;
+  videoTrack?: number;
 }
 
 // Unified Event Data Structure
@@ -199,6 +193,4 @@ export interface UseVlcPlayerReturn {
   subtitle: (options: SubtitleOptions) => Promise<void>;
   window: (options: WindowOptions) => Promise<boolean>;
   shortcut: (options: ShortcutOptions) => Promise<void>;
-  getMediaInfo: () => Promise<MediaInfo | null>;
-  getPlayerInfo: () => Promise<PlayerInfo | null>;
 }

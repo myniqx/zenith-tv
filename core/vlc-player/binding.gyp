@@ -6,7 +6,14 @@
       "cflags_cc!": ["-fno-exceptions"],
       "sources": [
         "src/vlc_player.cpp",
-        "src/vlc_controls.cpp",
+        "src/vlc_callbacks.cpp",
+        "src/vlc_playback.cpp",
+        "src/vlc_audio.cpp",
+        "src/vlc_video.cpp",
+        "src/vlc_subtitle.cpp",
+        "src/vlc_window.cpp",
+        "src/vlc_info.cpp",
+        "src/vlc_shortcuts.cpp",
         "src/vlc_vmem.cpp",
         "src/vlc_context_menu.cpp",
         "src/vlc_context_menu_actions.cpp"

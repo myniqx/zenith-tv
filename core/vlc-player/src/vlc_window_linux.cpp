@@ -4,6 +4,25 @@
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <thread>
+#include <vector>
+
+// =================================================================================================
+// X11 Constants
+// =================================================================================================
+
+// Motif Window Manager Hints
+constexpr unsigned long MWM_HINTS_DECORATIONS = 2;
+constexpr unsigned long MWM_DECOR_BORDER = (1L << 1);
+constexpr unsigned long MWM_DECOR_RESIZEH = (1L << 2);
+constexpr unsigned long MWM_DECOR_TITLE = (1L << 3);
+
+// Window Manager States
+constexpr long WM_STATE_NORMAL = 1;
+constexpr long WM_STATE_ICONIC = 3;
+
+// _NET_WM_STATE actions
+constexpr long NET_WM_STATE_REMOVE = 0;
+constexpr long NET_WM_STATE_ADD = 1;
 
 // =================================================================================================
 // Internal Window Management Methods
@@ -14,15 +33,9 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
         return; // Already created
     }
 
-    printf("[VLC] Creating child window: %dx%d\n", width, height);
-    fflush(stdout);
-
     // Connect to X11 display
     const char* display_name = getenv("DISPLAY");
-    printf("[VLC] CALL: XOpenDisplay(display='%s')\n", display_name ? display_name : ":0");
     display_ = XOpenDisplay(display_name);
-    printf("[VLC] RETURN: display=%p\n", (void*)display_);
-    fflush(stdout);
 
     if (!display_) {
         printf("[VLC] ERROR: XOpenDisplay failed\n");
@@ -31,7 +44,7 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
     }
 
     int screen = DefaultScreen(display_);
-    ::Window root = RootWindow(display_, screen);  // Use :: to avoid conflict with Window() method
+    ::Window root = RootWindow(display_, screen);
     Visual* visual = DefaultVisual(display_, screen);
     Colormap cmap = DefaultColormap(display_, screen);
 
@@ -40,9 +53,9 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
     attrs.colormap = cmap;
     attrs.background_pixel = BlackPixel(display_, screen);
     attrs.border_pixel = WhitePixel(display_, screen);
-    attrs.event_mask = ExposureMask | StructureNotifyMask | KeyPressMask | ButtonPressMask | ButtonReleaseMask;
+    attrs.event_mask = ExposureMask | StructureNotifyMask | KeyPressMask |
+                       ButtonPressMask | ButtonReleaseMask | PropertyChangeMask;
 
-    printf("[VLC] CALL: XCreateWindow(parent=root, x=100, y=100, w=%d, h=%d)\n", width, height);
     child_window_ = XCreateWindow(
         display_,
         root,
@@ -56,8 +69,6 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
         CWColormap | CWBackPixel | CWBorderPixel | CWEventMask,
         &attrs
     );
-    printf("[VLC] RETURN: child_window=0x%lx\n", child_window_);
-    fflush(stdout);
 
     if (!child_window_) {
         printf("[VLC] ERROR: XCreateWindow failed\n");
@@ -78,15 +89,20 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
         XFree(size_hints);
     }
 
-    Atom wm_delete_window = XInternAtom(display_, "WM_DELETE_WINDOW", False);
-    XSetWMProtocols(display_, child_window_, &wm_delete_window, 1);
+    // Cache frequently used atoms
+    wm_delete_window_atom_ = XInternAtom(display_, "WM_DELETE_WINDOW", False);
+    wm_state_atom_ = XInternAtom(display_, "_NET_WM_STATE", False);
+    wm_state_fullscreen_atom_ = XInternAtom(display_, "_NET_WM_STATE_FULLSCREEN", False);
+    wm_state_above_atom_ = XInternAtom(display_, "_NET_WM_STATE_ABOVE", False);
+    wm_state_skip_taskbar_atom_ = XInternAtom(display_, "_NET_WM_STATE_SKIP_TASKBAR", False);
+    motif_hints_atom_ = XInternAtom(display_, "_MOTIF_WM_HINTS", False);
 
-    printf("[VLC] CALL: XMapWindow(window=0x%lx)\n", child_window_);
+    XSetWMProtocols(display_, child_window_, &wm_delete_window_atom_, 1);
+
     XMapWindow(display_, child_window_);
     XRaiseWindow(display_, child_window_);
     XSync(display_, False);
     XFlush(display_);
-    fflush(stdout);
 
     // Set VLC to render on this window
     if (child_window_ <= UINT32_MAX) {
@@ -109,18 +125,12 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
     saved_window_state_.has_titlebar = true;
     saved_window_state_.is_resizable = true;
     is_fullscreen_ = false;
-
-    printf("[VLC] Child window created successfully\n");
-    fflush(stdout);
 }
 
 void VlcPlayer::DestroyChildWindowInternal() {
     if (!child_window_created_) {
         return;
     }
-
-    printf("[VLC] Destroying child window: window=0x%lx\n", child_window_);
-    fflush(stdout);
 
     // Stop event loop before destroying window
     StopEventLoop();
@@ -143,9 +153,6 @@ void VlcPlayer::DestroyChildWindowInternal() {
 void VlcPlayer::SetWindowBounds(int x, int y, int width, int height) {
     if (!child_window_created_ || !display_ || !child_window_) return;
 
-    printf("[VLC] SetWindowBounds: x=%d, y=%d, w=%d, h=%d\n", x, y, width, height);
-    fflush(stdout);
-
     XMoveResizeWindow(display_, child_window_, x, y,
                       static_cast<unsigned int>(width),
                       static_cast<unsigned int>(height));
@@ -160,23 +167,18 @@ void VlcPlayer::SetWindowBounds(int x, int y, int width, int height) {
     }
 }
 
-void VlcPlayer::SetWindowFullscreen(bool fullscreen) {
+// Helper function to send window state messages
+void VlcPlayer::SendWindowStateMessage(Atom state_atom, bool enable) {
     if (!child_window_created_ || !display_ || !child_window_) return;
-
-    printf("[VLC] SetWindowFullscreen: %s\n", fullscreen ? "true" : "false");
-    fflush(stdout);
-
-    Atom wm_state = XInternAtom(display_, "_NET_WM_STATE", False);
-    Atom wm_fullscreen = XInternAtom(display_, "_NET_WM_STATE_FULLSCREEN", False);
 
     XEvent xev;
     memset(&xev, 0, sizeof(xev));
     xev.type = ClientMessage;
     xev.xclient.window = child_window_;
-    xev.xclient.message_type = wm_state;
+    xev.xclient.message_type = wm_state_atom_;
     xev.xclient.format = 32;
-    xev.xclient.data.l[0] = fullscreen ? 1 : 0; // _NET_WM_STATE_ADD : _NET_WM_STATE_REMOVE
-    xev.xclient.data.l[1] = wm_fullscreen;
+    xev.xclient.data.l[0] = enable ? NET_WM_STATE_ADD : NET_WM_STATE_REMOVE;
+    xev.xclient.data.l[1] = state_atom;
     xev.xclient.data.l[2] = 0;
 
     XSendEvent(display_, DefaultRootWindow(display_), False,
@@ -184,35 +186,16 @@ void VlcPlayer::SetWindowFullscreen(bool fullscreen) {
     XFlush(display_);
 }
 
+void VlcPlayer::SetWindowFullscreen(bool fullscreen) {
+    SendWindowStateMessage(wm_state_fullscreen_atom_, fullscreen);
+}
+
 void VlcPlayer::SetWindowOnTop(bool onTop) {
-    if (!child_window_created_ || !display_ || !child_window_) return;
-
-    printf("[VLC] SetWindowOnTop: %s\n", onTop ? "true" : "false");
-    fflush(stdout);
-
-    Atom wm_state = XInternAtom(display_, "_NET_WM_STATE", False);
-    Atom wm_above = XInternAtom(display_, "_NET_WM_STATE_ABOVE", False);
-
-    XEvent xev;
-    memset(&xev, 0, sizeof(xev));
-    xev.type = ClientMessage;
-    xev.xclient.window = child_window_;
-    xev.xclient.message_type = wm_state;
-    xev.xclient.format = 32;
-    xev.xclient.data.l[0] = onTop ? 1 : 0;
-    xev.xclient.data.l[1] = wm_above;
-    xev.xclient.data.l[2] = 0;
-
-    XSendEvent(display_, DefaultRootWindow(display_), False,
-               SubstructureRedirectMask | SubstructureNotifyMask, &xev);
-    XFlush(display_);
+    SendWindowStateMessage(wm_state_above_atom_, onTop);
 }
 
 void VlcPlayer::SetWindowVisible(bool visible) {
     if (!child_window_created_ || !display_ || !child_window_) return;
-
-    printf("[VLC] SetWindowVisible: %s\n", visible ? "true" : "false");
-    fflush(stdout);
 
     if (visible) {
         XMapWindow(display_, child_window_);
@@ -225,12 +208,7 @@ void VlcPlayer::SetWindowVisible(bool visible) {
 void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable, bool taskbar) {
     if (!child_window_created_ || !display_ || !child_window_) return;
 
-    printf("[VLC] SetWindowStyle: border=%d, titlebar=%d, resizable=%d, taskbar=%d\n", border, titlebar, resizable, taskbar);
-    fflush(stdout);
-
     // Use Motif hints to control window decorations
-    Atom motif_hints = XInternAtom(display_, "_MOTIF_WM_HINTS", False);
-
     struct {
         unsigned long flags;
         unsigned long functions;
@@ -239,33 +217,29 @@ void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable, bool 
         unsigned long status;
     } hints;
 
-    hints.flags = 2; // MWM_HINTS_DECORATIONS
+    hints.flags = MWM_HINTS_DECORATIONS;
     hints.functions = 0;
     hints.decorations = 0;
     hints.input_mode = 0;
     hints.status = 0;
 
     if (border || titlebar) {
-        hints.decorations |= (1L << 1); // MWM_DECOR_BORDER
+        hints.decorations |= MWM_DECOR_BORDER;
     }
     if (titlebar) {
-        hints.decorations |= (1L << 3); // MWM_DECOR_TITLE
+        hints.decorations |= MWM_DECOR_TITLE;
     }
     if (resizable) {
-        hints.decorations |= (1L << 2); // MWM_DECOR_RESIZEH
+        hints.decorations |= MWM_DECOR_RESIZEH;
     }
 
-    XChangeProperty(display_, child_window_, motif_hints, motif_hints, 32,
+    XChangeProperty(display_, child_window_, motif_hints_atom_, motif_hints_atom_, 32,
                     PropModeReplace, (unsigned char*)&hints, 5);
 
     // Control taskbar visibility
-    Atom state_atom = XInternAtom(display_, "_NET_WM_STATE", False);
-    Atom skip_taskbar = XInternAtom(display_, "_NET_WM_STATE_SKIP_TASKBAR", False);
-
     if (!taskbar) {
-        // Add skip taskbar hint
-        XChangeProperty(display_, child_window_, state_atom, XA_ATOM, 32,
-                       PropModeAppend, (unsigned char*)&skip_taskbar, 1);
+        XChangeProperty(display_, child_window_, wm_state_atom_, XA_ATOM, 32,
+                       PropModeAppend, (unsigned char*)&wm_state_skip_taskbar_atom_, 1);
     } else {
         // Remove skip taskbar hint
         Atom* atoms = nullptr;
@@ -273,20 +247,23 @@ void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable, bool 
         int actual_format;
         unsigned long nitems, bytes_after;
 
-        if (XGetWindowProperty(display_, child_window_, state_atom, 0, 1024, False,
+        if (XGetWindowProperty(display_, child_window_, wm_state_atom_, 0, 1024, False,
                               XA_ATOM, &actual_type, &actual_format, &nitems,
                               &bytes_after, (unsigned char**)&atoms) == Success) {
             if (atoms) {
-                // Filter out skip_taskbar
-                Atom new_atoms[nitems];
-                int new_count = 0;
+                // Filter out skip_taskbar using std::vector (avoid VLA)
+                std::vector<Atom> new_atoms;
+                new_atoms.reserve(nitems);
+
                 for (unsigned long i = 0; i < nitems; i++) {
-                    if (atoms[i] != skip_taskbar) {
-                        new_atoms[new_count++] = atoms[i];
+                    if (atoms[i] != wm_state_skip_taskbar_atom_) {
+                        new_atoms.push_back(atoms[i]);
                     }
                 }
-                XChangeProperty(display_, child_window_, state_atom, XA_ATOM, 32,
-                               PropModeReplace, (unsigned char*)new_atoms, new_count);
+
+                XChangeProperty(display_, child_window_, wm_state_atom_, XA_ATOM, 32,
+                               PropModeReplace, (unsigned char*)new_atoms.data(),
+                               new_atoms.size());
                 XFree(atoms);
             }
         }
@@ -297,9 +274,6 @@ void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable, bool 
 
 void VlcPlayer::SetWindowMinSizeInternal(int min_width, int min_height) {
     if (!child_window_created_ || !display_ || !child_window_) return;
-
-    printf("[VLC] SetWindowMinSizeInternal: min_width=%d, min_height=%d\n", min_width, min_height);
-    fflush(stdout);
 
     XSizeHints* size_hints = XAllocSizeHints();
     if (size_hints) {
@@ -417,13 +391,11 @@ void VlcPlayer::StartEventLoop() {
     if (event_loop_running_) return;
     event_loop_running_ = true;
 
-    printf("[VLC] Starting X11 event loop thread\n");
-    fflush(stdout);
-
     std::thread([this]() {
         XEvent event;
+        Atom wm_state_property = XInternAtom(display_, "WM_STATE", False);
+
         while (event_loop_running_ && display_ && child_window_) {
-            // Check for pending events without blocking
             if (XPending(display_) > 0) {
                 XNextEvent(display_, &event);
 
@@ -432,47 +404,64 @@ void VlcPlayer::StartEventLoop() {
                     std::string keyCode = KeySymToKeyCode(keysym);
 
                     if (!keyCode.empty()) {
-                        printf("[VLC] X11 KeyPress: KeySym=0x%lx, Code=%s\n", keysym, keyCode.c_str());
-                        fflush(stdout);
-
-                        // Process through unified shortcut handler
                         ProcessKeyPress(keyCode);
                     }
                 } else if (event.type == ButtonPress) {
-                    // Mouse Left (Button1) -> playPause
                     if (event.xbutton.button == 1) {
-                        printf("[VLC] X11 Left-click detected\n");
-                        fflush(stdout);
                         ProcessKeyPress("MouseLeft");
-                    }
-                    // Mouse Middle (Button2) -> toggleFullscreen
-                    else if (event.xbutton.button == 2) {
-                        printf("[VLC] X11 Middle-click detected\n");
-                        fflush(stdout);
+                    } else if (event.xbutton.button == 2) {
                         ProcessKeyPress("MouseMiddle");
-                    }
-                    // Right-click (Button3) shows context menu
-                    else if (event.xbutton.button == 3) {
-                        printf("[VLC] X11 Right-click detected at (%d, %d)\n",
-                               event.xbutton.x_root, event.xbutton.y_root);
-                        fflush(stdout);
-
-                        // Show context menu at cursor position
+                    } else if (event.xbutton.button == 3) {
                         ShowContextMenu(event.xbutton.x_root, event.xbutton.y_root);
+                    } else if (event.xbutton.button == 4) {
+                        ProcessKeyPress("MouseWheelUp");
+                    } else if (event.xbutton.button == 5) {
+                        ProcessKeyPress("MouseWheelDown");
+                    }
+                } else if (event.type == ClientMessage) {
+                    if (event.xclient.data.l[0] == (long)wm_delete_window_atom_) {
+                        EmitShortcut("stop");
+                    }
+                } else if (event.type == PropertyNotify) {
+                    // Check for window state changes (minimize/restore)
+                    if (event.xproperty.atom == wm_state_property) {
+                        Atom actual_type;
+                        int actual_format;
+                        unsigned long nitems, bytes_after;
+                        unsigned char* prop_data = nullptr;
+
+                        if (XGetWindowProperty(display_, child_window_, wm_state_property, 0, 2, False,
+                                              wm_state_property, &actual_type, &actual_format, &nitems,
+                                              &bytes_after, &prop_data) == Success) {
+                            if (prop_data) {
+                                long state = *(long*)prop_data;
+
+                                if (state == WM_STATE_ICONIC) {
+                                    bool is_playing = libvlc_media_player_is_playing(media_player_);
+                                    was_playing_before_minimize_ = is_playing;
+
+                                    if (is_playing) {
+                                        libvlc_media_player_pause(media_player_);
+                                    }
+                                } else if (state == WM_STATE_NORMAL) {
+                                    if (was_playing_before_minimize_) {
+                                        libvlc_media_player_play(media_player_);
+                                        was_playing_before_minimize_ = false;
+                                    }
+                                }
+
+                                XFree(prop_data);
+                            }
+                        }
                     }
                 }
             } else {
-                // Sleep to avoid busy-waiting
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         }
-        printf("[VLC] X11 event loop thread exiting\n");
-        fflush(stdout);
     }).detach();
 }
 
 void VlcPlayer::StopEventLoop() {
     event_loop_running_ = false;
-    printf("[VLC] Stopping X11 event loop\n");
-    fflush(stdout);
 }

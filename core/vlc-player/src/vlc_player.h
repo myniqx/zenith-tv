@@ -47,13 +47,27 @@ public:
 #ifdef _WIN32
     HWND child_hwnd_;
     HWND parent_hwnd_;
+    std::atomic<bool> was_playing_before_minimize_{false};
+    int min_width_{0};
+    int min_height_{0};
 #elif defined(__linux__)
     Display* display_;
-    ::Window child_window_;  // Use :: to avoid conflict with Window() method
+    ::Window child_window_;
     ::Window parent_window_;
     std::atomic<bool> event_loop_running_{false};
+    std::atomic<bool> was_playing_before_minimize_{false};
+
+    // Cached X11 atoms (initialized in CreateChildWindowInternal)
+    Atom wm_delete_window_atom_;
+    Atom wm_state_atom_;
+    Atom wm_state_fullscreen_atom_;
+    Atom wm_state_above_atom_;
+    Atom wm_state_skip_taskbar_atom_;
+    Atom motif_hints_atom_;
+
     void StartEventLoop();
     void StopEventLoop();
+    void SendWindowStateMessage(Atom state_atom, bool enable);
 #elif defined(__APPLE__)
     void* child_nsview_;
     void* parent_nsview_;
@@ -91,32 +105,12 @@ private:
     Napi::Value Subtitle(const Napi::CallbackInfo& info);
     /**
      * Get comprehensive media information (tracks, duration, seekability)
-     * Returns: { duration, isSeekable, audioTracks, subtitleTracks, currentAudioTrack, currentSubtitleTrack }
+     * Returns: { duration, isSeekable, audioTracks, subtitleTracks, videoTracks }
      */
     Napi::Value GetMediaInfo(const Napi::CallbackInfo& info);
 
-    /**
-     * Get current player state information (time, length, state, isPlaying)
-     * Returns: { time, length, state, isPlaying }
-     */
-    Napi::Value GetPlayerInfo(const Napi::CallbackInfo& info);
-
     // Internal storage for media options (applied on Open)
     std::map<std::string, std::string> media_options_;
-
-    // Playback control setters (used by unified APIs)
-    Napi::Value Seek(const Napi::CallbackInfo& info);
-    Napi::Value SetVolume(const Napi::CallbackInfo& info);
-    Napi::Value SetMute(const Napi::CallbackInfo& info);
-    Napi::Value SetRate(const Napi::CallbackInfo& info);
-    Napi::Value SetAudioTrack(const Napi::CallbackInfo& info);
-    Napi::Value SetSubtitleTrack(const Napi::CallbackInfo& info);
-    Napi::Value SetSubtitleDelay(const Napi::CallbackInfo& info);
-
-    // Track list getters (used by getMediaInfo)
-    Napi::Value GetAudioTracks(const Napi::CallbackInfo& info);
-    Napi::Value GetSubtitleTracks(const Napi::CallbackInfo& info);
-    Napi::Value GetVideoTracks(const Napi::CallbackInfo& info);
 
     // Unified Window API (declared before internal methods to avoid X11 Window typedef conflict)
     Napi::Value Window(const Napi::CallbackInfo& info);
@@ -157,13 +151,61 @@ private:
         bool enabled;
         bool separator;
         std::vector<MenuItem> submenu;
-        
+
         MenuItem() : enabled(true), separator(false) {}
     };
-    
+
+    struct MenuColors {
+        unsigned long background;
+        unsigned long foreground;
+        unsigned long hoverBackground;
+        unsigned long hoverForeground;
+        unsigned long border;
+        unsigned long separator;
+        unsigned long disabledText;
+    };
+
+    // Enhanced menu state for multi-level support
+    struct MenuWindowState {
+        ::Window window;
+        Pixmap backBuffer;
+        std::vector<MenuItem> items;
+        int hoveredItem;
+        int selectedItem;  // For keyboard navigation
+        int width;
+        int height;
+        int posX;
+        int posY;
+        MenuWindowState* parent;
+        MenuWindowState* child;
+        bool active;
+
+        MenuWindowState()
+            : window(0), backBuffer(0), hoveredItem(-1), selectedItem(-1),
+              width(0), height(0), posX(0), posY(0),
+              parent(nullptr), child(nullptr), active(false) {}
+    };
+
     std::vector<MenuItem> BuildContextMenu();
     void ShowContextMenu(int x, int y);
     void ExecuteMenuAction(const std::string& action);
+
+    // Helper methods for menu rendering (Linux X11)
+    MenuColors GetGtkThemeColors();
+    unsigned long AllocColor(unsigned long rgb);
+    void DrawMenuItem(::Window window, GC gc, const MenuItem& item, int yPos,
+                     int width, int height, bool hovered, bool selected, const MenuColors& colors);
+    void RedrawMenu(MenuWindowState* menu, GC gc, const MenuColors& colors);
+    MenuWindowState* CreateMenuState(int x, int y, const std::vector<MenuItem>& items,
+                                     const MenuColors& colors, MenuWindowState* parent = nullptr);
+    void DestroyMenuState(MenuWindowState* menu);
+    void CloseChildMenus(MenuWindowState* menu);
+    bool OpenSubmenu(MenuWindowState* menu, int itemIndex, GC gc, const MenuColors& colors);
+    bool HandleMenuEvent(MenuWindowState* rootMenu, XEvent& event, GC gc,
+                        const MenuColors& colors, bool& menuActive);
+    int CalculateMenuHeight(const std::vector<MenuItem>& items);
+    bool IsPointInMenu(MenuWindowState* menu, int x, int y);
+    void SetMenuOpacity(::Window window, double opacity);
 
 
     // Event manager
@@ -188,6 +230,12 @@ private:
 
     // Helpers
     Napi::Object GetMediaInfoObject(Napi::Env env);
+
+    // Event emission helpers
+    void EmitShortcut(const std::string& action);
+    void EmitCurrentVideo(std::function<void(Napi::Env, Napi::Object&)> builder);
+    void EmitPlayerInfo(std::function<void(Napi::Env, Napi::Object&)> builder);
+    void EmitMediaInfo();
 
     // Video memory callbacks
     void SetupVideoCallbacks();
