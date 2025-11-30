@@ -16,7 +16,8 @@
         "src/vlc_shortcuts.cpp",
         "src/vlc_vmem.cpp",
         "src/vlc_context_menu.cpp",
-        "src/vlc_context_menu_actions.cpp"
+        "src/vlc_context_menu_actions.cpp",
+        "src/vlc_osd.cpp"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")"
@@ -86,7 +87,7 @@
         [
           "OS=='linux'",
           {
-            "sources": ["src/vlc_window_linux.cpp", "src/vlc_context_menu_linux.cpp"],
+            "sources": ["src/vlc_window_linux.cpp", "src/vlc_context_menu_linux.cpp", "src/vlc_osd_linux.cpp"],
             "cflags_cc": ["-std=c++17"],
             "include_dirs": ["/usr/include/vlc"],
             "libraries": ["-lvlc", "-lX11"]

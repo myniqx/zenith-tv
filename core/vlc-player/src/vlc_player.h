@@ -16,6 +16,9 @@ typedef SSIZE_T ssize_t;
 #include <map>
 #include <mutex>
 #include <atomic>
+#include <memory>
+#include <chrono>
+#include <thread>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -56,6 +59,7 @@ public:
     ::Window parent_window_;
     std::atomic<bool> event_loop_running_{false};
     std::atomic<bool> was_playing_before_minimize_{false};
+    std::mutex window_mutex_; // Protects child_window_ access
 
     // Cached X11 atoms (initialized in CreateChildWindowInternal)
     Atom wm_delete_window_atom_;
@@ -142,6 +146,120 @@ private:
     // New format: { "playPause": ["Space", "KeyK"], "volumeUp": ["ArrowUp", "Equal"] }
     std::map<std::string, std::vector<std::string>> action_to_keys_;
     void ProcessKeyPress(const std::string& key_code);
+
+    // =================================================================================================
+    // OSD (On-Screen Display) System
+    // =================================================================================================
+
+    enum class OSDType {
+        VOLUME,           // Top-left: icon + text + progress bar
+        PLAYBACK,         // Top-right queue: play/pause/stop icons
+        SEEK,             // Bottom-center: full-width progress + time
+        NOTIFICATION,     // Top-right queue: generic text messages
+        AUDIO_TRACK,      // Top-right queue: "Audio: Track 2"
+        SUBTITLE_TRACK    // Top-right queue: "Subtitle: English"
+    };
+
+    enum class OSDPosition {
+        TOP_LEFT,
+        TOP_RIGHT,
+        BOTTOM_CENTER,
+        CENTER
+    };
+
+    struct OSDElement {
+        OSDType type;
+        OSDPosition position;
+        std::string text;              // Primary text
+        std::string subtext;           // Secondary text (e.g., time display)
+        float progress;                // 0.0-1.0 for progress bars
+        std::string icon;              // Icon identifier (play, pause, volume_up, etc.)
+
+        // Lifecycle
+        std::chrono::steady_clock::time_point created_at;
+        std::chrono::steady_clock::time_point expire_at;
+        float opacity;                 // 0.0-1.0 for fade animation
+        bool fading_out;
+
+        // Rendering cache (platform-specific)
+#ifdef __linux__
+        ::Window window;
+        Pixmap backBuffer;
+#endif
+        int width;
+        int height;
+        int slot_index;                // For multi-line notifications (0 = first line)
+
+        OSDElement()
+            : type(OSDType::NOTIFICATION), position(OSDPosition::CENTER),
+              progress(0.0f), opacity(0.0f), fading_out(false),
+#ifdef __linux__
+              window(0), backBuffer(0),
+#endif
+              width(0), height(0), slot_index(0) {}
+    };
+
+    struct OSDColors {
+        unsigned long background;      // 0x1a1a1a (dark semi-transparent)
+        unsigned long text_primary;    // 0xffffff (white)
+        unsigned long text_secondary;  // 0xb0b0b0 (light gray)
+        unsigned long progress_fg;     // 0x4a9eff (blue accent)
+        unsigned long progress_bg;     // 0x3a3a3a (dark gray)
+        unsigned long border;          // 0x2a2a2a (subtle border)
+    };
+
+    // OSD state management
+    std::vector<std::shared_ptr<OSDElement>> active_osds_;
+    std::mutex osd_mutex_;
+    std::atomic<bool> osd_thread_running_{false};
+    std::thread osd_render_thread_;
+    OSDColors osd_colors_;
+#ifdef __linux__
+    Display* osd_display_; // Dedicated connection for OSD thread
+    GC osd_gc_;
+    XFontSet osd_font_normal_;
+    XFontSet osd_font_bold_;
+#endif
+
+    // Public OSD API
+    void ShowOSD(OSDType type, const std::string& text,
+                 const std::string& subtext = "", float progress = 0.0f);
+    void HideOSD(OSDType type);
+    void UpdateOSD(OSDType type, const std::string& text, float progress);
+
+    // Internal OSD management
+    void InitializeOSD();
+    void ShutdownOSD();
+    void StartOSDRenderLoop();
+    void StopOSDRenderLoop();
+    int CalculateSlotIndex(OSDPosition position);
+    void CompactSlots(OSDPosition position);
+    void UpdateOSDLifecycles();
+    void RemoveExpiredOSDs();
+    OSDPosition GetPositionForType(OSDType type);
+    void GetOSDSize(OSDType type, int& width, int& height);
+    std::string FormatTime(int64_t time_ms);
+
+    // Platform-specific OSD rendering (implemented in vlc_osd_linux.cpp, etc.)
+    void RenderOSD(std::shared_ptr<OSDElement> osd);
+    void CreateOSDWindow(std::shared_ptr<OSDElement> osd, int x, int y);
+    void DestroyOSDWindow(std::shared_ptr<OSDElement> osd);
+    void SetOSDWindowOpacity(::Window window, float opacity);
+
+    // Generic drawing components (platform-specific implementation)
+    void DrawText(::Window window, Pixmap buffer, GC gc,
+                  const std::string& text, int x, int y,
+                  unsigned long color, XFontSet font);
+    void DrawProgressBar(::Window window, Pixmap buffer, GC gc,
+                         int x, int y, int width, int height,
+                         float progress, unsigned long fg_color,
+                         unsigned long bg_color);
+    void DrawRoundedRect(::Window window, Pixmap buffer, GC gc,
+                         int x, int y, int width, int height,
+                         unsigned long color, int radius = 8);
+    void DrawIcon(::Window window, Pixmap buffer, GC gc,
+                  const std::string& icon_name, int x, int y, int size,
+                  unsigned long color);
 
     // Context Menu Infrastructure
     struct MenuItem {

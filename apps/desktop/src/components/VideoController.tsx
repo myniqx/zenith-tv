@@ -64,10 +64,12 @@ export function VideoController() {
     // Map settings shortcuts to VLC format: { "Space": "playPause", "Escape": "exitFullscreen" }
     const vlcShortcuts: Record<string, string> = {};
 
-    Object.entries(keyboardShortcuts).forEach(([action, keyCombo]) => {
+    Object.entries(keyboardShortcuts).forEach(([action, keyCombos]) => {
       // Convert "ctrl+KeyF" to just "KeyF" for VLC (modifiers not supported in native yet)
-      const key = keyCombo.split('+').pop() || keyCombo;
-      vlcShortcuts[key] = action;
+      for (const keyCombo of keyCombos) {
+        const key = keyCombo.split('+').pop() || keyCombo;
+        vlcShortcuts[key] = action;
+      }
     });
 
     vlc.shortcut({ shortcuts: vlcShortcuts }).catch(err => {

@@ -17,6 +17,10 @@ Napi::Value VlcPlayer::Audio(const Napi::CallbackInfo& info) {
         int vol = options.Get("volume").As<Napi::Number>().Int32Value();
         libvlc_audio_set_volume(media_player_, vol);
 
+        // Show Volume OSD
+        std::string text = "Volume: " + std::to_string(vol) + "%";
+        ShowOSD(OSDType::VOLUME, text, "", vol / 100.0f);
+
         EmitPlayerInfo([vol](Napi::Env env, Napi::Object& playerInfo) {
             playerInfo.Set("volume", Napi::Number::New(env, vol));
         });
@@ -26,6 +30,11 @@ Napi::Value VlcPlayer::Audio(const Napi::CallbackInfo& info) {
         bool mute = options.Get("mute").As<Napi::Boolean>().Value();
         libvlc_audio_set_mute(media_player_, mute ? 1 : 0);
 
+        // Show Volume OSD (muted or unmuted)
+        int vol = libvlc_audio_get_volume(media_player_);
+        std::string text = mute ? "Muted" : ("Volume: " + std::to_string(vol) + "%");
+        ShowOSD(OSDType::VOLUME, text, "", mute ? 0.0f : vol / 100.0f);
+
         EmitPlayerInfo([mute](Napi::Env env, Napi::Object& playerInfo) {
             playerInfo.Set("muted", Napi::Boolean::New(env, mute));
         });
@@ -34,6 +43,10 @@ Napi::Value VlcPlayer::Audio(const Napi::CallbackInfo& info) {
     if (options.Has("track")) {
         int track = options.Get("track").As<Napi::Number>().Int32Value();
         libvlc_audio_set_track(media_player_, track);
+
+        // Show Audio Track OSD
+        std::string text = "Audio Track: " + std::to_string(track);
+        ShowOSD(OSDType::AUDIO_TRACK, text, "", 0.0f);
 
         EmitCurrentVideo([track](Napi::Env env, Napi::Object& cv) {
             cv.Set("audioTrack", Napi::Number::New(env, track));
