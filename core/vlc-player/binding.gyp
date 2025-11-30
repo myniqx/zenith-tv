@@ -61,7 +61,7 @@
                   "<(module_root_dir)/lib/win32/libvlc.dll",
                   "<(module_root_dir)/lib/win32/libvlccore.dll"
                 ]
-              }
+              },
             ]
           }
         ],

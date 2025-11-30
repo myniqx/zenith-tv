@@ -11,7 +11,7 @@ export default defineConfig({
       viteStaticCopy({
         targets: [
           {
-            src: path.resolve(__dirname, 'electron/vlc/vlcStandaloneProcess.cjs'),
+            src: 'electron/vlc/vlcStandaloneProcess.cjs',
             dest: 'vlc'
           }
         ]

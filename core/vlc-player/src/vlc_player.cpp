@@ -60,35 +60,48 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo& info)
     // Optional: Accept mode parameter ("mem" or "win")
     if (info.Length() > 0 && info[0].IsString()) {
         rendering_mode_ = info[0].As<Napi::String>().Utf8Value();
-        printf("[VLC] Rendering mode: %s\n", rendering_mode_.c_str());
+        printf("[VLC Core] Rendering mode: %s\n", rendering_mode_.c_str());
         fflush(stdout);
     }
 
     // Initialize VLC with platform-specific parameters
 #ifdef _WIN32
+    // Windows: VLC plugins must be in the same directory as the .node file
+    // This is handled by binding.gyp copying plugins to build directory
     const char* args[] = {
         "--no-video-title-show",
         "--intf=dummy",
         "--no-plugins-cache"
     };
+
+    printf("[VLC Core] CALL: libvlc_new(argc=%zu, args=[...])\n", sizeof(args) / sizeof(args[0]));
+    vlc_instance_ = libvlc_new(sizeof(args) / sizeof(args[0]), args);
+    printf("[VLC Core] RETURN: vlc_instance=%p\n", (void*)vlc_instance_);
+    fflush(stdout);
 #elif defined(__linux__)
+    const char* plugin_path = getenv("VLC_PLUGIN_PATH");
+    if (!plugin_path) {
+        const char* default_plugin_path = "/usr/lib/x86_64-linux-gnu/vlc/plugins";
+        setenv("VLC_PLUGIN_PATH", default_plugin_path, 1);
+    }
+
     const char* args[] = {
         "--vout=xcb_x11",
         "--osd",
         "--no-plugins-cache"
     };
 
-    const char* plugin_path = getenv("VLC_PLUGIN_PATH");
-    if (!plugin_path) {
-        const char* default_plugin_path = "/usr/lib/x86_64-linux-gnu/vlc/plugins";
-        setenv("VLC_PLUGIN_PATH", default_plugin_path, 1);
-    }
+    printf("[VLC Core] CALL: libvlc_new(argc=%zu, args=[...])\n", sizeof(args) / sizeof(args[0]));
+    vlc_instance_ = libvlc_new(sizeof(args) / sizeof(args[0]), args);
 #elif defined(__APPLE__)
     const char* args[] = {
         "--no-video-title-show",
         "--intf=dummy",
         "--no-plugins-cache"
     };
+
+    printf("[VLC Core] CALL: libvlc_new(argc=%zu, args=[...])\n", sizeof(args) / sizeof(args[0]));
+    vlc_instance_ = libvlc_new(sizeof(args) / sizeof(args[0]), args);
 #else
     const char* args[] = {
         "-vv",
@@ -96,11 +109,12 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo& info)
         "--intf=dummy",
         "--no-plugins-cache"
     };
+
+    printf("[VLC Core] CALL: libvlc_new(argc=%zu, args=[...])\n", sizeof(args) / sizeof(args[0]));
+    vlc_instance_ = libvlc_new(sizeof(args) / sizeof(args[0]), args);
 #endif
 
-    printf("[VLC] CALL: libvlc_new(argc=%zu, args=[...])\n", sizeof(args) / sizeof(args[0]));
-    vlc_instance_ = libvlc_new(sizeof(args) / sizeof(args[0]), args);
-    printf("[VLC] RETURN: vlc_instance=%p\n", (void*)vlc_instance_);
+    printf("[VLC Core] RETURN: vlc_instance=%p\n", (void*)vlc_instance_);
     fflush(stdout);
 
     if (!vlc_instance_) {
@@ -108,9 +122,9 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo& info)
         return;
     }
 
-    printf("[VLC] CALL: libvlc_media_player_new(vlc_instance=%p)\n", (void*)vlc_instance_);
+    printf("[VLC Core] CALL: libvlc_media_player_new(vlc_instance=%p)\n", (void*)vlc_instance_);
     media_player_ = libvlc_media_player_new(vlc_instance_);
-    printf("[VLC] RETURN: media_player=%p\n", (void*)media_player_);
+    printf("[VLC Core] RETURN: media_player=%p\n", (void*)media_player_);
     fflush(stdout);
 
     if (!media_player_) {

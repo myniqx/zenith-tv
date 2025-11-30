@@ -22,7 +22,8 @@ const { execSync } = require('child_process');
 const os = require('os');
 
 // VLC version to download
-const VLC_VERSION = '3.0.20';
+// Note: Using latest 3.0.x stable version (as of Nov 2024)
+const VLC_VERSION = '3.0.21';
 
 // Download URLs for each platform
 // IMPORTANT: Use 7z package, not ZIP! Only 7z contains the SDK folder with headers and .lib files
@@ -135,19 +136,19 @@ function extractArchive(archivePath, destDir) {
     for (const method of methods) {
       try {
         method();
-        return;
+        return true;
       } catch {
         continue;
       }
     }
 
-    // If all methods fail, show instructions
-    console.error('\n❌ Could not extract 7z file automatically.');
-    console.error('Please install 7-Zip and add it to PATH, or extract manually:');
-    console.error(`  Archive: ${archivePath}`);
-    console.error(`  Extract to: ${destDir}`);
-    console.error('\nAfter extracting, run this script again with --force\n');
-    process.exit(1);
+    // If all methods fail, show instructions but DON'T exit
+    console.warn('\n⚠️  Could not extract 7z file automatically.');
+    console.warn('Please extract manually using 7-Zip or WinRAR:');
+    console.warn(`  Archive: ${archivePath}`);
+    console.warn(`  Extract to: ${destDir}`);
+    console.warn('\nAfter extracting, run this script again.\n');
+    return false;
   } else {
     // ZIP extraction
     if (process.platform === 'win32') {
@@ -157,6 +158,7 @@ function extractArchive(archivePath, destDir) {
     } else {
       execSync(`unzip -o "${archivePath}" -d "${destDir}"`, { stdio: 'inherit' });
     }
+    return true;
   }
 }
 
@@ -183,17 +185,38 @@ async function setupWindows() {
     console.log('Using cached download:', archivePath);
   }
 
-  // Extract
-  if (fs.existsSync(extractDir)) {
-    fs.rmSync(extractDir, { recursive: true, force: true });
+  // Extract (only if not already extracted)
+  const vlcFolderPattern = fs.existsSync(extractDir)
+    ? fs.readdirSync(extractDir).find(f => f.startsWith('vlc-'))
+    : null;
+
+  if (!vlcFolderPattern) {
+    // Only clean and extract if VLC folder doesn't exist
+    if (fs.existsSync(extractDir)) {
+      fs.rmSync(extractDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(extractDir, { recursive: true });
+    const extractSuccess = extractArchive(archivePath, extractDir);
+
+    if (!extractSuccess) {
+      // Extraction failed, check if user extracted manually
+      const manualVlcFolder = fs.existsSync(extractDir)
+        ? fs.readdirSync(extractDir).find(f => f.startsWith('vlc-'))
+        : null;
+
+      if (!manualVlcFolder) {
+        throw new Error('Extraction failed and no manually extracted VLC folder found. Please extract the archive manually and run again.');
+      }
+      console.log('✓ Found manually extracted VLC folder');
+    }
+  } else {
+    console.log('Using already extracted files:', extractDir);
   }
-  fs.mkdirSync(extractDir, { recursive: true });
-  extractArchive(archivePath, extractDir);
 
   // Find extracted VLC folder
   const vlcFolder = fs.readdirSync(extractDir).find(f => f.startsWith('vlc-'));
   if (!vlcFolder) {
-    throw new Error('Could not find VLC folder in extracted archive');
+    throw new Error('Could not find VLC folder in extracted archive. Expected folder name starting with "vlc-"');
   }
 
   const vlcPath = path.join(extractDir, vlcFolder);

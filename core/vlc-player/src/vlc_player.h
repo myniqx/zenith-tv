@@ -35,6 +35,11 @@ public:
     VlcPlayer(const Napi::CallbackInfo& info);
     ~VlcPlayer();
 
+#ifdef _WIN32
+    // Windows needs access to these methods from the window procedure
+    friend LRESULT CALLBACK VlcWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+#endif
+
     // Internal members accessible by split files
     libvlc_instance_t* vlc_instance_;
     libvlc_media_player_t* media_player_;
@@ -155,6 +160,11 @@ private:
         MenuItem() : enabled(true), separator(false) {}
     };
 
+    std::vector<MenuItem> BuildContextMenu();
+    void ShowContextMenu(int x, int y);
+    void ExecuteMenuAction(const std::string& action);
+
+#ifdef __linux__
     struct MenuColors {
         unsigned long background;
         unsigned long foreground;
@@ -186,10 +196,6 @@ private:
               parent(nullptr), child(nullptr), active(false) {}
     };
 
-    std::vector<MenuItem> BuildContextMenu();
-    void ShowContextMenu(int x, int y);
-    void ExecuteMenuAction(const std::string& action);
-
     // Helper methods for menu rendering (Linux X11)
     MenuColors GetGtkThemeColors();
     unsigned long AllocColor(unsigned long rgb);
@@ -206,6 +212,7 @@ private:
     int CalculateMenuHeight(const std::vector<MenuItem>& items);
     bool IsPointInMenu(MenuWindowState* menu, int x, int y);
     void SetMenuOpacity(::Window window, double opacity);
+#endif
 
 
     // Event manager
