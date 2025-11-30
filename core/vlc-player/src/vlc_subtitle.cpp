@@ -17,6 +17,10 @@ Napi::Value VlcPlayer::Subtitle(const Napi::CallbackInfo& info) {
         int track = options.Get("track").As<Napi::Number>().Int32Value();
         libvlc_video_set_spu(media_player_, track);
 
+        // Show Subtitle Track OSD
+        std::string text = (track == -1) ? "Subtitle: Disabled" : ("Subtitle Track: " + std::to_string(track));
+        ShowOSD(OSDType::SUBTITLE_TRACK, text, "", 0.0f);
+
         EmitCurrentVideo([track](Napi::Env env, Napi::Object& cv) {
             cv.Set("subtitleTrack", Napi::Number::New(env, track));
         });

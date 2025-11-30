@@ -133,11 +133,31 @@ Napi::Value VlcPlayer::Playback(const Napi::CallbackInfo& info) {
     if (options.Has("time")) {
         int64_t time = options.Get("time").As<Napi::Number>().Int64Value();
         libvlc_media_player_set_time(media_player_, time);
+
+        // Show Seek OSD
+        int64_t duration = libvlc_media_player_get_length(media_player_);
+        if (duration > 0) {
+            std::string current_time = FormatTime(time);
+            std::string total_time = FormatTime(duration);
+            std::string time_display = current_time + " / " + total_time;
+            float progress = static_cast<float>(time) / duration;
+            ShowOSD(OSDType::SEEK, "", time_display, progress);
+        }
     }
 
     if (options.Has("position")) {
         float pos = options.Get("position").As<Napi::Number>().FloatValue();
         libvlc_media_player_set_position(media_player_, pos);
+
+        // Show Seek OSD
+        int64_t duration = libvlc_media_player_get_length(media_player_);
+        if (duration > 0) {
+            int64_t time = static_cast<int64_t>(pos * duration);
+            std::string current_time = FormatTime(time);
+            std::string total_time = FormatTime(duration);
+            std::string time_display = current_time + " / " + total_time;
+            ShowOSD(OSDType::SEEK, "", time_display, pos);
+        }
     }
 
     if (options.Has("rate")) {

@@ -143,10 +143,21 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo& info)
     InitializeDefaultShortcuts();
 
     SetupEventCallbacks();
+
+    // Initialize OSD system (after window is created in window mode)
+    if (rendering_mode_ == "win") {
+        // OSD will be initialized after CreateChildWindowInternal is called
+        // (happens when Window API is used from JavaScript)
+    }
 }
 
 VlcPlayer::~VlcPlayer() {
     if (!disposed_) {
+        // Shutdown OSD system first
+        if (osd_thread_running_) {
+            ShutdownOSD();
+        }
+
         CleanupEventCallbacks();
 
         if (media_player_) {
@@ -257,11 +268,33 @@ void VlcPlayer::HandleStateChanged(const libvlc_event_t* event, void* data) {
     if (player->disposed_) return;
 
     std::string state;
+    std::string osd_text;
+    std::string icon;
+
     switch (event->type) {
-        case libvlc_MediaPlayerPlaying: state = "playing"; break;
-        case libvlc_MediaPlayerPaused: state = "paused"; break;
-        case libvlc_MediaPlayerStopped: state = "stopped"; break;
-        default: state = "unknown"; break;
+        case libvlc_MediaPlayerPlaying:
+            state = "playing";
+            osd_text = "Playing";
+            icon = "play";
+            break;
+        case libvlc_MediaPlayerPaused:
+            state = "paused";
+            osd_text = "Paused";
+            icon = "pause";
+            break;
+        case libvlc_MediaPlayerStopped:
+            state = "stopped";
+            osd_text = "Stopped";
+            icon = "stop";
+            break;
+        default:
+            state = "unknown";
+            break;
+    }
+
+    // Show Playback OSD
+    if (!osd_text.empty()) {
+        player->ShowOSD(OSDType::PLAYBACK, osd_text, icon, 0.0f);
     }
 
     player->EmitCurrentVideo([state](Napi::Env env, Napi::Object& currentVideo) {
@@ -380,6 +413,11 @@ Napi::Value VlcPlayer::Dispose(const Napi::CallbackInfo& info) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         disposed_ = true;
+    }
+
+    // Shutdown OSD system
+    if (osd_thread_running_) {
+        ShutdownOSD();
     }
 
     // Cleanup event callbacks after setting disposed flag

@@ -29,6 +29,7 @@ constexpr long NET_WM_STATE_ADD = 1;
 // =================================================================================================
 
 void VlcPlayer::CreateChildWindowInternal(int width, int height) {
+    std::lock_guard<std::mutex> lock(window_mutex_);
     if (child_window_created_) {
         return; // Already created
     }
@@ -114,6 +115,9 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
     // Start event loop for keyboard shortcuts
     StartEventLoop();
 
+    // Initialize OSD system
+    InitializeOSD();
+
     // Initialize window state
     XWindowAttributes wa;
     XGetWindowAttributes(display_, child_window_, &wa);
@@ -128,6 +132,7 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
 }
 
 void VlcPlayer::DestroyChildWindowInternal() {
+    std::lock_guard<std::mutex> lock(window_mutex_);
     if (!child_window_created_) {
         return;
     }
