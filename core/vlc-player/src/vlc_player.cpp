@@ -158,6 +158,9 @@ VlcPlayer::~VlcPlayer() {
             ShutdownOSD();
         }
 
+        // Cleanup window and message thread
+        DestroyChildWindowInternal();
+
         CleanupEventCallbacks();
 
         if (media_player_) {

@@ -58,6 +58,8 @@ public:
     std::atomic<bool> was_playing_before_minimize_{false};
     int min_width_{0};
     int min_height_{0};
+    std::thread window_thread_;
+    std::atomic<bool> window_thread_running_{false};
 #elif defined(__linux__)
     Display* display_;
     ::Window child_window_;
@@ -190,6 +192,11 @@ private:
 #ifdef __linux__
         ::Window window;
         Pixmap backBuffer;
+#elif defined(_WIN32)
+        HWND window;
+        HDC memDC;              // Memory DC for double buffering
+        HBITMAP memBitmap;      // Bitmap for double buffering
+        HBITMAP oldBitmap;      // Original bitmap to restore
 #endif
         int width;
         int height;
@@ -200,6 +207,8 @@ private:
               progress(0.0f), opacity(0.0f), fading_out(false),
 #ifdef __linux__
               window(0), backBuffer(0),
+#elif defined(_WIN32)
+              window(NULL), memDC(NULL), memBitmap(NULL), oldBitmap(NULL),
 #endif
               width(0), height(0), slot_index(0) {}
     };
@@ -224,6 +233,12 @@ private:
     GC osd_gc_;
     XFontSet osd_font_normal_;
     XFontSet osd_font_bold_;
+#elif defined(_WIN32)
+    // Windows-specific OSD resources
+    HBRUSH osd_brushes_[6];          // Brushes for colors (background, text, progress, etc.)
+    HFONT osd_font_normal_;
+    HFONT osd_font_bold_;
+    COLORREF osd_colors_win32_[6];   // RGB colors for Windows (parallel to OSDColors)
 #endif
 
     // Public OSD API
@@ -245,13 +260,22 @@ private:
     void GetOSDSize(OSDType type, int& width, int& height);
     std::string FormatTime(int64_t time_ms);
 
-    // Platform-specific OSD rendering (implemented in vlc_osd_linux.cpp, etc.)
+    // Platform-specific OSD rendering (implemented in vlc_osd_linux.cpp, vlc_osd_win32.cpp, etc.)
     void RenderOSD(std::shared_ptr<OSDElement> osd);
     void CreateOSDWindow(std::shared_ptr<OSDElement> osd, int x, int y);
     void DestroyOSDWindow(std::shared_ptr<OSDElement> osd);
+
+    // Platform-specific OSD initialization/cleanup
+    void InitializeOSDPlatform();
+    void ShutdownOSDPlatform();
+
+#ifdef __linux__
+    // Linux-specific color allocation helper
+    unsigned long AllocColor(uint32_t rgb);
+    // Linux-specific OSD helpers
     void SetOSDWindowOpacity(::Window window, float opacity);
 
-    // Generic drawing components (platform-specific implementation)
+    // Generic drawing components (Linux X11 implementation)
     void DrawText(::Window window, Pixmap buffer, GC gc,
                   const std::string& text, int x, int y,
                   unsigned long color, XFontSet font);
@@ -265,6 +289,21 @@ private:
     void DrawIcon(::Window window, Pixmap buffer, GC gc,
                   const std::string& icon_name, int x, int y, int size,
                   unsigned long color);
+#elif defined(_WIN32)
+    // Windows-specific OSD helpers
+    void SetOSDWindowOpacity(HWND window, float opacity);
+
+    // Generic drawing components (Windows GDI implementation)
+    void DrawText(HWND window, HDC hdc, const std::string& text,
+                  int x, int y, COLORREF color, HFONT font);
+    void DrawProgressBar(HWND window, HDC hdc, int x, int y,
+                        int width, int height, float progress,
+                        COLORREF fg_color, COLORREF bg_color);
+    void DrawRoundedRect(HWND window, HDC hdc, int x, int y,
+                        int width, int height, COLORREF color, int radius = 8);
+    void DrawIcon(HWND window, HDC hdc, const std::string& icon_name,
+                  int x, int y, int size, COLORREF color);
+#endif
 
     // Context Menu Infrastructure
     struct MenuItem {

@@ -116,13 +116,21 @@ static LRESULT CALLBACK VlcWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             }
             return 0;
 
-        case WM_RBUTTONDOWN:
+        case WM_RBUTTONDOWN: {
             if (player) {
-                // TODO: Show context menu when implemented
-                // For now, treat as right-click action
-                player->ProcessKeyPress("MouseRight");
+                // Get cursor position in window coordinates
+                POINT pt;
+                pt.x = LOWORD(lParam);
+                pt.y = HIWORD(lParam);
+
+                // Convert to screen coordinates for TrackPopupMenu
+                ClientToScreen(hwnd, &pt);
+
+                // Show context menu at cursor position
+                player->ShowContextMenu(pt.x, pt.y);
             }
             return 0;
+        }
 
         case WM_MOUSEWHEEL: {
             int delta = GET_WHEEL_DELTA_WPARAM(wParam);
@@ -185,63 +193,131 @@ static LRESULT CALLBACK VlcWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
 // Internal Window Management Methods
 // =================================================================================================
 
+// Windows message loop thread function
+static void WindowMessageLoop(VlcPlayer* player) {
+    MSG msg;
+    while (player->window_thread_running_) {
+        // Process all pending messages
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                player->window_thread_running_ = false;
+                return;
+            }
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+
+        // Sleep to avoid busy-waiting (16ms = ~60fps)
+        Sleep(16);
+    }
+}
+
 void VlcPlayer::CreateChildWindowInternal(int width, int height) {
     if (child_window_created_) {
         return;
     }
 
-    // Register custom window class
-    WNDCLASSEXW wc = {};
-    wc.cbSize = sizeof(WNDCLASSEXW);
-    wc.lpfnWndProc = VlcWindowProc;
-    wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = L"VLCPlayerWindow";
-    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    // Start window thread - it will create the window and run message loop
+    window_thread_running_ = true;
+    window_thread_ = std::thread([this, width, height]() {
+        // Register custom window class in this thread
+        WNDCLASSEXW wc = {};
+        wc.cbSize = sizeof(WNDCLASSEXW);
+        wc.lpfnWndProc = VlcWindowProc;
+        wc.hInstance = GetModuleHandle(NULL);
+        wc.lpszClassName = L"VLCPlayerWindow";
+        wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
 
-    RegisterClassExW(&wc);
+        RegisterClassExW(&wc);
 
-    child_hwnd_ = CreateWindowExW(
-        WS_EX_APPWINDOW | WS_EX_WINDOWEDGE,
-        L"VLCPlayerWindow",
-        L"VLC Player",
-        WS_STANDARD,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        width, height,
-        NULL,
-        NULL,
-        GetModuleHandle(NULL),
-        NULL
-    );
+        // Create window in this thread
+        child_hwnd_ = CreateWindowExW(
+            WS_EX_APPWINDOW | WS_EX_WINDOWEDGE,
+            L"VLCPlayerWindow",
+            L"VLC Player",
+            WS_STANDARD,
+            CW_USEDEFAULT, CW_USEDEFAULT,
+            width, height,
+            NULL,
+            NULL,
+            GetModuleHandle(NULL),
+            NULL
+        );
 
-    if (!child_hwnd_) {
-        printf("[VLC] ERROR: Failed to create child window\n");
+        if (!child_hwnd_) {
+            printf("[VLC] ERROR: Failed to create child window\n");
+            fflush(stdout);
+            window_thread_running_ = false;
+            return;
+        }
+
+        // Store 'this' pointer for WndProc callback
+        SetWindowLongPtr(child_hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+
+        libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
+
+        // Initialize window state
+        RECT rect;
+        GetWindowRect(child_hwnd_, &rect);
+        saved_window_state_.x = rect.left;
+        saved_window_state_.y = rect.top;
+        saved_window_state_.width = rect.right - rect.left;
+        saved_window_state_.height = rect.bottom - rect.top;
+        saved_window_state_.has_border = true;
+        saved_window_state_.has_titlebar = true;
+        saved_window_state_.is_resizable = true;
+        is_fullscreen_ = false;
+
+        // Mark window as created before starting message loop
+        child_window_created_ = true;
+
+        printf("[VLC] Window created and message pump thread started\n");
         fflush(stdout);
-        return;
+
+        // Initialize OSD system
+        InitializeOSD();
+
+        printf("[VLC] OSD system initialized\n");
+        fflush(stdout);
+
+        // Run message loop in this same thread
+        WindowMessageLoop(this);
+
+        printf("[VLC] Window message pump thread exiting\n");
+        fflush(stdout);
+    });
+
+    // Wait for window creation to complete
+    while (!child_window_created_ && window_thread_running_) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    // Store 'this' pointer for WndProc callback
-    SetWindowLongPtr(child_hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
-
-    libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
-    child_window_created_ = true;
-
-    // Initialize window state
-    RECT rect;
-    GetWindowRect(child_hwnd_, &rect);
-    saved_window_state_.x = rect.left;
-    saved_window_state_.y = rect.top;
-    saved_window_state_.width = rect.right - rect.left;
-    saved_window_state_.height = rect.bottom - rect.top;
-    saved_window_state_.has_border = true;
-    saved_window_state_.has_titlebar = true;
-    saved_window_state_.is_resizable = true;
-    is_fullscreen_ = false;
+    printf("[VLC] Window creation completed\n");
+    fflush(stdout);
 }
 
 void VlcPlayer::DestroyChildWindowInternal() {
     if (!child_window_created_) {
         return;
+    }
+
+    // Stop message pump thread first
+    if (window_thread_running_) {
+        window_thread_running_ = false;
+
+        // Post WM_QUIT to wake up the message loop
+        if (child_hwnd_) {
+            PostMessage(child_hwnd_, WM_QUIT, 0, 0);
+        }
+
+        // Wait for thread to finish
+        if (window_thread_.joinable()) {
+            window_thread_.join();
+        }
+
+        printf("[VLC] Window message pump thread stopped\n");
+        fflush(stdout);
     }
 
     if (child_hwnd_) {
