@@ -116,7 +116,7 @@ export function VideoController() {
         });
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   // Sync State

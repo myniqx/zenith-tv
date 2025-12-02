@@ -91,7 +91,7 @@ int VlcPlayer::CalculateSlotIndex(OSDPosition position) {
     int max_slot = -1;
     for (const auto& osd : active_osds_) {
         if (osd->position == position) {
-            max_slot = std::max(max_slot, osd->slot_index);
+            max_slot = (std::max)(max_slot, osd->slot_index);
         }
     }
 
@@ -206,7 +206,7 @@ void VlcPlayer::RemoveExpiredOSDs() {
  */
 void VlcPlayer::ShowOSD(OSDType type, const std::string& text,
                         const std::string& subtext, float progress) {
-    if (!child_window_created_ || !display_) {
+    if (!child_window_created_) {
         return;  // Window not ready
     }
 
@@ -328,68 +328,10 @@ void VlcPlayer::InitializeOSD() {
     printf("[VLC OSD] Initializing OSD system...\n");
     fflush(stdout);
 
-    // Initialize color palette
-#ifdef __linux__
-    if (display_) {
-        // Open dedicated display connection for OSD thread
-        osd_display_ = XOpenDisplay(NULL);
-        if (!osd_display_) {
-            printf("[VLC OSD] ERROR: Failed to open dedicated X11 display connection\n");
-            return;
-        }
+    // Platform-specific initialization (colors, fonts, graphics context)
+    InitializeOSDPlatform();
 
-        osd_colors_.background = AllocColor(0x1a1a1a);      // Dark gray
-        osd_colors_.text_primary = AllocColor(0xffffff);    // White
-        osd_colors_.text_secondary = AllocColor(0xb0b0b0);  // Light gray
-        osd_colors_.progress_fg = AllocColor(0x4a9eff);     // Blue accent
-        osd_colors_.progress_bg = AllocColor(0x3a3a3a);     // Dark gray
-        osd_colors_.border = AllocColor(0x2a2a2a);          // Subtle border
-
-        // Create GC for OSD rendering using OSD display
-        // Note: child_window_ belongs to main display, but we can use it as drawable reference
-        // IF we are careful. Better to use RootWindow of osd_display_ for GC creation if possible,
-        // or wait until we create an OSD window.
-        // Actually, for XCreateGC, the drawable determines the screen/depth.
-        // We will create GC later or use DefaultRootWindow of osd_display_.
-        int screen = DefaultScreen(osd_display_);
-        osd_gc_ = XCreateGC(osd_display_, RootWindow(osd_display_, screen), 0, nullptr);
-
-        // Load fonts using XCreateFontSet for UTF-8 support
-        char **missing_list;
-        int missing_count;
-        char *def_string;
-
-        osd_font_normal_ = XCreateFontSet(osd_display_,
-            "-*-dejavu sans-medium-r-*-*-12-*-*-*-*-*-*-*,"
-            "-*-liberation sans-medium-r-*-*-12-*-*-*-*-*-*-*,"
-            "-*-*-medium-r-*-*-12-*-*-*-*-*-*-*",
-            &missing_list, &missing_count, &def_string);
-
-        if (missing_count > 0) {
-            XFreeStringList(missing_list);
-        }
-
-        osd_font_bold_ = XCreateFontSet(osd_display_,
-            "-*-dejavu sans-bold-r-*-*-14-*-*-*-*-*-*-*,"
-            "-*-liberation sans-bold-r-*-*-14-*-*-*-*-*-*-*,"
-            "-*-*-bold-r-*-*-14-*-*-*-*-*-*-*",
-            &missing_list, &missing_count, &def_string);
-
-        if (missing_count > 0) {
-            XFreeStringList(missing_list);
-        }
-
-        if (!osd_font_bold_) {
-            osd_font_bold_ = osd_font_normal_;
-        }
-
-        printf("[VLC OSD] X11 resources initialized (Display=%p, GC=%p)\n",
-               (void*)osd_display_, (void*)osd_gc_);
-        fflush(stdout);
-    }
-#endif
-
-    // Start render loop
+    // Start render loop (platform-agnostic)
     StartOSDRenderLoop();
 
     printf("[VLC OSD] OSD system initialized\n");
@@ -415,27 +357,8 @@ void VlcPlayer::ShutdownOSD() {
         active_osds_.clear();
     }
 
-    // Cleanup X11 resources
-#ifdef __linux__
-    if (display_) {
-        if (osd_display_) {
-            if (osd_gc_) {
-                XFreeGC(osd_display_, osd_gc_);
-                osd_gc_ = nullptr;
-            }
-            if (osd_font_normal_ && osd_font_normal_ != osd_font_bold_) {
-                XFreeFontSet(osd_display_, osd_font_normal_);
-                osd_font_normal_ = nullptr;
-            }
-            if (osd_font_bold_) {
-                XFreeFontSet(osd_display_, osd_font_bold_);
-                osd_font_bold_ = nullptr;
-            }
-            XCloseDisplay(osd_display_);
-            osd_display_ = nullptr;
-        }
-    }
-#endif
+    // Platform-specific cleanup
+    ShutdownOSDPlatform();
 
     printf("[VLC OSD] OSD system shutdown complete\n");
     fflush(stdout);

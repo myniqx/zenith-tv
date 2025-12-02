@@ -389,4 +389,118 @@ void VlcPlayer::RenderOSD(std::shared_ptr<OSDElement> osd) {
     XFlush(osd_display_);
 }
 
+/**
+ * Allocate X11 color from RGB value
+ */
+unsigned long VlcPlayer::AllocColor(uint32_t rgb) {
+    if (!osd_display_) return 0;
+
+    XColor color;
+    color.red = ((rgb >> 16) & 0xFF) << 8;
+    color.green = ((rgb >> 8) & 0xFF) << 8;
+    color.blue = (rgb & 0xFF) << 8;
+    color.flags = DoRed | DoGreen | DoBlue;
+
+    int screen = DefaultScreen(osd_display_);
+    Colormap colormap = DefaultColormap(osd_display_, screen);
+
+    if (XAllocColor(osd_display_, colormap, &color)) {
+        return color.pixel;
+    }
+
+    return 0;
+}
+
+/**
+ * Initialize platform-specific OSD resources (Linux X11)
+ */
+void VlcPlayer::InitializeOSDPlatform() {
+    if (!display_) {
+        printf("[VLC OSD] ERROR: Main display not available\n");
+        fflush(stdout);
+        return;
+    }
+
+    // Open dedicated display connection for OSD thread
+    osd_display_ = XOpenDisplay(NULL);
+    if (!osd_display_) {
+        printf("[VLC OSD] ERROR: Failed to open dedicated X11 display connection\n");
+        fflush(stdout);
+        return;
+    }
+
+    // Initialize color palette
+    osd_colors_.background = AllocColor(0x1a1a1a);      // Dark gray
+    osd_colors_.text_primary = AllocColor(0xffffff);    // White
+    osd_colors_.text_secondary = AllocColor(0xb0b0b0);  // Light gray
+    osd_colors_.progress_fg = AllocColor(0x4a9eff);     // Blue accent
+    osd_colors_.progress_bg = AllocColor(0x3a3a3a);     // Dark gray
+    osd_colors_.border = AllocColor(0x2a2a2a);          // Subtle border
+
+    // Create GC for OSD rendering using OSD display
+    int screen = DefaultScreen(osd_display_);
+    osd_gc_ = XCreateGC(osd_display_, RootWindow(osd_display_, screen), 0, nullptr);
+
+    // Load fonts using XCreateFontSet for UTF-8 support
+    char **missing_list;
+    int missing_count;
+    char *def_string;
+
+    osd_font_normal_ = XCreateFontSet(osd_display_,
+        "-*-dejavu sans-medium-r-*-*-12-*-*-*-*-*-*-*,"
+        "-*-liberation sans-medium-r-*-*-12-*-*-*-*-*-*-*,"
+        "-*-*-medium-r-*-*-12-*-*-*-*-*-*-*",
+        &missing_list, &missing_count, &def_string);
+
+    if (missing_count > 0) {
+        XFreeStringList(missing_list);
+    }
+
+    osd_font_bold_ = XCreateFontSet(osd_display_,
+        "-*-dejavu sans-bold-r-*-*-14-*-*-*-*-*-*-*,"
+        "-*-liberation sans-bold-r-*-*-14-*-*-*-*-*-*-*,"
+        "-*-*-bold-r-*-*-14-*-*-*-*-*-*-*",
+        &missing_list, &missing_count, &def_string);
+
+    if (missing_count > 0) {
+        XFreeStringList(missing_list);
+    }
+
+    if (!osd_font_bold_) {
+        osd_font_bold_ = osd_font_normal_;
+    }
+
+    printf("[VLC OSD] Linux X11 resources initialized (Display=%p, GC=%p)\n",
+           (void*)osd_display_, (void*)osd_gc_);
+    fflush(stdout);
+}
+
+/**
+ * Shutdown platform-specific OSD resources (Linux X11)
+ */
+void VlcPlayer::ShutdownOSDPlatform() {
+    if (!osd_display_) return;
+
+    if (osd_gc_) {
+        XFreeGC(osd_display_, osd_gc_);
+        osd_gc_ = nullptr;
+    }
+
+    if (osd_font_normal_ && osd_font_normal_ != osd_font_bold_) {
+        XFreeFontSet(osd_display_, osd_font_normal_);
+        osd_font_normal_ = nullptr;
+    }
+
+    if (osd_font_bold_) {
+        XFreeFontSet(osd_display_, osd_font_bold_);
+        osd_font_bold_ = nullptr;
+    }
+
+    XCloseDisplay(osd_display_);
+    osd_display_ = nullptr;
+
+    printf("[VLC OSD] Linux X11 resources cleaned up\n");
+    fflush(stdout);
+}
+
 #endif // __linux__
