@@ -63,3 +63,5 @@ enum class OSDPosition
   BOTTOM_CENTER,
   CENTER
 };
+
+typedef void *OSDColor;

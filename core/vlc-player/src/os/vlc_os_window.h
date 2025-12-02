@@ -141,79 +141,6 @@ public:
      */
     void HideAllOSDs();
 
-protected:
-    // =================================================================================================
-    // Protected Drawing API (Platform-Agnostic Interface for OSD Rendering)
-    // =================================================================================================
-    // These methods provide a unified drawing interface across all platforms.
-    // Implementations use platform-specific rendering:
-    // - Windows: GDI (HDC, HBRUSH, HFONT, etc.)
-    // - Linux: X11 (Display*, GC, XFontSet, etc.)
-    // - macOS: CoreGraphics (CGContext, etc.)
-
-    /**
-     * Draw text at specified position
-     * @param drawable Platform-specific drawable handle (HDC, Drawable, CGContext*)
-     * @param text UTF-8 encoded text string
-     * @param x X coordinate
-     * @param y Y coordinate
-     * @param color Color as 0xRRGGBB (platform-agnostic)
-     * @param font_handle Platform-specific font handle (HFONT, XFontSet, CTFont*)
-     */
-    virtual void DrawText(void *drawable,
-                          const std::string &text,
-                          int x, int y,
-                          OSDColor color,
-                          void *font_handle) = 0;
-
-    /**
-     * Draw progress bar
-     * @param drawable Platform-specific drawable handle
-     * @param x X coordinate of top-left corner
-     * @param y Y coordinate of top-left corner
-     * @param width Progress bar width
-     * @param height Progress bar height
-     * @param progress Progress value 0.0-1.0
-     * @param fg_color Foreground color 0xRRGGBB
-     * @param bg_color Background color 0xRRGGBB
-     */
-    void DrawProgressBar(void *drawable,
-                         int x, int y,
-                         int width, int height,
-                         float progress,
-                         OSDColor fg_color,
-                         OSDColor bg_color);
-
-    virtual void DrawRoundedRect(void *drawable,
-                                 int x, int y,
-                                 int width, int height,
-                                 OSDColor color,
-                                 int radius) = 0;
-    virtual void DrawPolygon(void *drawable,
-                             Point *points,
-                             int pointSize,
-                             OSDColor color) = 0;
-    virtual void DrawArc(void *drawable,
-                         int x, int y, int width, int height,
-                         int startAngle, int endAngle,
-                         OSDColor color) = 0;
-    virtual void DrawLine(void *drawable,
-                          int x1, int y1,
-                          int x2, int y2,
-                          OSDColor color) = 0;
-    virtual void DrawIcon(void *drawable,
-                          const OSDIcon &icon,
-                          int x, int y,
-                          int size,
-                          OSDColor color) = 0;
-    virtual void DrawCircle(void *drawable,
-                            int x, int y,
-                            int radius,
-                            OSDColor color) = 0;
-    virtual void ClearDrawable(void *drawable,
-                               int x, int y, int width, int height,
-                               OSDColor color) = 0;
-
     OSDColor background;     // 0x1a1a1a (dark semi-transparent)
     OSDColor text_primary;   // 0xffffff (white)
     OSDColor text_secondary; // 0xb0b0b0 (light gray)
@@ -221,7 +148,8 @@ protected:
     OSDColor progress_bg;    // 0x3a3a3a (dark gray)
     OSDColor border;         // 0x2a2a2a (subtle border)
 
-    virtual OSDColor CreateColor(int r, int g, int b) = 0;
+protected:
+    virtual OSDColor CreateColor(int r, int g, int b, int a) = 0;
     virtual void DestroyColor(OSDColor color) = 0;
 
     // =================================================================================================
