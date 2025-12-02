@@ -28,14 +28,15 @@ typedef SSIZE_T ssize_t;
 #include <objc/objc.h>
 #endif
 
-class VlcPlayer : public Napi::ObjectWrap<VlcPlayer> {
+class VlcPlayer : public Napi::ObjectWrap<VlcPlayer>
+{
 public:
     // Constants
     static constexpr int MIN_WINDOW_SIZE = 1;
     static constexpr size_t MAX_URL_LENGTH = 8192;
 
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
-    VlcPlayer(const Napi::CallbackInfo& info);
+    VlcPlayer(const Napi::CallbackInfo &info);
     ~VlcPlayer();
 
 #ifdef _WIN32
@@ -44,9 +45,9 @@ public:
 #endif
 
     // Internal members accessible by split files
-    libvlc_instance_t* vlc_instance_;
-    libvlc_media_player_t* media_player_;
-    libvlc_media_t* current_media_;
+    libvlc_instance_t *vlc_instance_;
+    libvlc_media_player_t *media_player_;
+    libvlc_media_t *current_media_;
     std::mutex mutex_;
     std::atomic<bool> disposed_{false};
     std::string rendering_mode_; // "mem" or "win"
@@ -61,7 +62,7 @@ public:
     std::thread window_thread_;
     std::atomic<bool> window_thread_running_{false};
 #elif defined(__linux__)
-    Display* display_;
+    Display *display_;
     ::Window child_window_;
     ::Window parent_window_;
     std::atomic<bool> event_loop_running_{false};
@@ -80,13 +81,14 @@ public:
     void StopEventLoop();
     void SendWindowStateMessage(Atom state_atom, bool enable);
 #elif defined(__APPLE__)
-    void* child_nsview_;
-    void* parent_nsview_;
+    void *child_nsview_;
+    void *parent_nsview_;
 #endif
     bool child_window_created_;
 
     // Window state management
-    struct WindowState {
+    struct WindowState
+    {
         int x;
         int y;
         int width;
@@ -97,6 +99,7 @@ public:
     };
     WindowState saved_window_state_;
     bool is_fullscreen_;
+    bool is_window_visible_; // Track window visibility (minimize/hide state)
 
     // Video memory (vmem) callback support
     unsigned int video_width_;
@@ -109,28 +112,28 @@ public:
 
 private:
     // Unified API Methods
-    Napi::Value Open(const Napi::CallbackInfo& info);
-    Napi::Value Playback(const Napi::CallbackInfo& info);
-    Napi::Value Audio(const Napi::CallbackInfo& info);
-    Napi::Value Video(const Napi::CallbackInfo& info);
-    Napi::Value Subtitle(const Napi::CallbackInfo& info);
+    Napi::Value Open(const Napi::CallbackInfo &info);
+    Napi::Value Playback(const Napi::CallbackInfo &info);
+    Napi::Value Audio(const Napi::CallbackInfo &info);
+    Napi::Value Video(const Napi::CallbackInfo &info);
+    Napi::Value Subtitle(const Napi::CallbackInfo &info);
     /**
      * Get comprehensive media information (tracks, duration, seekability)
      * Returns: { duration, isSeekable, audioTracks, subtitleTracks, videoTracks }
      */
-    Napi::Value GetMediaInfo(const Napi::CallbackInfo& info);
+    Napi::Value GetMediaInfo(const Napi::CallbackInfo &info);
 
     // Internal storage for media options (applied on Open)
     std::map<std::string, std::string> media_options_;
 
     // Unified Window API (declared before internal methods to avoid X11 Window typedef conflict)
-    Napi::Value Window(const Napi::CallbackInfo& info);
+    Napi::Value Window(const Napi::CallbackInfo &info);
 
     // Unified Shortcut API
-    Napi::Value Shortcut(const Napi::CallbackInfo& info);
+    Napi::Value Shortcut(const Napi::CallbackInfo &info);
 
     // Unified Event Callback
-    Napi::Value SetEventCallback(const Napi::CallbackInfo& info);
+    Napi::Value SetEventCallback(const Napi::CallbackInfo &info);
 
     // Internal window management methods (platform-specific implementations)
     void CreateChildWindowInternal(int width = 1280, int height = 720);
@@ -141,10 +144,10 @@ private:
     void SetWindowVisible(bool visible);
     void SetWindowStyle(bool border, bool titlebar, bool resizable, bool taskbar);
     void SetWindowMinSizeInternal(int min_width, int min_height);
-    void GetWindowBounds(WindowState* state);
+    void GetWindowBounds(WindowState *state);
 
     // Cleanup
-    Napi::Value Dispose(const Napi::CallbackInfo& info);
+    Napi::Value Dispose(const Napi::CallbackInfo &info);
 
     // Event handling
     Napi::ThreadSafeFunction tsfn_events_;
@@ -152,40 +155,25 @@ private:
     // Keyboard shortcut mapping (action -> keys[])
     // New format: { "playPause": ["Space", "KeyK"], "volumeUp": ["ArrowUp", "Equal"] }
     std::map<std::string, std::vector<std::string>> action_to_keys_;
-    void ProcessKeyPress(const std::string& key_code);
+    void ProcessKeyPress(const std::string &key_code);
 
     // =================================================================================================
     // OSD (On-Screen Display) System
     // =================================================================================================
 
-    enum class OSDType {
-        VOLUME,           // Top-left: icon + text + progress bar
-        PLAYBACK,         // Top-right queue: play/pause/stop icons
-        SEEK,             // Bottom-center: full-width progress + time
-        NOTIFICATION,     // Top-right queue: generic text messages
-        AUDIO_TRACK,      // Top-right queue: "Audio: Track 2"
-        SUBTITLE_TRACK    // Top-right queue: "Subtitle: English"
-    };
-
-    enum class OSDPosition {
-        TOP_LEFT,
-        TOP_RIGHT,
-        BOTTOM_CENTER,
-        CENTER
-    };
-
-    struct OSDElement {
+    struct OSDElement
+    {
         OSDType type;
         OSDPosition position;
-        std::string text;              // Primary text
-        std::string subtext;           // Secondary text (e.g., time display)
-        float progress;                // 0.0-1.0 for progress bars
-        std::string icon;              // Icon identifier (play, pause, volume_up, etc.)
+        std::string text;    // Primary text
+        std::string subtext; // Secondary text (e.g., time display)
+        float progress;      // 0.0-1.0 for progress bars
+        std::string icon;    // Icon identifier (play, pause, volume_up, etc.)
 
         // Lifecycle
         std::chrono::steady_clock::time_point created_at;
         std::chrono::steady_clock::time_point expire_at;
-        float opacity;                 // 0.0-1.0 for fade animation
+        float opacity; // 0.0-1.0 for fade animation
         bool fading_out;
 
         // Rendering cache (platform-specific)
@@ -194,13 +182,13 @@ private:
         Pixmap backBuffer;
 #elif defined(_WIN32)
         HWND window;
-        HDC memDC;              // Memory DC for double buffering
-        HBITMAP memBitmap;      // Bitmap for double buffering
-        HBITMAP oldBitmap;      // Original bitmap to restore
+        HDC memDC;         // Memory DC for double buffering
+        HBITMAP memBitmap; // Bitmap for double buffering
+        HBITMAP oldBitmap; // Original bitmap to restore
 #endif
         int width;
         int height;
-        int slot_index;                // For multi-line notifications (0 = first line)
+        int slot_index; // For multi-line notifications (0 = first line)
 
         OSDElement()
             : type(OSDType::NOTIFICATION), position(OSDPosition::CENTER),
@@ -210,16 +198,19 @@ private:
 #elif defined(_WIN32)
               window(NULL), memDC(NULL), memBitmap(NULL), oldBitmap(NULL),
 #endif
-              width(0), height(0), slot_index(0) {}
+              width(0), height(0), slot_index(0)
+        {
+        }
     };
 
-    struct OSDColors {
-        unsigned long background;      // 0x1a1a1a (dark semi-transparent)
-        unsigned long text_primary;    // 0xffffff (white)
-        unsigned long text_secondary;  // 0xb0b0b0 (light gray)
-        unsigned long progress_fg;     // 0x4a9eff (blue accent)
-        unsigned long progress_bg;     // 0x3a3a3a (dark gray)
-        unsigned long border;          // 0x2a2a2a (subtle border)
+    struct OSDColors
+    {
+        unsigned long background;     // 0x1a1a1a (dark semi-transparent)
+        unsigned long text_primary;   // 0xffffff (white)
+        unsigned long text_secondary; // 0xb0b0b0 (light gray)
+        unsigned long progress_fg;    // 0x4a9eff (blue accent)
+        unsigned long progress_bg;    // 0x3a3a3a (dark gray)
+        unsigned long border;         // 0x2a2a2a (subtle border)
     };
 
     // OSD state management
@@ -229,23 +220,24 @@ private:
     std::thread osd_render_thread_;
     OSDColors osd_colors_;
 #ifdef __linux__
-    Display* osd_display_; // Dedicated connection for OSD thread
+    Display *osd_display_; // Dedicated connection for OSD thread
     GC osd_gc_;
     XFontSet osd_font_normal_;
     XFontSet osd_font_bold_;
 #elif defined(_WIN32)
     // Windows-specific OSD resources
-    HBRUSH osd_brushes_[6];          // Brushes for colors (background, text, progress, etc.)
+    HBRUSH osd_brushes_[6]; // Brushes for colors (background, text, progress, etc.)
     HFONT osd_font_normal_;
     HFONT osd_font_bold_;
-    COLORREF osd_colors_win32_[6];   // RGB colors for Windows (parallel to OSDColors)
+    COLORREF osd_colors_win32_[6]; // RGB colors for Windows (parallel to OSDColors)
 #endif
 
     // Public OSD API
-    void ShowOSD(OSDType type, const std::string& text,
-                 const std::string& subtext = "", float progress = 0.0f);
+    void ShowOSD(OSDType type, const std::string &text,
+                 const std::string &subtext = "", float progress = 0.0f);
     void HideOSD(OSDType type);
-    void UpdateOSD(OSDType type, const std::string& text, float progress);
+    void UpdateOSD(OSDType type, const std::string &text, float progress);
+    void ClearAllOSDs(); // Clear all active OSDs (called on minimize/hide/close)
 
     // Internal OSD management
     void InitializeOSD();
@@ -257,7 +249,7 @@ private:
     void UpdateOSDLifecycles();
     void RemoveExpiredOSDs();
     OSDPosition GetPositionForType(OSDType type);
-    void GetOSDSize(OSDType type, int& width, int& height);
+    void GetOSDSize(OSDType type, int &width, int &height);
     std::string FormatTime(int64_t time_ms);
 
     // Platform-specific OSD rendering (implemented in vlc_osd_linux.cpp, vlc_osd_win32.cpp, etc.)
@@ -277,7 +269,7 @@ private:
 
     // Generic drawing components (Linux X11 implementation)
     void DrawText(::Window window, Pixmap buffer, GC gc,
-                  const std::string& text, int x, int y,
+                  const std::string &text, int x, int y,
                   unsigned long color, XFontSet font);
     void DrawProgressBar(::Window window, Pixmap buffer, GC gc,
                          int x, int y, int width, int height,
@@ -287,29 +279,30 @@ private:
                          int x, int y, int width, int height,
                          unsigned long color, int radius = 8);
     void DrawIcon(::Window window, Pixmap buffer, GC gc,
-                  const std::string& icon_name, int x, int y, int size,
+                  const std::string &icon_name, int x, int y, int size,
                   unsigned long color);
 #elif defined(_WIN32)
     // Windows-specific OSD helpers
     void SetOSDWindowOpacity(HWND window, float opacity);
 
     // Generic drawing components (Windows GDI implementation)
-    void DrawText(HWND window, HDC hdc, const std::string& text,
+    void DrawText(HWND window, HDC hdc, const std::string &text,
                   int x, int y, COLORREF color, HFONT font);
     void DrawProgressBar(HWND window, HDC hdc, int x, int y,
-                        int width, int height, float progress,
-                        COLORREF fg_color, COLORREF bg_color);
+                         int width, int height, float progress,
+                         COLORREF fg_color, COLORREF bg_color);
     void DrawRoundedRect(HWND window, HDC hdc, int x, int y,
-                        int width, int height, COLORREF color, int radius = 8);
-    void DrawIcon(HWND window, HDC hdc, const std::string& icon_name,
+                         int width, int height, COLORREF color, int radius = 8);
+    void DrawIcon(HWND window, HDC hdc, const std::string &icon_name,
                   int x, int y, int size, COLORREF color);
 #endif
 
     // Context Menu Infrastructure
-    struct MenuItem {
+    struct MenuItem
+    {
         std::string label;
-        std::string action;        // Action name to trigger via ProcessKeyPress
-        std::string shortcut;      // Keyboard shortcut display (e.g., "F11", "Space")
+        std::string action;   // Action name to trigger via ProcessKeyPress
+        std::string shortcut; // Keyboard shortcut display (e.g., "F11", "Space")
         bool enabled;
         bool separator;
         std::vector<MenuItem> submenu;
@@ -319,10 +312,11 @@ private:
 
     std::vector<MenuItem> BuildContextMenu();
     void ShowContextMenu(int x, int y);
-    void ExecuteMenuAction(const std::string& action);
+    void ExecuteMenuAction(const std::string &action);
 
 #ifdef __linux__
-    struct MenuColors {
+    struct MenuColors
+    {
         unsigned long background;
         unsigned long foreground;
         unsigned long hoverBackground;
@@ -333,18 +327,19 @@ private:
     };
 
     // Enhanced menu state for multi-level support
-    struct MenuWindowState {
+    struct MenuWindowState
+    {
         ::Window window;
         Pixmap backBuffer;
         std::vector<MenuItem> items;
         int hoveredItem;
-        int selectedItem;  // For keyboard navigation
+        int selectedItem; // For keyboard navigation
         int width;
         int height;
         int posX;
         int posY;
-        MenuWindowState* parent;
-        MenuWindowState* child;
+        MenuWindowState *parent;
+        MenuWindowState *child;
         bool active;
 
         MenuWindowState()
@@ -356,60 +351,59 @@ private:
     // Helper methods for menu rendering (Linux X11)
     MenuColors GetGtkThemeColors();
     unsigned long AllocColor(unsigned long rgb);
-    void DrawMenuItem(::Window window, GC gc, const MenuItem& item, int yPos,
-                     int width, int height, bool hovered, bool selected, const MenuColors& colors);
-    void RedrawMenu(MenuWindowState* menu, GC gc, const MenuColors& colors);
-    MenuWindowState* CreateMenuState(int x, int y, const std::vector<MenuItem>& items,
-                                     const MenuColors& colors, MenuWindowState* parent = nullptr);
-    void DestroyMenuState(MenuWindowState* menu);
-    void CloseChildMenus(MenuWindowState* menu);
-    bool OpenSubmenu(MenuWindowState* menu, int itemIndex, GC gc, const MenuColors& colors);
-    bool HandleMenuEvent(MenuWindowState* rootMenu, XEvent& event, GC gc,
-                        const MenuColors& colors, bool& menuActive);
-    int CalculateMenuHeight(const std::vector<MenuItem>& items);
-    bool IsPointInMenu(MenuWindowState* menu, int x, int y);
+    void DrawMenuItem(::Window window, GC gc, const MenuItem &item, int yPos,
+                      int width, int height, bool hovered, bool selected, const MenuColors &colors);
+    void RedrawMenu(MenuWindowState *menu, GC gc, const MenuColors &colors);
+    MenuWindowState *CreateMenuState(int x, int y, const std::vector<MenuItem> &items,
+                                     const MenuColors &colors, MenuWindowState *parent = nullptr);
+    void DestroyMenuState(MenuWindowState *menu);
+    void CloseChildMenus(MenuWindowState *menu);
+    bool OpenSubmenu(MenuWindowState *menu, int itemIndex, GC gc, const MenuColors &colors);
+    bool HandleMenuEvent(MenuWindowState *rootMenu, XEvent &event, GC gc,
+                         const MenuColors &colors, bool &menuActive);
+    int CalculateMenuHeight(const std::vector<MenuItem> &items);
+    bool IsPointInMenu(MenuWindowState *menu, int x, int y);
     void SetMenuOpacity(::Window window, double opacity);
 #endif
 
-
     // Event manager
-    libvlc_event_manager_t* event_manager_;
+    libvlc_event_manager_t *event_manager_;
 
     void SetupEventCallbacks();
     void CleanupEventCallbacks();
 
     // Static event handlers
-    static void HandleTimeChanged(const libvlc_event_t* event, void* data);
-    static void HandleStateChanged(const libvlc_event_t* event, void* data);
-    static void HandleEndReached(const libvlc_event_t* event, void* data);
-    static void HandleError(const libvlc_event_t* event, void* data);
-    static void HandleLengthChanged(const libvlc_event_t* event, void* data);
-    static void HandleBuffering(const libvlc_event_t* event, void* data);
+    static void HandleTimeChanged(const libvlc_event_t *event, void *data);
+    static void HandleStateChanged(const libvlc_event_t *event, void *data);
+    static void HandleEndReached(const libvlc_event_t *event, void *data);
+    static void HandleError(const libvlc_event_t *event, void *data);
+    static void HandleLengthChanged(const libvlc_event_t *event, void *data);
+    static void HandleBuffering(const libvlc_event_t *event, void *data);
 
     // Shortcut management
     void InitializeDefaultShortcuts();
-    std::string GetFirstKeyForAction(const std::string& action);
-    bool HasKeyForAction(const std::string& action);
-    bool IsKnownAction(const std::string& action);
+    std::string GetFirstKeyForAction(const std::string &action);
+    bool HasKeyForAction(const std::string &action);
+    bool IsKnownAction(const std::string &action);
 
     // Helpers
     Napi::Object GetMediaInfoObject(Napi::Env env);
 
     // Event emission helpers
-    void EmitShortcut(const std::string& action);
-    void EmitCurrentVideo(std::function<void(Napi::Env, Napi::Object&)> builder);
-    void EmitPlayerInfo(std::function<void(Napi::Env, Napi::Object&)> builder);
+    void EmitShortcut(const std::string &action);
+    void EmitCurrentVideo(std::function<void(Napi::Env, Napi::Object &)> builder);
+    void EmitPlayerInfo(std::function<void(Napi::Env, Napi::Object &)> builder);
     void EmitMediaInfo();
 
     // Video memory callbacks
     void SetupVideoCallbacks();
-    static void* VideoLockCallback(void* opaque, void** planes);
-    static void VideoUnlockCallback(void* opaque, void* picture, void* const* planes);
-    static void VideoDisplayCallback(void* opaque, void* picture);
+    static void *VideoLockCallback(void *opaque, void **planes);
+    static void VideoUnlockCallback(void *opaque, void *picture, void *const *planes);
+    static void VideoDisplayCallback(void *opaque, void *picture);
 
     // Frame retrieval
-    Napi::Value GetFrame(const Napi::CallbackInfo& info);
-    Napi::Value GetVideoFormat(const Napi::CallbackInfo& info);
+    Napi::Value GetFrame(const Napi::CallbackInfo &info);
+    Napi::Value GetVideoFormat(const Napi::CallbackInfo &info);
 };
 
 #endif // VLC_PLAYER_H

@@ -275,16 +275,22 @@ void VlcPlayer::DestroyOSDWindow(std::shared_ptr<OSDElement> osd) {
 void VlcPlayer::RenderOSD(std::shared_ptr<OSDElement> osd) {
     if (!osd || !child_hwnd_) return;
 
-    // Get VLC player window position and size
-    RECT playerRect;
-    if (!GetWindowRect(child_hwnd_, &playerRect)) {
+    // Get VLC player window client area (excludes title bar and borders)
+    RECT clientRect;
+    if (!GetClientRect(child_hwnd_, &clientRect)) {
         return;
     }
 
-    int player_x = playerRect.left;
-    int player_y = playerRect.top;
-    int player_width = playerRect.right - playerRect.left;
-    int player_height = playerRect.bottom - playerRect.top;
+    // Convert client rect to screen coordinates
+    POINT topLeft = { clientRect.left, clientRect.top };
+    POINT bottomRight = { clientRect.right, clientRect.bottom };
+    ClientToScreen(child_hwnd_, &topLeft);
+    ClientToScreen(child_hwnd_, &bottomRight);
+
+    int player_x = topLeft.x;
+    int player_y = topLeft.y;
+    int player_width = bottomRight.x - topLeft.x;
+    int player_height = bottomRight.y - topLeft.y;
 
     // Ensure OSD size is set
     GetOSDSize(osd->type, osd->width, osd->height);

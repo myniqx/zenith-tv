@@ -1,4 +1,5 @@
-#include "vlc_player.h"
+#include "../vlc_player.h"
+#include "vlc_os_window.h"
 #include <algorithm>
 #include <cmath>
 
@@ -9,70 +10,79 @@
 /**
  * Get OSD position based on type
  */
-VlcPlayer::OSDPosition VlcPlayer::GetPositionForType(OSDType type) {
-    switch (type) {
-        case OSDType::VOLUME:
-            return OSDPosition::TOP_LEFT;
+VlcPlayer::OSDPosition OSWindow::GetPositionForType(OSDType type)
+{
+    switch (type)
+    {
+    case OSDType::VOLUME:
+        return OSDPosition::TOP_LEFT;
 
-        case OSDType::PLAYBACK:
-        case OSDType::NOTIFICATION:
-        case OSDType::AUDIO_TRACK:
-        case OSDType::SUBTITLE_TRACK:
-            return OSDPosition::TOP_RIGHT;
+    case OSDType::PLAYBACK:
+    case OSDType::NOTIFICATION:
+    case OSDType::AUDIO_TRACK:
+    case OSDType::SUBTITLE_TRACK:
+        return OSDPosition::TOP_RIGHT;
 
-        case OSDType::SEEK:
-            return OSDPosition::BOTTOM_CENTER;
+    case OSDType::SEEK:
+        return OSDPosition::BOTTOM_CENTER;
 
-        default:
-            return OSDPosition::CENTER;
+    default:
+        return OSDPosition::CENTER;
     }
 }
 
 /**
  * Get OSD size based on type
  */
-void VlcPlayer::GetOSDSize(OSDType type, int& width, int& height) {
-    switch (type) {
-        case OSDType::VOLUME:
-            width = 220;
-            height = 70;
-            break;
+void OSWindow::GetOSDSize(OSDType type, int &width, int &height)
+{
+    switch (type)
+    {
+    case OSDType::VOLUME:
+        width = 220;
+        height = 70;
+        break;
 
-        case OSDType::PLAYBACK:
-        case OSDType::NOTIFICATION:
-        case OSDType::AUDIO_TRACK:
-        case OSDType::SUBTITLE_TRACK:
-            width = 160;
-            height = 50;
-            break;
+    case OSDType::PLAYBACK:
+    case OSDType::NOTIFICATION:
+    case OSDType::AUDIO_TRACK:
+    case OSDType::SUBTITLE_TRACK:
+        width = 160;
+        height = 50;
+        break;
 
-        case OSDType::SEEK:
-            width = 600;
-            height = 80;
-            break;
+    case OSDType::SEEK:
+        width = 600;
+        height = 80;
+        break;
 
-        default:
-            width = 200;
-            height = 60;
-            break;
+    default:
+        width = 200;
+        height = 60;
+        break;
     }
 }
 
 /**
  * Format time in milliseconds to HH:MM:SS format
  */
-std::string VlcPlayer::FormatTime(int64_t time_ms) {
-    if (time_ms < 0) time_ms = 0;
+std::string OSWindow::FormatTime(int64_t time_ms)
+{
+    if (time_ms < 0)
+        time_ms = 0;
 
     int64_t total_seconds = time_ms / 1000;
     int hours = total_seconds / 3600;
     int minutes = (total_seconds % 3600) / 60;
     int seconds = total_seconds % 60;
 
-    char buffer[32];  // Increased buffer size to avoid warnings
-    if (hours > 0) {
+    char buffer[32]; // Increased buffer size to avoid warnings
+    if (hours > 0)
+    {
         snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", hours, minutes, seconds);
-    } else {
+    }
+    else
+    {
         snprintf(buffer, sizeof(buffer), "%02d:%02d", minutes, seconds);
     }
 
@@ -82,44 +92,54 @@ std::string VlcPlayer::FormatTime(int64_t time_ms) {
 /**
  * Calculate next available slot index for position-based queuing
  */
-int VlcPlayer::CalculateSlotIndex(OSDPosition position) {
-    if (position != OSDPosition::TOP_RIGHT) {
-        return 0;  // Only TOP_RIGHT uses multi-slot system
+int OSWindow::CalculateSlotIndex(OSDPosition position)
+{
+    if (position != OSDPosition::TOP_RIGHT)
+    {
+        return 0; // Only TOP_RIGHT uses multi-slot system
     }
 
     // Find highest slot index in use
     int max_slot = -1;
-    for (const auto& osd : active_osds_) {
-        if (osd->position == position) {
+    for (const auto &osd : active_osds_)
+    {
+        if (osd->position == position)
+        {
             max_slot = (std::max)(max_slot, osd->slot_index);
         }
     }
 
-    return max_slot + 1;  // Next available slot
+    return max_slot + 1; // Next available slot
 }
 
 /**
  * Compact slots after an OSD expires (move remaining slots up)
  */
-void VlcPlayer::CompactSlots(OSDPosition position) {
-    if (position != OSDPosition::TOP_RIGHT) return;
+void OSWindow::CompactSlots(OSDPosition position)
+{
+    if (position != OSDPosition::TOP_RIGHT)
+        return;
 
     // Collect all active OSDs in this position
     std::vector<std::shared_ptr<OSDElement>> sorted_osds;
-    for (auto& osd : active_osds_) {
-        if (osd->position == position && osd->opacity > 0.0f) {
+    for (auto &osd : active_osds_)
+    {
+        if (osd->position == position && osd->opacity > 0.0f)
+        {
             sorted_osds.push_back(osd);
         }
     }
 
     // Sort by current slot index
     std::sort(sorted_osds.begin(), sorted_osds.end(),
-              [](const auto& a, const auto& b) {
+              [](const auto &a, const auto &b)
+              {
                   return a->slot_index < b->slot_index;
               });
 
     // Reassign sequential slot indices (0, 1, 2, ...)
-    for (size_t i = 0; i < sorted_osds.size(); ++i) {
+    for (size_t i = 0; i < sorted_osds.size(); ++i)
+    {
         sorted_osds[i]->slot_index = static_cast<int>(i);
     }
 }
@@ -127,54 +147,61 @@ void VlcPlayer::CompactSlots(OSDPosition position) {
 /**
  * Update OSD lifecycles: fade in/out and expiration
  */
-void VlcPlayer::UpdateOSDLifecycles() {
+void OSWindow::UpdateOSDLifecycles()
+{
     auto now = std::chrono::steady_clock::now();
-    const float fade_duration = 200.0f;  // 200ms fade in/out
+    const float fade_duration = 200.0f; // 200ms fade in/out
 
-    for (auto& osd : active_osds_) {
+    for (auto &osd : active_osds_)
+    {
         // Calculate elapsed time since creation
         auto elapsed = std::chrono::duration<float, std::milli>(
-            now - osd->created_at
-        ).count();
+                           now - osd->created_at)
+                           .count();
 
         // Calculate total duration for this OSD
         auto total_duration = std::chrono::duration<float, std::milli>(
-            osd->expire_at - osd->created_at
-        ).count();
+                                  osd->expire_at - osd->created_at)
+                                  .count();
 
         // Calculate time remaining until expiration
         auto time_remaining = std::chrono::duration<float, std::milli>(
-            osd->expire_at - now
-        ).count();
+                                  osd->expire_at - now)
+                                  .count();
 
         // State machine for opacity
-        if (elapsed < fade_duration) {
+        if (elapsed < fade_duration)
+        {
             // Phase 1: Fade in (0-200ms)
             osd->opacity = elapsed / fade_duration;
             osd->fading_out = false;
         }
-        else if (elapsed >= fade_duration && time_remaining > fade_duration) {
+        else if (elapsed >= fade_duration && time_remaining > fade_duration)
+        {
             // Phase 2: Fully visible (200ms - (total-200ms))
             osd->opacity = 1.0f;
             osd->fading_out = false;
         }
-        else if (time_remaining > 0.0f && time_remaining <= fade_duration) {
+        else if (time_remaining > 0.0f && time_remaining <= fade_duration)
+        {
             // Phase 3: Fade out (last 200ms)
             osd->opacity = time_remaining / fade_duration;
             osd->fading_out = true;
         }
-        else {
+        else
+        {
             // Phase 4: Expired
             osd->opacity = 0.0f;
             osd->fading_out = true;
         }
 
         // Debug log with real timestamp (can be removed later)
-        if (elapsed < 100.0f || (time_remaining < 300.0f && time_remaining > 0.0f)) {
+        if (elapsed < 100.0f || (time_remaining < 300.0f && time_remaining > 0.0f))
+        {
             // Get current time in milliseconds since epoch
             auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()
-            ).count();
+                              std::chrono::system_clock::now().time_since_epoch())
+                              .count();
 
             printf("[%lld] [VLC OSD] type=%d, elapsed=%.0fms, remaining=%.0fms, opacity=%.2f\n",
                    now_ms, static_cast<int>(osd->type), elapsed, time_remaining, osd->opacity);
@@ -186,16 +213,21 @@ void VlcPlayer::UpdateOSDLifecycles() {
 /**
  * Remove expired OSDs and cleanup resources
  */
-void VlcPlayer::RemoveExpiredOSDs() {
+void OSWindow::RemoveExpiredOSDs()
+{
     auto it = active_osds_.begin();
-    while (it != active_osds_.end()) {
-        if ((*it)->opacity <= 0.0f && (*it)->fading_out) {
+    while (it != active_osds_.end())
+    {
+        if ((*it)->opacity <= 0.0f && (*it)->fading_out)
+        {
             // Cleanup platform-specific resources
             DestroyOSDWindow(*it);
 
             // Remove from active list
             it = active_osds_.erase(it);
-        } else {
+        }
+        else
+        {
             ++it;
         }
     }
@@ -204,10 +236,20 @@ void VlcPlayer::RemoveExpiredOSDs() {
 /**
  * Show OSD with specified type and content
  */
-void VlcPlayer::ShowOSD(OSDType type, const std::string& text,
-                        const std::string& subtext, float progress) {
-    if (!child_window_created_) {
-        return;  // Window not ready
+void OSWindow::ShowOSD(OSDType type, const std::string &text,
+                       const std::string &subtext, float progress)
+{
+    if (!child_window_created_)
+    {
+        return; // Window not ready
+    }
+
+    // Skip if window is not visible (minimized/hidden)
+    if (!is_window_visible_)
+    {
+        printf("[VLC OSD] Skipping OSD creation - window not visible\n");
+        fflush(stdout);
+        return;
     }
 
     std::lock_guard<std::mutex> lock(osd_mutex_);
@@ -218,18 +260,25 @@ void VlcPlayer::ShowOSD(OSDType type, const std::string& text,
     // For other TOP_RIGHT types: find new slot
     std::shared_ptr<OSDElement> existing_osd = nullptr;
 
-    if (type == OSDType::PLAYBACK && position == OSDPosition::TOP_RIGHT) {
+    if (type == OSDType::PLAYBACK && position == OSDPosition::TOP_RIGHT)
+    {
         // Replace existing playback OSD in slot 0
-        for (auto& osd : active_osds_) {
-            if (osd->type == OSDType::PLAYBACK && osd->position == OSDPosition::TOP_RIGHT) {
+        for (auto &osd : active_osds_)
+        {
+            if (osd->type == OSDType::PLAYBACK && osd->position == OSDPosition::TOP_RIGHT)
+            {
                 existing_osd = osd;
                 break;
             }
         }
-    } else if (position != OSDPosition::TOP_RIGHT) {
+    }
+    else if (position != OSDPosition::TOP_RIGHT)
+    {
         // For non-queue positions (VOLUME, SEEK): replace existing of same type
-        for (auto& osd : active_osds_) {
-            if (osd->type == type) {
+        for (auto &osd : active_osds_)
+        {
+            if (osd->type == type)
+            {
                 existing_osd = osd;
                 break;
             }
@@ -237,7 +286,8 @@ void VlcPlayer::ShowOSD(OSDType type, const std::string& text,
     }
 
     // Update existing or create new
-    if (existing_osd) {
+    if (existing_osd)
+    {
         // Update existing OSD with same duration logic
         existing_osd->text = text;
         existing_osd->subtext = subtext;
@@ -245,18 +295,25 @@ void VlcPlayer::ShowOSD(OSDType type, const std::string& text,
         existing_osd->created_at = std::chrono::steady_clock::now();
 
         int duration_ms;
-        if (type == OSDType::SEEK) {
+        if (type == OSDType::SEEK)
+        {
             duration_ms = 4000;
-        } else if (type == OSDType::VOLUME) {
+        }
+        else if (type == OSDType::VOLUME)
+        {
             duration_ms = 3000;
-        } else {
+        }
+        else
+        {
             duration_ms = 2500;
         }
 
         existing_osd->expire_at = existing_osd->created_at + std::chrono::milliseconds(duration_ms);
-        existing_osd->opacity = 0.0f;  // Restart fade in
+        existing_osd->opacity = 0.0f; // Restart fade in
         existing_osd->fading_out = false;
-    } else {
+    }
+    else
+    {
         // Create new OSD
         auto osd = std::make_shared<OSDElement>();
         osd->type = type;
@@ -269,12 +326,17 @@ void VlcPlayer::ShowOSD(OSDType type, const std::string& text,
         // Duration: fade_in (200ms) + hold + fade_out (200ms)
         // Total times: Seek=4s, Volume=3s, Others=2.5s
         int duration_ms;
-        if (type == OSDType::SEEK) {
-            duration_ms = 4000;  // 200 + 3600 + 200 = 4 seconds
-        } else if (type == OSDType::VOLUME) {
-            duration_ms = 3000;  // 200 + 2600 + 200 = 3 seconds
-        } else {
-            duration_ms = 2500;  // 200 + 2100 + 200 = 2.5 seconds
+        if (type == OSDType::SEEK)
+        {
+            duration_ms = 4000; // 200 + 3600 + 200 = 4 seconds
+        }
+        else if (type == OSDType::VOLUME)
+        {
+            duration_ms = 3000; // 200 + 2600 + 200 = 3 seconds
+        }
+        else
+        {
+            duration_ms = 2500; // 200 + 2100 + 200 = 2.5 seconds
         }
 
         osd->expire_at = osd->created_at + std::chrono::milliseconds(duration_ms);
@@ -295,24 +357,59 @@ void VlcPlayer::ShowOSD(OSDType type, const std::string& text,
 /**
  * Hide OSD of specified type
  */
-void VlcPlayer::HideOSD(OSDType type) {
+void OSWindow::HideOSD(OSDType type)
+{
     std::lock_guard<std::mutex> lock(osd_mutex_);
 
-    for (auto& osd : active_osds_) {
-        if (osd->type == type) {
-            osd->expire_at = std::chrono::steady_clock::now();  // Force immediate fade out
+    for (auto &osd : active_osds_)
+    {
+        if (osd->type == type)
+        {
+            osd->expire_at = std::chrono::steady_clock::now(); // Force immediate fade out
         }
     }
 }
 
 /**
- * Update existing OSD (without creating new one)
+ * Clear all active OSDs immediately
+ * Called when window is minimized, hidden, or closed
  */
-void VlcPlayer::UpdateOSD(OSDType type, const std::string& text, float progress) {
+void OSWindow::ClearAllOSDs()
+{
     std::lock_guard<std::mutex> lock(osd_mutex_);
 
-    for (auto& osd : active_osds_) {
-        if (osd->type == type) {
+    if (active_osds_.empty())
+    {
+        return; // Nothing to clear
+    }
+
+    printf("[VLC OSD] Clearing all active OSDs (%zu total)\n", active_osds_.size());
+    fflush(stdout);
+
+    // Destroy all OSD windows immediately (platform-specific cleanup)
+    for (auto &osd : active_osds_)
+    {
+        DestroyOSDWindow(osd);
+    }
+
+    // Clear the list
+    active_osds_.clear();
+
+    printf("[VLC OSD] All OSDs cleared\n");
+    fflush(stdout);
+}
+
+/**
+ * Update existing OSD (without creating new one)
+ */
+void OSWindow::UpdateOSD(OSDType type, const std::string &text, float progress)
+{
+    std::lock_guard<std::mutex> lock(osd_mutex_);
+
+    for (auto &osd : active_osds_)
+    {
+        if (osd->type == type)
+        {
             osd->text = text;
             osd->progress = progress;
             // Don't reset timer - just update content
@@ -324,7 +421,8 @@ void VlcPlayer::UpdateOSD(OSDType type, const std::string& text, float progress)
 /**
  * Initialize OSD system
  */
-void VlcPlayer::InitializeOSD() {
+void OSWindow::InitializeOSD()
+{
     printf("[VLC OSD] Initializing OSD system...\n");
     fflush(stdout);
 
@@ -341,7 +439,8 @@ void VlcPlayer::InitializeOSD() {
 /**
  * Shutdown OSD system
  */
-void VlcPlayer::ShutdownOSD() {
+void OSWindow::ShutdownOSD()
+{
     printf("[VLC OSD] Shutting down OSD system...\n");
     fflush(stdout);
 
@@ -351,7 +450,8 @@ void VlcPlayer::ShutdownOSD() {
     // Cleanup all active OSDs
     {
         std::lock_guard<std::mutex> lock(osd_mutex_);
-        for (auto& osd : active_osds_) {
+        for (auto &osd : active_osds_)
+        {
             DestroyOSDWindow(osd);
         }
         active_osds_.clear();
@@ -367,11 +467,14 @@ void VlcPlayer::ShutdownOSD() {
 /**
  * Start OSD render loop (60 FPS)
  */
-void VlcPlayer::StartOSDRenderLoop() {
-    if (osd_thread_running_) return;
+void OSWindow::StartOSDRenderLoop()
+{
+    if (osd_thread_running_)
+        return;
 
     osd_thread_running_ = true;
-    osd_render_thread_ = std::thread([this]() {
+    osd_render_thread_ = std::thread([this]()
+                                     {
         const auto frame_duration = std::chrono::milliseconds(16);  // ~60 FPS
 
         printf("[VLC OSD] Render loop started\n");
@@ -408,19 +511,21 @@ void VlcPlayer::StartOSDRenderLoop() {
         }
 
         printf("[VLC OSD] Render loop stopped\n");
-        fflush(stdout);
-    });
+        fflush(stdout); });
 }
 
 /**
  * Stop OSD render loop
  */
-void VlcPlayer::StopOSDRenderLoop() {
-    if (!osd_thread_running_) return;
+void OSWindow::StopOSDRenderLoop()
+{
+    if (!osd_thread_running_)
+        return;
 
     osd_thread_running_ = false;
 
-    if (osd_render_thread_.joinable()) {
+    if (osd_render_thread_.joinable())
+    {
         osd_render_thread_.join();
     }
 }

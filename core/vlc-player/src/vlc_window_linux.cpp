@@ -111,6 +111,7 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
     }
 
     child_window_created_ = true;
+    is_window_visible_ = true;  // Window starts visible
 
     // Start event loop for keyboard shortcuts
     StartEventLoop();
@@ -204,8 +205,11 @@ void VlcPlayer::SetWindowVisible(bool visible) {
 
     if (visible) {
         XMapWindow(display_, child_window_);
+        is_window_visible_ = true;
     } else {
         XUnmapWindow(display_, child_window_);
+        is_window_visible_ = false;
+        ClearAllOSDs();
     }
     XFlush(display_);
 }
@@ -423,8 +427,17 @@ void VlcPlayer::StartEventLoop() {
                     } else if (event.xbutton.button == 5) {
                         ProcessKeyPress("MouseWheelDown");
                     }
+                } else if (event.type == UnmapNotify) {
+                    // Window hidden/unmapped
+                    is_window_visible_ = false;
+                    ClearAllOSDs();
+                } else if (event.type == MapNotify) {
+                    // Window shown/mapped
+                    is_window_visible_ = true;
                 } else if (event.type == ClientMessage) {
                     if (event.xclient.data.l[0] == (long)wm_delete_window_atom_) {
+                        is_window_visible_ = false;
+                        ClearAllOSDs();
                         EmitShortcut("stop");
                     }
                 } else if (event.type == PropertyNotify) {
@@ -442,6 +455,10 @@ void VlcPlayer::StartEventLoop() {
                                 long state = *(long*)prop_data;
 
                                 if (state == WM_STATE_ICONIC) {
+                                    // Window minimized
+                                    is_window_visible_ = false;
+                                    ClearAllOSDs();
+
                                     bool is_playing = libvlc_media_player_is_playing(media_player_);
                                     was_playing_before_minimize_ = is_playing;
 
@@ -449,6 +466,9 @@ void VlcPlayer::StartEventLoop() {
                                         libvlc_media_player_pause(media_player_);
                                     }
                                 } else if (state == WM_STATE_NORMAL) {
+                                    // Window restored
+                                    is_window_visible_ = true;
+
                                     if (was_playing_before_minimize_) {
                                         libvlc_media_player_play(media_player_);
                                         was_playing_before_minimize_ = false;

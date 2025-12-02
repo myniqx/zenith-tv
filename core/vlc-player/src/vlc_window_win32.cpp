@@ -147,12 +147,31 @@ static LRESULT CALLBACK VlcWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         case WM_CLOSE:
             // Close button clicked - emit stop but don't close window
             if (player) {
+                player->is_window_visible_ = false;
+                player->ClearAllOSDs();
                 player->EmitShortcut("stop");
+            }
+            return 0;
+
+        case WM_SHOWWINDOW:
+            if (player) {
+                if (!wParam) {  // wParam == FALSE means hiding
+                    player->is_window_visible_ = false;
+                    player->ClearAllOSDs();
+                } else {  // wParam == TRUE means showing
+                    player->is_window_visible_ = true;
+                }
             }
             return 0;
 
         case WM_SIZE: {
             if (player && wParam == SIZE_MINIMIZED) {
+                // Mark window as not visible
+                player->is_window_visible_ = false;
+
+                // Clear all OSDs when minimizing
+                player->ClearAllOSDs();
+
                 // Window minimized - smart pause
                 bool is_playing = libvlc_media_player_is_playing(player->media_player_);
                 player->was_playing_before_minimize_ = is_playing;
@@ -161,6 +180,9 @@ static LRESULT CALLBACK VlcWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                     libvlc_media_player_pause(player->media_player_);
                 }
             } else if (player && wParam == SIZE_RESTORED) {
+                // Mark window as visible again
+                player->is_window_visible_ = true;
+
                 // Window restored - smart resume
                 if (player->was_playing_before_minimize_) {
                     libvlc_media_player_play(player->media_player_);
@@ -271,6 +293,7 @@ void VlcPlayer::CreateChildWindowInternal(int width, int height) {
 
         // Mark window as created before starting message loop
         child_window_created_ = true;
+        is_window_visible_ = true;  // Window starts visible
 
         printf("[VLC] Window created and message pump thread started\n");
         fflush(stdout);
@@ -394,6 +417,14 @@ void VlcPlayer::SetWindowVisible(bool visible) {
     if (!child_window_created_ || !child_hwnd_) return;
 
     ::ShowWindow(child_hwnd_, visible ? SW_SHOW : SW_HIDE);
+
+    // Update visibility state
+    is_window_visible_ = visible;
+
+    // Clear OSDs if hiding
+    if (!visible) {
+        ClearAllOSDs();
+    }
 }
 
 void VlcPlayer::SetWindowStyle(bool border, bool titlebar, bool resizable, bool taskbar) {
