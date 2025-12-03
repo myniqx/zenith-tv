@@ -157,62 +157,6 @@ private:
     std::map<std::string, std::vector<std::string>> action_to_keys_;
     void ProcessKeyPress(const std::string &key_code);
 
-    // =================================================================================================
-    // OSD (On-Screen Display) System
-    // =================================================================================================
-
-    struct OSDElement
-    {
-        OSDType type;
-        OSDPosition position;
-        std::string text;    // Primary text
-        std::string subtext; // Secondary text (e.g., time display)
-        float progress;      // 0.0-1.0 for progress bars
-        std::string icon;    // Icon identifier (play, pause, volume_up, etc.)
-
-        // Lifecycle
-        std::chrono::steady_clock::time_point created_at;
-        std::chrono::steady_clock::time_point expire_at;
-        float opacity; // 0.0-1.0 for fade animation
-        bool fading_out;
-
-        // Rendering cache (platform-specific)
-#ifdef __linux__
-        ::Window window;
-        Pixmap backBuffer;
-#elif defined(_WIN32)
-        HWND window;
-        HDC memDC;         // Memory DC for double buffering
-        HBITMAP memBitmap; // Bitmap for double buffering
-        HBITMAP oldBitmap; // Original bitmap to restore
-#endif
-        int width;
-        int height;
-        int slot_index; // For multi-line notifications (0 = first line)
-
-        OSDElement()
-            : type(OSDType::NOTIFICATION), position(OSDPosition::CENTER),
-              progress(0.0f), opacity(0.0f), fading_out(false),
-#ifdef __linux__
-              window(0), backBuffer(0),
-#elif defined(_WIN32)
-              window(NULL), memDC(NULL), memBitmap(NULL), oldBitmap(NULL),
-#endif
-              width(0), height(0), slot_index(0)
-        {
-        }
-    };
-
-    struct OSDColors
-    {
-        unsigned long background;     // 0x1a1a1a (dark semi-transparent)
-        unsigned long text_primary;   // 0xffffff (white)
-        unsigned long text_secondary; // 0xb0b0b0 (light gray)
-        unsigned long progress_fg;    // 0x4a9eff (blue accent)
-        unsigned long progress_bg;    // 0x3a3a3a (dark gray)
-        unsigned long border;         // 0x2a2a2a (subtle border)
-    };
-
     // OSD state management
     std::vector<std::shared_ptr<OSDElement>> active_osds_;
     std::mutex osd_mutex_;

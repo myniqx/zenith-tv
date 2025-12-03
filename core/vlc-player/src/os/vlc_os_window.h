@@ -152,6 +152,8 @@ protected:
     virtual OSDColor CreateColor(int r, int g, int b, int a) = 0;
     virtual void DestroyColor(OSDColor color) = 0;
 
+    virtual std::shared_ptr<OSDWindow> CreateOSDWindow() = 0;
+
     // =================================================================================================
     // Platform-Agnostic Event Handlers (implemented in vlc_os_window.cpp)
     // =================================================================================================

@@ -48,20 +48,10 @@ struct Dimension
 
 enum class OSDType
 {
-  VOLUME,        // Top-left: icon + text + progress bar
-  PLAYBACK,      // Top-right queue: play/pause/stop icons
-  SEEK,          // Bottom-center: full-width progress + time
-  NOTIFICATION,  // Top-right queue: generic text messages
-  AUDIO_TRACK,   // Top-right queue: "Audio: Track 2"
-  SUBTITLE_TRACK // Top-right queue: "Subtitle: English"
-};
-
-enum class OSDPosition
-{
-  TOP_LEFT,
-  TOP_RIGHT,
-  BOTTOM_CENTER,
-  CENTER
+  VOLUME = 0,       // Top-left: icon + text + progress bar
+  SEEK = 1,         // Bottom-center: full-width progress + time
+  PLAYBACK = 2,     // Top-right: icon + text
+  NOTIFICATION = 3, // Top-right queue: generic text messages
 };
 
 typedef void *OSDColor;
