@@ -19,6 +19,7 @@ typedef SSIZE_T ssize_t;
 #include <memory>
 #include <chrono>
 #include <thread>
+#include "os/vlc_os_window.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -50,7 +51,7 @@ public:
     libvlc_media_t *current_media_;
     std::mutex mutex_;
     std::atomic<bool> disposed_{false};
-    std::string rendering_mode_; // "mem" or "win"
+    OSWindow *osd_window_;
 
     // Child window handles (platform-specific)
 #ifdef _WIN32

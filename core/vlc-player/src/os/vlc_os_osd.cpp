@@ -1,4 +1,40 @@
 #include "vlc_os_osd.h"
+#include "vlc_os_window.h"
+#include <cstdint>
+#include <string>
+#include <vector>
+#include <map>
+#include <mutex>
+#include <atomic>
+#include <memory>
+#include <chrono>
+#include <thread>
+#include <algorithm>
+
+void OSDWindow::SetCreatedAt(std::chrono::steady_clock::time_point time)
+{
+  created_at = time;
+  expire_at = time + std::chrono::milliseconds(duration);
+}
+
+void OSDWindow::SetData(
+    const std::string &text,
+    const std::string &subtext,
+    float progress,
+    OSDIcon icon)
+{
+  this->text = text;
+  this->subtext = subtext;
+  this->progress = std::clamp(progress, 0.0f, 1.0f);
+  this->icon = icon;
+
+  if (_type == OSDType::NOTIFICATION)
+  {
+    auto dimension = window->MeasureText(window->defaultFont, text);
+    _width = dimension.width + 30;
+    _height = dimension.height + 20;
+  }
+}
 
 void OSDWindow::DrawProgressBar(int x, int y,
                                 int width, int height,
@@ -6,7 +42,6 @@ void OSDWindow::DrawProgressBar(int x, int y,
                                 OSDColor fg_color,
                                 OSDColor bg_color)
 {
-  DrawRoundedRect(x, y, width, height, bg_color, 4);
   if (progress > 0.0f)
   {
     int padding = 2;
@@ -33,11 +68,11 @@ void OSDWindow::DrawIcon(const OSDIcon &icon,
   {
     int bar_width = size / 3;
     DrawRoundedRect(x, y, bar_width, size, color, 0);
-    DrawRoundedRect(x + size - bar_width, y, size, size, color, 0);
+    DrawRoundedRect(x + size - bar_width, y, bar_width, size, color, 0);
   }
   else if (icon == STOP)
   {
-    DrawProgressBar(x, y, size, size, 1.0f, color, color);
+    DrawRoundedRect(x, y, size, size, color, 2);
   }
   else if (icon == VOLUME_UP || icon == VOLUME_DOWN)
   {
@@ -67,7 +102,7 @@ void OSDWindow::DrawIcon(const OSDIcon &icon,
   }
 }
 
-std::string OSDWindow::FormatTime(int64_t time_ms)
+std::string OSDWindow::FormatTime(int64_t time_ms) const
 {
   if (time_ms < 0)
     time_ms = 0;
@@ -131,10 +166,10 @@ void OSDWindow::SetSize(int width, int height)
   }
 }
 
-OSDWindow::OSDWindow()
-    : progress(0.0f), _opacity(-1), fading_out(false),
-      window(nullptr), drawable(nullptr),
-      _width(0), _height(0), slot_index(0)
+OSDWindow::OSDWindow(OSWindow *window)
+    : progress(0.0f), _opacity(-1),
+      window(window),
+      _width(0), _height(0), duration(2000)
 {
   SetType(OSDType::NOTIFICATION);
 }
@@ -147,29 +182,78 @@ void OSDWindow::SetType(OSDType type)
   case OSDType::VOLUME:
     _width = 220;
     _height = 70;
+    duration = 2000;
     break;
 
-  case OSDType::NOTIFICATION:
-    _width = 160;
-    _height = 50;
+  case OSDType::PLAYBACK:
+    auto dimension = window->MeasureText(window->defaultFont, "Pause");
+    _width = dimension.width + 30;
+    _height = dimension.height + 20;
+    duration = 2000;
     break;
 
   case OSDType::SEEK:
     _width = 600;
     _height = 80;
+    duration = 4000;
     break;
 
   default:
+    duration = 2000;
+    // this will be dynamic
     _width = 200;
     _height = 60;
     break;
   }
 }
 
-void OSDWindow::Render(WindowBounds bounds)
+void OSDWindow::Update(WindowBounds bounds, int offsetY, float time)
 {
-  if (_opacity < 0)
+  if (_type == OSDType::SEEK || _type == OSDType::VOLUME || _opacity <= 0)
     return;
+
+  auto now = std::chrono::steady_clock::now();
+  const float fade_duration = 200.0f; // 200ms fade in/out
+
+  // Calculate elapsed time since creation
+  auto elapsed = std::chrono::duration<float, std::milli>(
+                     now - created_at)
+                     .count();
+
+  // Calculate total duration for this OSD
+  auto total_duration = std::chrono::duration<float, std::milli>(
+                            expire_at - created_at)
+                            .count();
+
+  // Calculate time remaining until expiration
+  auto time_remaining = std::chrono::duration<float, std::milli>(
+                            expire_at - now)
+                            .count();
+
+  // State machine for opacity
+  if (elapsed < fade_duration)
+  {
+    // Phase 1: Fade in (0-200ms)
+    auto opacity = elapsed / fade_duration;
+    SetOpacity((int)(opacity * 100.0f));
+  }
+  else if (elapsed >= fade_duration && time_remaining > fade_duration)
+  {
+    // Phase 2: Fully visible (200ms - (total-200ms))
+    SetOpacity(100);
+  }
+  else if (time_remaining > 0.0f && time_remaining <= fade_duration)
+  {
+    // Phase 3: Fade out (last 200ms)
+    auto opacity = time_remaining / fade_duration;
+    SetOpacity((int)(opacity * 100.0f));
+  }
+  else
+  {
+    SetOpacity(0);
+    _offsetY = 0;
+    return;
+  }
 
   int x = 0, y = 0;
   switch (_type)
@@ -182,7 +266,15 @@ void OSDWindow::Render(WindowBounds bounds)
   default:
   case OSDType::NOTIFICATION:
     x = bounds.x + bounds.width - _width - 20;
-    y = bounds.y + 20 + (slot_index * 60);
+    if (_offsetY <= offsetY)
+    {
+      _offsetY = offsetY; // reset the offset
+    }
+    else
+    {
+      _offsetY -= (_offsetY - offsetY) * time;
+    }
+    y = bounds.y + 20 + _offsetY;
     break;
 
   case OSDType::SEEK:
@@ -198,8 +290,14 @@ void OSDWindow::Render(WindowBounds bounds)
     CreateWindowInternal(x, y);
     SetOpacity(0.0f);
   }
+}
 
-  ClearDrawable(drawable, 0, 0, _width, _height, window->background);
+void OSDWindow::Render(WindowBounds bounds)
+{
+  if (_opacity <= 0)
+    return;
+
+  ClearDrawable(0, 0, _width, _height, window->background);
 
   Flush();
   switch (GetType())
@@ -224,8 +322,9 @@ void OSDWindow::Render(WindowBounds bounds)
 
 void OSDWindow::RenderVolume()
 {
-  OSDIcon icon = (progress == 0.0f) ? VOLUME_MUTE : VOLUME_UP;
-  DrawIcon(icon, 15, 10, 24, window->text_primary);
+  DrawIcon(
+      progress == 0.0f ? VOLUME_MUTE : VOLUME_UP,
+      15, 10, 24, window->text_primary);
 
   DrawText(text, 50, 25, window->text_primary, nullptr);
 
@@ -235,12 +334,12 @@ void OSDWindow::RenderVolume()
 
 void OSDWindow::RenderPlayback()
 {
-  if (icon != STOP)
+  if (icon != NONE)
   {
     DrawIcon(icon, 15, 15, 20, window->text_primary);
   }
 
-  int text_x = (icon != STOP) ? 45 : 15;
+  int text_x = (icon != NONE) ? 45 : 15;
   DrawText(text, text_x, 30, window->text_primary, nullptr);
 }
 

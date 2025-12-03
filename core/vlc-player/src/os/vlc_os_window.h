@@ -15,6 +15,7 @@
 #include <thread>
 #include "common.h"
 #include "vlc_os_osd.h"
+#include "../vlc_player.h"
 
 // =================================================================================================
 // Forward Declarations
@@ -29,18 +30,10 @@ public:
     // Constructor & Destructor
     // =================================================================================================
 
-    OSWindow();
+    OSWindow(VlcPlayer *player);
     ~OSWindow();
 
-    // Prevent copy/move
-    OSWindow(const OSWindow &) = delete;
-    OSWindow &operator=(const OSWindow &) = delete;
-    OSWindow(OSWindow &&) = delete;
-    OSWindow &operator=(OSWindow &&) = delete;
-
-    // =================================================================================================
-    // Window Lifecycle
-    // =================================================================================================
+    void Initialize();
 
     /**
      * Create the main window for VLC player
@@ -66,16 +59,17 @@ public:
     /**
      * Check if window is currently visible (not hidden or minimized)
      */
-    bool IsVisible() const;
-    bool IsMinimized() const;
-    bool IsFullscreen() const;
-    bool IsOnTop() const;
+    virtual bool IsVisible() const = 0;
+    virtual bool IsMinimized() const = 0;
+    virtual bool IsFullscreen() const = 0;
+    virtual bool IsOnTop() const = 0;
+    bool ShouldShowOSD() const { return IsVisible() && !IsMinimized(); }
 
     /**
      * Get current window bounds (position and size)
      * @param bounds Output parameter for window bounds
      */
-    void GetBounds(WindowBounds *bounds) const;
+    virtual void GetBounds(WindowBounds *bounds) const = 0;
 
     /**
      * Get window client area (inner drawable area, excluding title bar and borders)
@@ -84,23 +78,16 @@ public:
      * Coordinates are in screen space.
      * @return WindowBounds with client area coordinates and size
      */
-    WindowBounds GetClientArea() const;
-
-    /**
-     * Get current window style
-     * @param style Output parameter for window style
-     */
-    void GetStyle(WindowStyle *style) const;
+    virtual WindowBounds GetClientArea() const = 0;
 
     // =================================================================================================
     // Window Manipulation
     // =================================================================================================
 
     void SetBounds(int x, int y, int width, int height);
-    void SetFullscreen(bool fullscreen);
-    void SetOnTop(bool on_top);
     void SetVisible(bool visible);
     void SetStyle(const WindowStyle &style);
+    void SetScreenMode(ScreenMode mode);
 
     // =================================================================================================
     // OSD Management (Fully Encapsulated)
@@ -116,6 +103,7 @@ public:
     void ShowOSD(OSDType type,
                  const std::string &text,
                  const std::string &subtext = "",
+                 const OSDIcon icon = OSDIcon::NONE,
                  float progress = 0.0f);
 
     /**
@@ -129,18 +117,6 @@ public:
                    const std::string &text,
                    float progress);
 
-    /**
-     * Hide specific OSD type immediately (fade out)
-     * @param type OSD type to hide
-     */
-    void HideOSD(OSDType type);
-
-    /**
-     * Hide all active OSDs immediately
-     * Called automatically on minimize/hide/destroy
-     */
-    void HideAllOSDs();
-
     OSDColor background;     // 0x1a1a1a (dark semi-transparent)
     OSDColor text_primary;   // 0xffffff (white)
     OSDColor text_secondary; // 0xb0b0b0 (light gray)
@@ -148,11 +124,21 @@ public:
     OSDColor progress_bg;    // 0x3a3a3a (dark gray)
     OSDColor border;         // 0x2a2a2a (subtle border)
 
+    OSDFont defaultFont;
+    OSDFont boldFont;
+
+    virtual Dimension MeasureText(OSDFont font, const std::string &text) = 0;
+
 protected:
     virtual OSDColor CreateColor(int r, int g, int b, int a) = 0;
+    virtual OSDFont CreateFont(bool bold) = 0;
     virtual void DestroyColor(OSDColor color) = 0;
-
+    virtual void DestroyFont(OSDFont font) = 0;
     virtual std::shared_ptr<OSDWindow> CreateOSDWindow() = 0;
+    virtual void CreateContextMenu(std::vector<VlcPlayer::MenuItem> items, int x, int y) = 0;
+    virtual void DestroyContextMenu() = 0;
+    virtual void SetBoundsInternal(int x, int y, int width, int height) = 0;
+    virtual void SetStyleInternal(const WindowStyle &style) = 0;
 
     // =================================================================================================
     // Platform-Agnostic Event Handlers (implemented in vlc_os_window.cpp)
@@ -170,37 +156,25 @@ protected:
      * @param meta Is Windows/Command key pressed?
      */
     void OnInput(const std::string &key_code, bool ctrl, bool shift, bool alt, bool meta);
+    void OnRightClick(int x, int y);
     void OnMinimize(bool minimized);
     void OnClose();
     void OnResize(int x, int y, int width, int height);
+    void OnStyleChange(const WindowStyle &style);
 
-    /**
-     * Called when window visibility changes (hide/show)
-     * @param visible true if visible, false if hidden
-     */
-    void OnVisibilityChange(bool visible);
-
-    /**
-     * Called when right-click context menu is requested
-     * @param screen_x Screen X coordinate
-     * @param screen_y Screen Y coordinate
-     */
-    void OnContextMenu(int screen_x, int screen_y);
+    VlcPlayer *player = nullptr;
 
 private:
+    ScreenMode _screenMode = ScreenMode::FREE;
+    WindowBounds _freeBounds = {0, 0, 0, 0};
+    bool _contextMenuActive = false;
     // =================================================================================================
     // OSD Internal Management (implemented in vlc_os_window.cpp)
     // =================================================================================================
 
-    OSDPosition GetPositionForType(OSDType type);
-    std::string FormatTime(int64_t time_ms);
-    int CalculateSlotIndex(OSDPosition position);
-    void CompactSlots(OSDPosition position);
     void StartOSDRenderLoop();
     void StopOSDRenderLoop();
-    void UpdateOSDLifecycles();
-    void RemoveExpiredOSDs();
-    void RenderOSD(std::shared_ptr<OSDWindow> osd);
+    void ClearOSDs();
 
     std::vector<std::shared_ptr<OSDWindow>> active_osds_;
     std::mutex osd_mutex_;

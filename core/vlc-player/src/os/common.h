@@ -18,7 +18,16 @@ struct WindowStyle
   bool has_titlebar;
   bool is_resizable;
   bool show_in_taskbar;
+  bool fullscreen;
+  bool on_top;
 };
+
+enum ScreenMode
+{
+  FREE,
+  STICKY,
+  FULLSCREEN
+}
 
 // =================================================================================================
 // OSWindow - Platform-Agnostic Window Manager
@@ -26,6 +35,7 @@ struct WindowStyle
 
 enum OSDIcon
 {
+  NONE,
   PLAY,
   PAUSE,
   STOP,
@@ -55,3 +65,4 @@ enum class OSDType
 };
 
 typedef void *OSDColor;
+typedef void *OSDFont;
