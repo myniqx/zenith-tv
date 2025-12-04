@@ -50,10 +50,7 @@ Napi::Value VlcPlayer::Open(const Napi::CallbackInfo &info)
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (rendering_mode_ == "win" && !child_window_created_)
-    {
-        CreateChildWindowInternal(window_width, window_height);
-    }
+    CreateChildWindowInternal(window_width, window_height);
 
     if (current_media_)
     {
@@ -86,20 +83,6 @@ Napi::Value VlcPlayer::Open(const Napi::CallbackInfo &info)
     libvlc_media_release(current_media_);
     current_media_ = nullptr;
 
-    if (child_window_created_ && rendering_mode_ == "win")
-    {
-#ifdef _WIN32
-        if (child_hwnd_)
-            libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
-#elif defined(__linux__)
-        if (child_window_)
-            libvlc_media_player_set_xwindow(media_player_, static_cast<uint32_t>(child_window_));
-#elif defined(__APPLE__)
-        if (child_nsview_)
-            libvlc_media_player_set_nsobject(media_player_, child_nsview_);
-#endif
-    }
-
     return env.Undefined();
 }
 
@@ -120,26 +103,7 @@ Napi::Value VlcPlayer::Playback(const Napi::CallbackInfo &info)
         std::string action = options.Get("action").As<Napi::String>().Utf8Value();
         if (action == "play")
         {
-            if (child_window_created_ && rendering_mode_ == "win")
-            {
-#ifdef _WIN32
-                if (child_hwnd_)
-                {
-                    libvlc_media_player_set_hwnd(media_player_, child_hwnd_);
-                }
-#elif defined(__linux__)
-                if (child_window_)
-                {
-                    libvlc_media_player_set_xwindow(media_player_, static_cast<uint32_t>(child_window_));
-                }
-#elif defined(__APPLE__)
-                if (child_nsview_)
-                {
-                    libvlc_media_player_set_nsobject(media_player_, child_nsview_);
-                }
-#endif
-            }
-
+            osd_window_->Bind(media_player_);
             libvlc_media_player_play(media_player_);
         }
         else if (action == "pause")
@@ -153,11 +117,7 @@ Napi::Value VlcPlayer::Playback(const Napi::CallbackInfo &info)
         else if (action == "stop")
         {
             libvlc_media_player_stop(media_player_);
-
-            if (rendering_mode_ == "win" && child_window_created_)
-            {
-                DestroyChildWindowInternal();
-            }
+            DestroyChildWindowInternal();
         }
     }
 

@@ -1,11 +1,12 @@
 #include "vlc_player.h"
+#include "os/common.h"
 #include <vlc/vlc.h>
 
 // =================================================================================================
 // Context Menu Builder
 // =================================================================================================
 
-std::vector<VlcPlayer::MenuItem> VlcPlayer::BuildContextMenu()
+std::vector<MenuItem> VlcPlayer::BuildContextMenu()
 {
     std::vector<MenuItem> menu;
 
@@ -92,7 +93,7 @@ std::vector<VlcPlayer::MenuItem> VlcPlayer::BuildContextMenu()
     fullscreen.label = isFullscreen ? "Exit Fullscreen" : "Fullscreen";
     fullscreen.action = isFullscreen ? "exitFullscreen" : "toggleFullscreen";
     fullscreen.shortcut = GetFirstKeyForAction(isFullscreen ? "exitFullscreen" : "toggleFullscreen");
-    fullscreen.enabled = child_window_created_;
+    fullscreen.enabled = osd_window_->IsCreated();
     menu.push_back(fullscreen);
 
     // Sticky Mode (always on top, no taskbar)
@@ -100,7 +101,7 @@ std::vector<VlcPlayer::MenuItem> VlcPlayer::BuildContextMenu()
     sticky.label = "Sticky Mode";
     sticky.action = "stickyMode";
     sticky.shortcut = GetFirstKeyForAction("stickyMode");
-    sticky.enabled = child_window_created_;
+    sticky.enabled = osd_window_->IsCreated();
     menu.push_back(sticky);
 
     // Free Screen Mode (borderless, no decorations)
@@ -108,7 +109,7 @@ std::vector<VlcPlayer::MenuItem> VlcPlayer::BuildContextMenu()
     freeScreen.label = "Free Screen Mode";
     freeScreen.action = "freeScreenMode";
     freeScreen.shortcut = GetFirstKeyForAction("freeScreenMode");
-    freeScreen.enabled = child_window_created_;
+    freeScreen.enabled = osd_window_->IsCreated();
     menu.push_back(freeScreen);
 
     // Separator

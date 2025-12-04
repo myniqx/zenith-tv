@@ -40,7 +40,6 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
       media_player_(nullptr),
       current_media_(nullptr),
       osd_window_(nullptr),
-      rendering_mode_("win"), // Default to window mode
 #ifdef __linux__
       display_(nullptr),
       child_window_(0),
@@ -49,7 +48,6 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
       child_nsview_(nullptr),
       parent_nsview_(nullptr),
 #endif
-      child_window_created_(false),
       video_width_(0),
       video_height_(0),
       video_pitch_(0),
@@ -58,14 +56,6 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
 {
 
     Napi::Env env = info.Env();
-
-    // Optional: Accept mode parameter ("mem" or "win")
-    if (info.Length() > 0 && info[0].IsString())
-    {
-        rendering_mode_ = info[0].As<Napi::String>().Utf8Value();
-        printf("[VLC Core] Rendering mode: %s\n", rendering_mode_.c_str());
-        fflush(stdout);
-    }
 
     // Initialize VLC with platform-specific parameters
 #ifdef _WIN32
@@ -136,23 +126,10 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
         return;
     }
 
-    // Setup video callbacks only in memory rendering mode
-    if (rendering_mode_ == "mem")
-    {
-        SetupVideoCallbacks();
-    }
-
     // Initialize default keyboard shortcuts
     InitializeDefaultShortcuts();
 
     SetupEventCallbacks();
-
-    // Initialize OSD system (after window is created in window mode)
-    if (rendering_mode_ == "win")
-    {
-        // OSD will be initialized after CreateChildWindowInternal is called
-        // (happens when Window API is used from JavaScript)
-    }
 }
 
 VlcPlayer::~VlcPlayer()

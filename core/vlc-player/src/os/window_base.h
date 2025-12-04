@@ -14,14 +14,15 @@
 #include <chrono>
 #include <thread>
 #include "common.h"
-#include "vlc_os_osd.h"
-#include "../vlc_player.h"
+#include "base_osd.h"
 
 // =================================================================================================
 // Forward Declarations
 // =================================================================================================
 
 struct libvlc_media_player_t;
+
+class VlcPlayer;
 
 class OSWindow
 {
@@ -31,7 +32,7 @@ public:
     // =================================================================================================
 
     OSWindow(VlcPlayer *player);
-    ~OSWindow();
+    virtual ~OSWindow();
 
     void Initialize();
 
@@ -133,11 +134,11 @@ public:
 
 protected:
     virtual OSDColor CreateColor(int r, int g, int b, int a) = 0;
-    virtual OSDFont CreateFont(bool bold) = 0;
+    virtual OSDFont CreateOSDFont(bool bold) = 0;
     virtual void DestroyColor(OSDColor color) = 0;
     virtual void DestroyFont(OSDFont font) = 0;
     virtual std::shared_ptr<OSDWindow> CreateOSDWindow() = 0;
-    virtual void CreateContextMenu(std::vector<VlcPlayer::MenuItem> items, int x, int y) = 0;
+    virtual void CreateContextMenu(std::vector<MenuItem> items, int x, int y) = 0;
     virtual void DestroyContextMenu() = 0;
     virtual void SetBoundsInternal(int x, int y, int width, int height) = 0;
     virtual void SetStyleInternal(const WindowStyle &style) = 0;

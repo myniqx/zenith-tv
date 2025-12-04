@@ -10,6 +10,10 @@
 
 #pragma comment(lib, "gdiplus.lib")
 
+// Undefine Windows macros that conflict with our method names
+#undef CreateFont
+#undef IsMinimized
+
 // =================================================================================================
 // Win32 Main Window - VLC player window with OSD management
 // =================================================================================================
@@ -52,7 +56,7 @@ protected:
     // =================================================================================================
 
     OSDColor CreateColor(int r, int g, int b, int a) override;
-    OSDFont CreateFont(bool bold) override;
+    OSDFont CreateOSDFont(bool bold) override;
     void DestroyColor(OSDColor color) override;
     void DestroyFont(OSDFont font) override;
 
@@ -61,15 +65,12 @@ protected:
     // =================================================================================================
 
     std::shared_ptr<OSDWindow> CreateOSDWindow() override;
-    void InitializeOSDPlatform() override;
-    void ShutdownOSDPlatform() override;
-    void DestroyOSDWindow(std::shared_ptr<OSDWindow> osd) override;
 
     // =================================================================================================
     // Context Menu (OSWindow abstract methods)
     // =================================================================================================
 
-    void CreateContextMenu(std::vector<VlcPlayer::MenuItem> items, int x, int y) override;
+    void CreateContextMenu(std::vector<MenuItem> items, int x, int y) override;
     void DestroyContextMenu() override;
 
     // =================================================================================================
@@ -109,7 +110,7 @@ private:
     std::vector<Gdiplus::Font *> fonts_;
 
     // Context menu tracking
-    std::map<UINT, VlcPlayer::MenuItem> menu_item_map_;
+    std::map<UINT, MenuItem> menu_item_map_;
     UINT next_menu_id_;
 
     // Message pump thread
@@ -143,7 +144,7 @@ private:
     bool GetKeyModifiers(bool &ctrl, bool &shift, bool &alt, bool &meta);
 
     // Context menu helpers
-    void BuildWin32Menu(HMENU menu, const std::vector<VlcPlayer::MenuItem> &items);
+    void BuildWin32Menu(HMENU menu, const std::vector<MenuItem> &items);
     void HandleMenuCommand(UINT command_id);
 };
 

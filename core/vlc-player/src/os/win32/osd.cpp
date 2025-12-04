@@ -1,5 +1,5 @@
-#include "vlc_os_win32_osd.h"
-#include "../vlc_os_window.h"
+#include "osd.h"
+#include "../window_base.h"
 #include <algorithm>
 
 // Win32 window class name for OSD windows

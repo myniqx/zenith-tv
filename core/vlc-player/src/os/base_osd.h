@@ -1,3 +1,6 @@
+#ifndef VLC_OS_BASE_OSD_H
+#define VLC_OS_BASE_OSD_H
+
 #include "common.h"
 
 class OSWindow;
@@ -67,6 +70,10 @@ public:
   int height() const { return _height; }
   virtual bool isWindowCreated() const = 0;
 
+  void Destroy() { DestroyWindowInternal(); }
+
+  void Hide();
+
   int GetHeight() const
   {
     // dont return height for volume or seek
@@ -120,3 +127,5 @@ public:
 
   void RenderSeek();
 };
+
+#endif // VLC_OS_BASE_OSD_H

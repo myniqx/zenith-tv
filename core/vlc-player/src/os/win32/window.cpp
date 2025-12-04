@@ -1,7 +1,12 @@
-#include "vlc_os_window_win32.h"
-#include "vlc_os_win32_osd.h"
+#include "window.h"
+#include "osd.h"
+#include "../../vlc_player.h"
+#include <vlc/vlc.h>
 #include <windowsx.h>
 #include <string>
+
+// Undefine Windows macros that conflict with our method names
+#undef IsMinimized
 
 // Win32 window class name
 static const wchar_t *WINDOW_CLASS_NAME = L"VLC_Player_Window";
@@ -435,7 +440,7 @@ OSDColor Win32Window::CreateColor(int r, int g, int b, int a)
     return static_cast<OSDColor>(color);
 }
 
-OSDFont Win32Window::CreateFont(bool bold)
+OSDFont Win32Window::CreateOSDFont(bool bold)
 {
     auto *font = new Gdiplus::Font(
         L"Segoe UI",
@@ -512,29 +517,11 @@ std::shared_ptr<OSDWindow> Win32Window::CreateOSDWindow()
     return std::make_shared<Win32OSDWindow>(this);
 }
 
-void Win32Window::InitializeOSDPlatform()
-{
-    // GDI+ already initialized in Create()
-}
-
-void Win32Window::ShutdownOSDPlatform()
-{
-    // Cleanup handled in Destroy()
-}
-
-void Win32Window::DestroyOSDWindow(std::shared_ptr<OSDWindow> osd)
-{
-    if (osd && osd->isWindowCreated())
-    {
-        osd->DestroyWindowInternal();
-    }
-}
-
 // =================================================================================================
 // Context Menu
 // =================================================================================================
 
-void Win32Window::CreateContextMenu(std::vector<VlcPlayer::MenuItem> items, int x, int y)
+void Win32Window::CreateContextMenu(std::vector<MenuItem> items, int x, int y)
 {
     DestroyContextMenu();
 
@@ -558,7 +545,7 @@ void Win32Window::CreateContextMenu(std::vector<VlcPlayer::MenuItem> items, int 
                    pt.x, pt.y, 0, hwnd_, NULL);
 }
 
-void Win32Window::BuildWin32Menu(HMENU menu, const std::vector<VlcPlayer::MenuItem> &items)
+void Win32Window::BuildWin32Menu(HMENU menu, const std::vector<MenuItem> &items)
 {
     for (const auto &item : items)
     {
@@ -621,7 +608,7 @@ void Win32Window::HandleMenuCommand(UINT command_id)
     auto it = menu_item_map_.find(command_id);
     if (it != menu_item_map_.end())
     {
-        const VlcPlayer::MenuItem &item = it->second;
+        const MenuItem &item = it->second;
 
         // Execute action if available
         if (!item.action.empty() && player)
@@ -806,7 +793,7 @@ LRESULT Win32Window::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         return 0;
     }
 
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
+    return DefWindowProcW(hwnd_, msg, wParam, lParam);
 }
 
 // =================================================================================================

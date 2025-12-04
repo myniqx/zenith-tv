@@ -1,5 +1,5 @@
-#include "vlc_os_osd.h"
-#include "vlc_os_window.h"
+#include "base_osd.h"
+#include "window_base.h"
 #include "../vlc_player.h"
 #include <algorithm>
 #include <cmath>
@@ -191,7 +191,10 @@ void OSWindow::ClearOSDs()
 
     for (auto &osd : active_osds_)
     {
-        DestroyOSDWindow(osd);
+        if (osd && osd->isWindowCreated())
+        {
+            osd->Destroy();
+        }
     }
 
     active_osds_.clear();
@@ -286,25 +289,9 @@ OSWindow::~OSWindow()
     StopOSDRenderLoop();
     ClearOSDs();
 
-    // Cleanup fonts
-    if (defaultFont)
-        DestroyFont(defaultFont);
-    if (boldFont)
-        DestroyFont(boldFont);
-
-    // Cleanup colors
-    if (background)
-        DestroyColor(background);
-    if (text_primary)
-        DestroyColor(text_primary);
-    if (text_secondary)
-        DestroyColor(text_secondary);
-    if (progress_fg)
-        DestroyColor(progress_fg);
-    if (progress_bg)
-        DestroyColor(progress_bg);
-    if (border)
-        DestroyColor(border);
+    // Note: Fonts and colors are cleaned up by derived classes in their Destroy() methods
+    // We cannot call virtual methods (DestroyFont/DestroyColor) from base class destructor
+    // as the derived class vtable has already been destroyed at this point.
 }
 
 void OSWindow::Initialize()
@@ -318,8 +305,8 @@ void OSWindow::Initialize()
     border = CreateColor(0x2a, 0x2a, 0x2a, 0xff);
 
     // Initialize fonts (platform-specific CreateFont implementation)
-    defaultFont = CreateFont(false);
-    boldFont = CreateFont(true);
+    defaultFont = CreateOSDFont(false);
+    boldFont = CreateOSDFont(true);
 
     // Start OSD system
     StartOSDRenderLoop();
@@ -384,11 +371,12 @@ void OSWindow::SetScreenMode(ScreenMode mode)
 
 void OSWindow::SetVisible(bool visible)
 {
-    // Platform implementation will handle visibility
-    // Common logic: hide OSDs when window is hidden
     if (!visible)
     {
-        HideAllOSDs();
+        for (auto &osd : active_osds_)
+        {
+            osd->Hide();
+        }
     }
 }
 

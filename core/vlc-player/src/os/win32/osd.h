@@ -1,11 +1,14 @@
 #ifndef VLC_OS_WIN32_OSD_H
 #define VLC_OS_WIN32_OSD_H
 
-#include "../vlc_os_osd.h"
+#include "../base_osd.h"
 #include <windows.h>
 #include <gdiplus.h>
 
 #pragma comment(lib, "gdiplus.lib")
+
+// Undefine Windows macros that conflict with our method names
+#undef DrawText
 
 // =================================================================================================
 // Win32 OSD Window - Layered transparent overlay window

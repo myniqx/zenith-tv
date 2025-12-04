@@ -1,4 +1,14 @@
+#ifndef VLC_OS_COMMON_H
+#define VLC_OS_COMMON_H
 
+#include <string>
+#include <vector>
+#include <functional>
+
+#include <atomic>
+#include <mutex>
+#include <thread>
+#include <chrono>
 
 // =================================================================================================
 // Window State Structures
@@ -28,7 +38,7 @@ enum ScreenMode
   FREE_ON_TOP,
   STICKY,
   FULLSCREEN
-}
+};
 
 // =================================================================================================
 // OSWindow - Platform-Agnostic Window Manager
@@ -67,3 +77,22 @@ enum class OSDType
 
 typedef void *OSDColor;
 typedef void *OSDFont;
+
+// Menu Item
+
+struct MenuItem
+{
+  std::string label;
+  std::string action;   // Action name to trigger via ProcessKeyPress
+  std::string shortcut; // Keyboard shortcut display (e.g., "F11", "Space")
+  bool enabled;
+  bool separator;
+  bool disabled;
+  bool checked;
+  std::function<void()> callback;
+  std::vector<MenuItem> submenu;
+
+  MenuItem() : enabled(true), separator(false), disabled(false), checked(false) {}
+};
+
+#endif // VLC_OS_COMMON_H

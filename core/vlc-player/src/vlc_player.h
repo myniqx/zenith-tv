@@ -19,7 +19,8 @@ typedef SSIZE_T ssize_t;
 #include <memory>
 #include <chrono>
 #include <thread>
-#include "os/vlc_os_window.h"
+#include "os/common.h"
+#include "os/window_base.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -36,6 +37,17 @@ public:
     static constexpr int MIN_WINDOW_SIZE = 1;
     static constexpr size_t MAX_URL_LENGTH = 8192;
 
+    // Debug logging helper
+    static void Log(const char* format, ...) {
+        printf("[VLC Node] ");
+        va_list args;
+        va_start(args, format);
+        vprintf(format, args);
+        va_end(args);
+        printf("\n");
+        fflush(stdout);
+    }
+
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
     VlcPlayer(const Napi::CallbackInfo &info);
     ~VlcPlayer();
@@ -43,6 +55,7 @@ public:
 #ifdef _WIN32
     // Windows needs access to these methods from the window procedure
     friend LRESULT CALLBACK VlcWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    friend class Win32Window;
 #endif
 
     // Internal members accessible by split files
@@ -77,22 +90,6 @@ public:
     void *child_nsview_;
     void *parent_nsview_;
 #endif
-    bool child_window_created_;
-
-    // Window state management
-    struct WindowState
-    {
-        int x;
-        int y;
-        int width;
-        int height;
-        bool has_border;
-        bool has_titlebar;
-        bool is_resizable;
-    };
-    WindowState saved_window_state_;
-    bool is_fullscreen_;
-    bool is_window_visible_; // Track window visibility (minimize/hide state)
 
     // Video memory (vmem) callback support
     unsigned int video_width_;
@@ -102,6 +99,10 @@ public:
     std::mutex frame_mutex_;
     bool frame_ready_;
     std::atomic<float> buffering_progress_{0.0f};
+
+    void ProcessKeyPress(const std::string &key_code);
+
+    std::vector<MenuItem> BuildContextMenu();
 
 private:
     // Unified API Methods
@@ -141,26 +142,7 @@ private:
     // Keyboard shortcut mapping (action -> keys[])
     // New format: { "playPause": ["Space", "KeyK"], "volumeUp": ["ArrowUp", "Equal"] }
     std::map<std::string, std::vector<std::string>> action_to_keys_;
-    void ProcessKeyPress(const std::string &key_code);
 
-
-    // Context Menu Infrastructure
-    struct MenuItem
-    {
-        std::string label;
-        std::string action;   // Action name to trigger via ProcessKeyPress
-        std::string shortcut; // Keyboard shortcut display (e.g., "F11", "Space")
-        bool enabled;
-        bool separator;
-        bool disabled;
-        bool checked;
-        std::function<void()> callback;
-        std::vector<MenuItem> submenu;
-
-        MenuItem() : enabled(true), separator(false), disabled(false), checked(false) {}
-    };
-
-    std::vector<MenuItem> BuildContextMenu();
     void ExecuteMenuAction(const std::string &action);
 
     // Helper methods for OSD (delegates to osd_window_)

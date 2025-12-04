@@ -17,7 +17,7 @@ Napi::Value VlcPlayer::Window(const Napi::CallbackInfo &info)
     Napi::Object options = info[0].As<Napi::Object>();
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (!child_window_created_)
+    if (!osd_window_->IsCreated())
     {
         // Window not created yet
         return Napi::Boolean::New(env, false);

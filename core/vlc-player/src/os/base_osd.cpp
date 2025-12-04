@@ -1,5 +1,5 @@
-#include "vlc_os_osd.h"
-#include "vlc_os_window.h"
+#include "base_osd.h"
+#include "window_base.h"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -10,6 +10,12 @@
 #include <chrono>
 #include <thread>
 #include <algorithm>
+
+void OSDWindow::Hide()
+{
+  SetOpacity(0);
+  expire_at = std::chrono::steady_clock::now();
+}
 
 void OSDWindow::SetCreatedAt(std::chrono::steady_clock::time_point time)
 {
@@ -327,7 +333,7 @@ void OSDWindow::Update(WindowBounds bounds, int offsetY, float time)
   }
 }
 
-void OSDWindow::Render(WindowBounds bounds)
+void OSDWindow::Render()
 {
   if (_opacity <= 0)
     return;

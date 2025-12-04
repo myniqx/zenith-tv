@@ -17,8 +17,8 @@
         "src/vlc_vmem.cpp",
         "src/vlc_context_menu.cpp",
         "src/vlc_context_menu_actions.cpp",
-        "src/os/vlc_os_window.cpp",
-        "src/os/vlc_os_osd.cpp"
+        "src/os/window_base.cpp",
+        "src/os/base_osd.cpp"
       ],
       "include_dirs": [
         "node_modules/node-addon-api"
@@ -30,8 +30,8 @@
           {
             "sources+": [
               "src/vlc_window_win32.cpp",
-              "src/os/win32/vlc_os_window_win32.cpp",
-              "src/os/win32/vlc_os_win32_osd.cpp"
+              "src/os/win32/window.cpp",
+              "src/os/win32/osd.cpp"
             ]
           }
         ],
