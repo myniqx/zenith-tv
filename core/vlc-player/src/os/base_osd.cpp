@@ -17,20 +17,55 @@ void OSDWindow::SetCreatedAt(std::chrono::steady_clock::time_point time)
   expire_at = time + std::chrono::milliseconds(duration);
 }
 
+bool OSDWindow::IsCurrentlyVisible(std::chrono::steady_clock::time_point now) const
+{
+  // Check if expired
+  if (expire_at <= now)
+    return false;
+
+  // Check if has visible opacity
+  if (_opacity <= 0)
+    return false;
+
+  return true;
+}
+
 void OSDWindow::SetData(
     const std::string &text,
     const std::string &subtext,
     float progress,
     OSDIcon icon)
 {
-  this->text = text;
-  this->subtext = subtext;
   this->progress = std::clamp(progress, 0.0f, 1.0f);
   this->icon = icon;
 
+  // Type-specific text generation
+  switch (_type)
+  {
+  case OSDType::VOLUME:
+    // Generate percentage text from progress
+    this->text = std::to_string((int)(this->progress * 100)) + "%";
+    this->subtext = "";
+    break;
+
+  case OSDType::SEEK:
+    // Seek uses subtext for time display
+    this->text = "";
+    this->subtext = subtext;
+    break;
+
+  case OSDType::PLAYBACK:
+  case OSDType::NOTIFICATION:
+    // Use provided text directly
+    this->text = text;
+    this->subtext = subtext;
+    break;
+  }
+
+  // Dynamic sizing for notifications
   if (_type == OSDType::NOTIFICATION)
   {
-    auto dimension = window->MeasureText(window->defaultFont, text);
+    auto dimension = window->MeasureText(window->defaultFont, this->text);
     _width = dimension.width + 30;
     _height = dimension.height + 20;
   }

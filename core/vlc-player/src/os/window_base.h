@@ -94,28 +94,30 @@ public:
     // =================================================================================================
 
     /**
-     * Show an OSD overlay
-     * @param type OSD type (determines position, layout, and duration)
-     * @param text Primary text to display
-     * @param subtext Secondary text (optional, e.g., "00:45 / 02:30" for SEEK)
-     * @param progress Progress value 0.0-1.0 (for VOLUME, SEEK)
+     * Show volume OSD with progress bar
+     * @param progress Volume level 0.0-1.0 (text is auto-generated as percentage)
      */
-    void ShowOSD(OSDType type,
-                 const std::string &text,
-                 const std::string &subtext = "",
-                 const OSDIcon icon = OSDIcon::NONE,
-                 float progress = 0.0f);
+    void ShowVolumeOSD(float progress);
 
     /**
-     * Update existing OSD content without resetting timer
-     * Useful for continuous updates (e.g., volume dragging)
-     * @param type OSD type to update
-     * @param text New text
-     * @param progress New progress value
+     * Show seek OSD with time display and progress bar
+     * @param time Current playback time in milliseconds
+     * @param duration Total duration in milliseconds
      */
-    void UpdateOSD(OSDType type,
-                   const std::string &text,
-                   float progress);
+    void ShowSeekOSD(int64_t time, int64_t duration);
+
+    /**
+     * Show playback state OSD (Play/Pause/Stop)
+     * @param state Playback state string ("playing", "paused", "stopped")
+     */
+    void ShowPlaybackOSD(const std::string &state);
+
+    /**
+     * Show notification OSD in top-right queue
+     * @param text Notification message
+     * @param icon Optional icon
+     */
+    void ShowNotificationOSD(const std::string &text, OSDIcon icon = OSDIcon::NONE);
 
     OSDColor background;     // 0x1a1a1a (dark semi-transparent)
     OSDColor text_primary;   // 0xffffff (white)
@@ -168,6 +170,7 @@ private:
     ScreenMode _screenMode = ScreenMode::FREE;
     WindowBounds _freeBounds = {0, 0, 0, 0};
     bool _contextMenuActive = false;
+    std::atomic<bool> was_playing_before_minimize_{false};
     // =================================================================================================
     // OSD Internal Management (implemented in vlc_os_window.cpp)
     // =================================================================================================
@@ -175,6 +178,14 @@ private:
     void StartOSDRenderLoop();
     void StopOSDRenderLoop();
     void ClearOSDs();
+
+    /**
+     * Find existing OSD of given type or create new one
+     * @param type OSD type to find/create
+     * @param allow_visible_reuse If false, won't reuse currently visible OSDs (for notifications)
+     * @return Shared pointer to OSD window, or nullptr on failure
+     */
+    std::shared_ptr<OSDWindow> FindOrCreateOSD(OSDType type, bool allow_visible_reuse);
 
     std::vector<std::shared_ptr<OSDWindow>> active_osds_;
     std::mutex osd_mutex_;

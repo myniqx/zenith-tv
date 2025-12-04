@@ -81,6 +81,13 @@ public:
     return _height + padding;
   }
 
+  /**
+   * Check if this OSD is currently visible to the user
+   * @param now Current time point (for checking expiration)
+   * @return true if OSD is visible (not expired and has opacity > 0)
+   */
+  bool IsCurrentlyVisible(std::chrono::steady_clock::time_point now) const;
+
   std::string FormatTime(int64_t time_ms) const;
 
   void SetCreatedAt(std::chrono::steady_clock::time_point time);

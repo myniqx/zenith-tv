@@ -1,7 +1,7 @@
 #ifndef VLC_OS_WINDOW_WIN32_H
 #define VLC_OS_WINDOW_WIN32_H
 
-#include "../vlc_os_window.h"
+#include "../window_base.h"
 #include <windows.h>
 #include <gdiplus.h>
 #include <map>
@@ -84,9 +84,9 @@ private:
     // Win32 Window Management
     // =================================================================================================
 
-    HWND hwnd_;                          // Main window handle
-    HINSTANCE hinstance_;                // Application instance
-    HMENU hmenu_;                        // Context menu handle
+    HWND hwnd_;           // Main window handle
+    HINSTANCE hinstance_; // Application instance
+    HMENU hmenu_;         // Context menu handle
 
     // Window state (cached for queries)
     bool is_created_;
@@ -100,7 +100,7 @@ private:
     libvlc_media_player_t *media_player_;
 
     // GDI+ for text measurement and color management
-    ULONG_PTR gdiplus_token_;           // GDI+ initialization token
+    ULONG_PTR gdiplus_token_; // GDI+ initialization token
     Gdiplus::Graphics *measure_graphics_;
     HDC measure_dc_;
 
@@ -111,6 +111,11 @@ private:
     // Context menu tracking
     std::map<UINT, VlcPlayer::MenuItem> menu_item_map_;
     UINT next_menu_id_;
+
+    // Message pump thread
+    std::thread message_thread_;
+    std::atomic<bool> message_thread_running_{false};
+    DWORD window_thread_id_;
 
     // =================================================================================================
     // Window Procedure & Message Handling

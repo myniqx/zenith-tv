@@ -8,6 +8,63 @@ static const wchar_t *WINDOW_CLASS_NAME = L"VLC_Player_Window";
 static bool g_window_class_registered = false;
 
 // =================================================================================================
+// Dark Mode Support Helpers
+// =================================================================================================
+
+// Check if Windows is in dark mode
+static bool IsWindowsDarkMode()
+{
+    HKEY hKey;
+    LONG result = RegOpenKeyExW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        0,
+        KEY_READ,
+        &hKey);
+
+    if (result == ERROR_SUCCESS)
+    {
+        DWORD value = 1; // Default to light mode
+        DWORD size = sizeof(value);
+        LONG queryResult = RegQueryValueExW(
+            hKey,
+            L"AppsUseLightTheme",
+            NULL,
+            NULL,
+            (LPBYTE)&value,
+            &size);
+        RegCloseKey(hKey);
+
+        if (queryResult == ERROR_SUCCESS)
+        {
+            return (value == 0); // 0 = dark mode, 1 = light mode
+        }
+    }
+
+    return false; // Default to light mode
+}
+
+// Enable dark mode for Windows 10 20H1+ menus
+static void EnableDarkModeForMenu(HWND hwnd)
+{
+    HMODULE hUxtheme = LoadLibraryW(L"uxtheme.dll");
+    if (!hUxtheme)
+        return;
+
+    // Use ordinal 135 for SetPreferredAppMode (Windows 10 1903+)
+    typedef int(WINAPI * SetPreferredAppMode_t)(int);
+    SetPreferredAppMode_t SetPreferredAppMode =
+        (SetPreferredAppMode_t)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(135));
+
+    if (SetPreferredAppMode)
+    {
+        SetPreferredAppMode(1); // 1 = ForceDark
+    }
+
+    FreeLibrary(hUxtheme);
+}
+
+// =================================================================================================
 // Constructor & Destructor
 // =================================================================================================
 
@@ -44,59 +101,131 @@ bool Win32Window::Create(int width, int height)
     if (is_created_)
         return true;
 
-    // Register window class
+    // Register window class first (outside thread)
     RegisterWindowClass();
 
-    // Initialize GDI+
-    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    Gdiplus::GdiplusStartup(&gdiplus_token_, &gdiplusStartupInput, NULL);
+    // Start message pump thread
+    message_thread_running_ = true;
+    message_thread_ = std::thread([this, width, height]()
+                                  {
+        // Store thread ID for debugging
+        window_thread_id_ = GetCurrentThreadId();
 
-    // Create measure DC for text measurement
-    measure_dc_ = CreateCompatibleDC(NULL);
-    measure_graphics_ = new Gdiplus::Graphics(measure_dc_);
-    measure_graphics_->SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+        // Initialize GDI+
+        Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+        Gdiplus::GdiplusStartup(&gdiplus_token_, &gdiplusStartupInput, NULL);
 
-    // Create main window
-    hwnd_ = CreateWindowExW(
-        0,
-        WINDOW_CLASS_NAME,
-        L"VLC Player",
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        width, height,
-        NULL, NULL, hinstance_,
-        this // Pass 'this' pointer for WM_CREATE
-    );
+        // Create measure DC for text measurement
+        measure_dc_ = CreateCompatibleDC(NULL);
+        measure_graphics_ = new Gdiplus::Graphics(measure_dc_);
+        measure_graphics_->SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
 
-    if (!hwnd_)
+        // Create main window
+        hwnd_ = CreateWindowExW(
+            0,
+            WINDOW_CLASS_NAME,
+            L"VLC Player",
+            WS_OVERLAPPEDWINDOW,
+            CW_USEDEFAULT, CW_USEDEFAULT,
+            width, height,
+            NULL, NULL, hinstance_,
+            this // Pass 'this' pointer for WM_CREATE
+        );
+
+        if (!hwnd_)
+        {
+            if (measure_graphics_)
+            {
+                delete measure_graphics_;
+                measure_graphics_ = nullptr;
+            }
+            if (measure_dc_)
+            {
+                DeleteDC(measure_dc_);
+                measure_dc_ = nullptr;
+            }
+            Gdiplus::GdiplusShutdown(gdiplus_token_);
+            message_thread_running_ = false;
+            return;
+        }
+
+        // Show window
+        ShowWindow(hwnd_, SW_SHOW);
+        UpdateWindow(hwnd_);
+
+        // Update state
+        is_created_ = true;
+        is_visible_ = true;
+        is_minimized_ = false;
+
+        // Get initial bounds
+        RECT rect;
+        GetWindowRect(hwnd_, &rect);
+        bounds_ = {rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top};
+
+        UpdateClientArea();
+
+        // Message loop (~60fps with 16ms sleep)
+        MSG msg;
+        while (message_thread_running_)
+        {
+            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+            {
+                if (msg.message == WM_QUIT)
+                {
+                    message_thread_running_ = false;
+                    return;
+                }
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+            Sleep(16); // ~60fps
+        } });
+
+    // Wait for window creation (timeout after 5 seconds)
+    auto start_time = std::chrono::steady_clock::now();
+    while (!is_created_ && message_thread_running_)
     {
-        Gdiplus::GdiplusShutdown(gdiplus_token_);
-        return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        // Timeout check
+        auto elapsed = std::chrono::steady_clock::now() - start_time;
+        if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= 5)
+        {
+            message_thread_running_ = false;
+            if (message_thread_.joinable())
+            {
+                message_thread_.join();
+            }
+            return false;
+        }
     }
 
-    // Show window
-    ShowWindow(hwnd_, SW_SHOW);
-    UpdateWindow(hwnd_);
-
-    // Update state
-    is_created_ = true;
-    is_visible_ = true;
-    is_minimized_ = false;
-
-    // Get initial bounds
-    RECT rect;
-    GetWindowRect(hwnd_, &rect);
-    bounds_ = {rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top};
-
-    UpdateClientArea();
-
-    return true;
+    return is_created_;
 }
 
 void Win32Window::Destroy()
 {
     if (!is_created_)
         return;
+
+    // Stop message pump thread
+    if (message_thread_running_)
+    {
+        message_thread_running_ = false;
+
+        // Send WM_QUIT to exit message loop
+        if (hwnd_)
+        {
+            PostMessage(hwnd_, WM_QUIT, 0, 0);
+        }
+
+        // Wait for thread to finish
+        if (message_thread_.joinable())
+        {
+            message_thread_.join();
+        }
+    }
 
     // Unbind VLC
     if (media_player_)
@@ -409,6 +538,12 @@ void Win32Window::CreateContextMenu(std::vector<VlcPlayer::MenuItem> items, int 
 {
     DestroyContextMenu();
 
+    // Enable dark mode if system is in dark mode
+    if (IsWindowsDarkMode())
+    {
+        EnableDarkModeForMenu(hwnd_);
+    }
+
     hmenu_ = CreatePopupMenu();
     next_menu_id_ = 1000;
 
@@ -445,9 +580,16 @@ void Win32Window::BuildWin32Menu(HMENU menu, const std::vector<VlcPlayer::MenuIt
         }
         else
         {
-            int wlen = MultiByteToWideChar(CP_UTF8, 0, item.label.c_str(), -1, NULL, 0);
+            // Build label with shortcut (if available)
+            std::string label_with_shortcut = item.label;
+            if (!item.shortcut.empty())
+            {
+                label_with_shortcut += "\t" + item.shortcut;
+            }
+
+            int wlen = MultiByteToWideChar(CP_UTF8, 0, label_with_shortcut.c_str(), -1, NULL, 0);
             wchar_t *wlabel = new wchar_t[wlen];
-            MultiByteToWideChar(CP_UTF8, 0, item.label.c_str(), -1, wlabel, wlen);
+            MultiByteToWideChar(CP_UTF8, 0, label_with_shortcut.c_str(), -1, wlabel, wlen);
 
             UINT flags = MF_STRING;
             if (item.disabled)
@@ -477,10 +619,25 @@ void Win32Window::DestroyContextMenu()
 void Win32Window::HandleMenuCommand(UINT command_id)
 {
     auto it = menu_item_map_.find(command_id);
-    if (it != menu_item_map_.end() && it->second.callback)
+    if (it != menu_item_map_.end())
     {
-        it->second.callback();
+        const VlcPlayer::MenuItem &item = it->second;
+
+        // Execute action if available
+        if (!item.action.empty() && player)
+        {
+            player->ExecuteMenuAction(item.action);
+        }
+
+        // Also call callback if available (for custom actions)
+        if (item.callback)
+        {
+            item.callback();
+        }
     }
+
+    // Clean up menu after command execution
+    DestroyContextMenu();
 }
 
 // =================================================================================================

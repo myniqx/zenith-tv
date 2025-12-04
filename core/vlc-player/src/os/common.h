@@ -25,6 +25,7 @@ struct WindowStyle
 enum ScreenMode
 {
   FREE,
+  FREE_ON_TOP,
   STICKY,
   FULLSCREEN
 }

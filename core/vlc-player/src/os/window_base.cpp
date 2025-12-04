@@ -5,51 +5,181 @@
 #include <cmath>
 
 /**
- * Show OSD with specified type and content
+ * Find existing OSD of given type or create new one
  */
-void OSWindow::ShowOSD(
-    OSDType type,
-    const std::string &text,
-    const std::string &subtext,
-    const OSDIcon icon,
-    float progress)
+std::shared_ptr<OSDWindow> OSWindow::FindOrCreateOSD(OSDType type, bool allow_visible_reuse)
 {
-    if (!IsCreated())
-        return; // Window not ready
-
-    // Skip if window is not visible (minimized/hidden)
-    if (!IsVisible())
-        return;
-
     std::lock_guard<std::mutex> lock(osd_mutex_);
+    auto now = std::chrono::steady_clock::now();
 
-    // For PLAYBACK type in TOP_RIGHT: replace existing playback OSD
-    // For other TOP_RIGHT types: find new slot
-    std::shared_ptr<OSDWindow> existing_osd = nullptr;
-    std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-
+    // Try to find existing OSD of same type
     for (auto &osd : active_osds_)
     {
-        if (osd->type == type)
-        {
-            if (type == OSDType::NOTIFICATION && osd->expire_at > now)
-                continue;
-            existing_osd = osd;
-            break;
-        }
+        if (osd->GetType() != type)
+            continue;
+
+        // For notifications: never reuse visible OSDs
+        if (!allow_visible_reuse && osd->IsCurrentlyVisible(now))
+            continue;
+
+        return osd;
     }
 
-    if (!existing_osd)
+    // Not found, create new
+    try
     {
         auto osd = CreateOSDWindow();
+        if (!osd)
+        {
+            fprintf(stderr, "CreateOSDWindow returned null for type %d\n", (int)type);
+            return nullptr;
+        }
         osd->SetType(type);
         active_osds_.push_back(osd);
-        existing_osd = osd;
+        return osd;
+    }
+    catch (const std::exception &e)
+    {
+        fprintf(stderr, "Failed to create OSD window: %s\n", e.what());
+        return nullptr;
+    }
+}
+
+/**
+ * Show volume OSD
+ */
+void OSWindow::ShowVolumeOSD(float progress)
+{
+    if (!IsCreated() || !IsVisible())
+        return;
+
+    auto osd = FindOrCreateOSD(OSDType::VOLUME, true);
+    if (!osd)
+        return;
+
+    auto now = std::chrono::steady_clock::now();
+
+    // Skip fade_in if already visible
+    if (osd->IsCurrentlyVisible(now))
+    {
+        osd->SetCreatedAt(now + std::chrono::milliseconds(200));
+    }
+    else
+    {
+        osd->SetCreatedAt(now);
     }
 
-    // Update existing OSD with same duration logic
-    existing_osd->SetData(text, subtext, progress, icon);
-    existing_osd->SetCreatedAt(now);
+    // Text is auto-generated inside SetData for VOLUME type
+    osd->SetData("", "", progress,
+                 progress == 0.0f ? OSDIcon::VOLUME_MUTE : OSDIcon::VOLUME_UP);
+}
+
+/**
+ * Show seek OSD
+ */
+void OSWindow::ShowSeekOSD(int64_t time, int64_t duration)
+{
+    if (!IsCreated() || !IsVisible())
+        return;
+
+    auto osd = FindOrCreateOSD(OSDType::SEEK, true);
+    if (!osd)
+        return;
+
+    // Format time display
+    std::string current_time = osd->FormatTime(time);
+    std::string total_time = osd->FormatTime(duration);
+    std::string time_display = current_time + " / " + total_time;
+
+    // Calculate progress
+    float progress = (duration > 0) ? static_cast<float>(time) / duration : 0.0f;
+
+    auto now = std::chrono::steady_clock::now();
+
+    // Skip fade_in if already visible
+    if (osd->IsCurrentlyVisible(now))
+    {
+        osd->SetCreatedAt(now + std::chrono::milliseconds(200));
+    }
+    else
+    {
+        osd->SetCreatedAt(now);
+    }
+
+    // time_display goes to subtext for SEEK type
+    osd->SetData("", time_display, progress, OSDIcon::NONE);
+}
+
+/**
+ * Show playback state OSD
+ */
+void OSWindow::ShowPlaybackOSD(const std::string &state)
+{
+    if (!IsCreated() || !IsVisible())
+        return;
+
+    auto osd = FindOrCreateOSD(OSDType::PLAYBACK, true);
+    if (!osd)
+        return;
+
+    // Map state to text and icon
+    std::string text;
+    OSDIcon icon = OSDIcon::NONE;
+
+    if (state == "playing")
+    {
+        text = "Playing";
+        icon = OSDIcon::PLAY;
+    }
+    else if (state == "paused")
+    {
+        text = "Paused";
+        icon = OSDIcon::PAUSE;
+    }
+    else if (state == "stopped")
+    {
+        text = "Stopped";
+        icon = OSDIcon::STOP;
+    }
+    else
+    {
+        text = state; // Fallback to state string itself
+        icon = OSDIcon::NONE;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+
+    // Skip fade_in if already visible
+    if (osd->IsCurrentlyVisible(now))
+    {
+        osd->SetCreatedAt(now + std::chrono::milliseconds(200));
+    }
+    else
+    {
+        osd->SetCreatedAt(now);
+    }
+
+    osd->SetData(text, "", 0.0f, icon);
+}
+
+/**
+ * Show notification OSD
+ */
+void OSWindow::ShowNotificationOSD(const std::string &text, OSDIcon icon)
+{
+    if (!IsCreated() || !IsVisible())
+        return;
+
+    // Never reuse visible notifications (allow_visible_reuse = false)
+    auto osd = FindOrCreateOSD(OSDType::NOTIFICATION, false);
+    if (!osd)
+        return;
+
+    auto now = std::chrono::steady_clock::now();
+
+    // Always start fresh (no fade_in skip for notifications)
+    osd->SetCreatedAt(now);
+    osd->SetData(text, "", 0.0f, icon);
 }
 
 void OSWindow::ClearOSDs()
@@ -65,25 +195,6 @@ void OSWindow::ClearOSDs()
     }
 
     active_osds_.clear();
-}
-
-/**
- * Update existing OSD (without creating new one)
- */
-void OSWindow::UpdateOSD(OSDType type, const std::string &text, float progress)
-{
-    std::lock_guard<std::mutex> lock(osd_mutex_);
-
-    for (auto &osd : active_osds_)
-    {
-        if (osd->type == type)
-        {
-            osd->text = text;
-            osd->progress = progress;
-            // Don't reset timer - just update content
-            return;
-        }
-    }
 }
 
 /**
@@ -239,6 +350,16 @@ void OSWindow::SetScreenMode(ScreenMode mode)
         SetBoundsInternal(_freeBounds.x, _freeBounds.y, _freeBounds.width, _freeBounds.height);
         break;
 
+    case ScreenMode::FREE_ON_TOP:
+        style.fullscreen = false;
+        style.has_border = true;
+        style.has_titlebar = true;
+        style.is_resizable = true;
+        style.show_in_taskbar = true;
+        style.on_top = true;
+        SetBoundsInternal(_freeBounds.x, _freeBounds.y, _freeBounds.width, _freeBounds.height);
+        break;
+
     case ScreenMode::FULLSCREEN:
         style.fullscreen = true;
         style.has_border = false;
@@ -299,10 +420,30 @@ void OSWindow::OnRightClick(int x, int y)
 
 void OSWindow::OnMinimize(bool minimized)
 {
-    // When window is minimized, hide all OSDs
     if (minimized)
     {
-        HideAllOSDs();
+        // Clear all OSDs when minimizing
+        ClearOSDs();
+
+        // Smart pause: remember playback state and pause if playing
+        if (player && player->media_player_)
+        {
+            bool is_playing = libvlc_media_player_is_playing(player->media_player_);
+            was_playing_before_minimize_ = is_playing;
+            if (is_playing)
+            {
+                libvlc_media_player_pause(player->media_player_);
+            }
+        }
+    }
+    else
+    {
+        // Smart resume: resume playback if it was playing before minimize
+        if (was_playing_before_minimize_ && player && player->media_player_)
+        {
+            libvlc_media_player_play(player->media_player_);
+            was_playing_before_minimize_ = false;
+        }
     }
 }
 

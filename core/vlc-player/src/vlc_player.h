@@ -53,16 +53,8 @@ public:
     std::atomic<bool> disposed_{false};
     OSWindow *osd_window_;
 
-    // Child window handles (platform-specific)
-#ifdef _WIN32
-    HWND child_hwnd_;
-    HWND parent_hwnd_;
-    std::atomic<bool> was_playing_before_minimize_{false};
-    int min_width_{0};
-    int min_height_{0};
-    std::thread window_thread_;
-    std::atomic<bool> window_thread_running_{false};
-#elif defined(__linux__)
+    // Child window handles (platform-specific - kept for Linux/Mac compatibility)
+#ifdef __linux__
     Display *display_;
     ::Window child_window_;
     ::Window parent_window_;
@@ -136,16 +128,9 @@ private:
     // Unified Event Callback
     Napi::Value SetEventCallback(const Napi::CallbackInfo &info);
 
-    // Internal window management methods (platform-specific implementations)
+    // Internal window management methods
     void CreateChildWindowInternal(int width = 1280, int height = 720);
     void DestroyChildWindowInternal();
-    void SetWindowBounds(int x, int y, int width, int height);
-    void SetWindowFullscreen(bool fullscreen);
-    void SetWindowOnTop(bool onTop);
-    void SetWindowVisible(bool visible);
-    void SetWindowStyle(bool border, bool titlebar, bool resizable, bool taskbar);
-    void SetWindowMinSizeInternal(int min_width, int min_height);
-    void GetWindowBounds(WindowState *state);
 
     // Cleanup
     Napi::Value Dispose(const Napi::CallbackInfo &info);
@@ -158,89 +143,6 @@ private:
     std::map<std::string, std::vector<std::string>> action_to_keys_;
     void ProcessKeyPress(const std::string &key_code);
 
-    // OSD state management
-    std::vector<std::shared_ptr<OSDElement>> active_osds_;
-    std::mutex osd_mutex_;
-    std::atomic<bool> osd_thread_running_{false};
-    std::thread osd_render_thread_;
-    OSDColors osd_colors_;
-#ifdef __linux__
-    Display *osd_display_; // Dedicated connection for OSD thread
-    GC osd_gc_;
-    XFontSet osd_font_normal_;
-    XFontSet osd_font_bold_;
-#elif defined(_WIN32)
-    // Windows-specific OSD resources
-    HBRUSH osd_brushes_[6]; // Brushes for colors (background, text, progress, etc.)
-    HFONT osd_font_normal_;
-    HFONT osd_font_bold_;
-    COLORREF osd_colors_win32_[6]; // RGB colors for Windows (parallel to OSDColors)
-#endif
-
-    // Public OSD API
-    void ShowOSD(OSDType type, const std::string &text,
-                 const std::string &subtext = "", float progress = 0.0f);
-    void HideOSD(OSDType type);
-    void UpdateOSD(OSDType type, const std::string &text, float progress);
-    void ClearAllOSDs(); // Clear all active OSDs (called on minimize/hide/close)
-
-    // Internal OSD management
-    void InitializeOSD();
-    void ShutdownOSD();
-    void StartOSDRenderLoop();
-    void StopOSDRenderLoop();
-    int CalculateSlotIndex(OSDPosition position);
-    void CompactSlots(OSDPosition position);
-    void UpdateOSDLifecycles();
-    void RemoveExpiredOSDs();
-    OSDPosition GetPositionForType(OSDType type);
-    void GetOSDSize(OSDType type, int &width, int &height);
-    std::string FormatTime(int64_t time_ms);
-
-    // Platform-specific OSD rendering (implemented in vlc_osd_linux.cpp, vlc_osd_win32.cpp, etc.)
-    void RenderOSD(std::shared_ptr<OSDElement> osd);
-    void CreateOSDWindow(std::shared_ptr<OSDElement> osd, int x, int y);
-    void DestroyOSDWindow(std::shared_ptr<OSDElement> osd);
-
-    // Platform-specific OSD initialization/cleanup
-    void InitializeOSDPlatform();
-    void ShutdownOSDPlatform();
-
-#ifdef __linux__
-    // Linux-specific color allocation helper
-    unsigned long AllocColor(uint32_t rgb);
-    // Linux-specific OSD helpers
-    void SetOSDWindowOpacity(::Window window, float opacity);
-
-    // Generic drawing components (Linux X11 implementation)
-    void DrawText(::Window window, Pixmap buffer, GC gc,
-                  const std::string &text, int x, int y,
-                  unsigned long color, XFontSet font);
-    void DrawProgressBar(::Window window, Pixmap buffer, GC gc,
-                         int x, int y, int width, int height,
-                         float progress, unsigned long fg_color,
-                         unsigned long bg_color);
-    void DrawRoundedRect(::Window window, Pixmap buffer, GC gc,
-                         int x, int y, int width, int height,
-                         unsigned long color, int radius = 8);
-    void DrawIcon(::Window window, Pixmap buffer, GC gc,
-                  const std::string &icon_name, int x, int y, int size,
-                  unsigned long color);
-#elif defined(_WIN32)
-    // Windows-specific OSD helpers
-    void SetOSDWindowOpacity(HWND window, float opacity);
-
-    // Generic drawing components (Windows GDI implementation)
-    void DrawText(HWND window, HDC hdc, const std::string &text,
-                  int x, int y, COLORREF color, HFONT font);
-    void DrawProgressBar(HWND window, HDC hdc, int x, int y,
-                         int width, int height, float progress,
-                         COLORREF fg_color, COLORREF bg_color);
-    void DrawRoundedRect(HWND window, HDC hdc, int x, int y,
-                         int width, int height, COLORREF color, int radius = 8);
-    void DrawIcon(HWND window, HDC hdc, const std::string &icon_name,
-                  int x, int y, int size, COLORREF color);
-#endif
 
     // Context Menu Infrastructure
     struct MenuItem
@@ -250,14 +152,19 @@ private:
         std::string shortcut; // Keyboard shortcut display (e.g., "F11", "Space")
         bool enabled;
         bool separator;
+        bool disabled;
+        bool checked;
+        std::function<void()> callback;
         std::vector<MenuItem> submenu;
 
-        MenuItem() : enabled(true), separator(false) {}
+        MenuItem() : enabled(true), separator(false), disabled(false), checked(false) {}
     };
 
     std::vector<MenuItem> BuildContextMenu();
-    void ShowContextMenu(int x, int y);
     void ExecuteMenuAction(const std::string &action);
+
+    // Helper methods for OSD (delegates to osd_window_)
+    std::string FormatTime(int64_t time_ms);
 
 #ifdef __linux__
     struct MenuColors
