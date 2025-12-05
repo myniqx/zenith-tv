@@ -39,7 +39,8 @@ public:
     static constexpr size_t MAX_URL_LENGTH = 8192;
 
     // Debug logging helper
-    static void Log(const char* format, ...) {
+    static void Log(const char *format, ...)
+    {
         printf("[VLC Node] ");
         va_list args;
         va_start(args, format);
@@ -129,10 +130,6 @@ private:
 
     // Unified Event Callback
     Napi::Value SetEventCallback(const Napi::CallbackInfo &info);
-
-    // Internal window management methods
-    void CreateChildWindowInternal(int width = 1280, int height = 720);
-    void DestroyChildWindowInternal();
 
     // Cleanup
     Napi::Value Dispose(const Napi::CallbackInfo &info);

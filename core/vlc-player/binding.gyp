@@ -29,7 +29,6 @@
           "OS=='win'",
           {
             "sources+": [
-              "src/vlc_window_win32.cpp",
               "src/os/win32/window.cpp",
               "src/os/win32/osd.cpp"
             ]

@@ -75,7 +75,7 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
 
     Log("Creating Win32Window instance in constructor...");
     osd_window_ = new Win32Window(this);
-    // Note: Window will be created later via CreateChildWindowInternal with proper dimensions
+    osd_window_->Initialize();
 
 #elif defined(__linux__)
     const char *plugin_path = getenv("VLC_PLUGIN_PATH");
@@ -152,10 +152,7 @@ VlcPlayer::~VlcPlayer()
     Log("Destructor started (disposed_=%d)", (int)disposed_);
     if (!disposed_)
     {
-        // Cleanup window (handles OSD cleanup internally)
-        Log("Calling DestroyChildWindowInternal...");
-        DestroyChildWindowInternal();
-        Log("DestroyChildWindowInternal completed");
+        osd_window_->Destroy();
 
         CleanupEventCallbacks();
 

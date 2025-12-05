@@ -55,8 +55,8 @@ Napi::Value VlcPlayer::Open(const Napi::CallbackInfo &info)
     std::lock_guard<std::mutex> lock(mutex_);
 
     Log("Creating child window (width=%d, height=%d)...", window_width, window_height);
-    CreateChildWindowInternal(window_width, window_height);
-    Log("Child window creation call completed, osd_window_=%p", (void*)osd_window_);
+    osd_window_->Create(window_width, window_height);
+    Log("Child window creation call completed, osd_window_=%p", (void *)osd_window_);
 
     if (current_media_)
     {
@@ -147,7 +147,7 @@ Napi::Value VlcPlayer::Playback(const Napi::CallbackInfo &info)
         else if (action == "stop")
         {
             libvlc_media_player_stop(media_player_);
-            DestroyChildWindowInternal();
+            osd_window_->Destroy();
         }
     }
 
