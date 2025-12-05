@@ -1,4 +1,5 @@
 #include "vlc_player.h"
+#include "os/win32/window.h"
 
 Napi::Object VlcPlayer::Init(Napi::Env env, Napi::Object exports)
 {
@@ -52,8 +53,10 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
       video_height_(0),
       video_pitch_(0),
       frame_ready_(false),
-      event_manager_(nullptr)
+      event_manager_(nullptr),
+      tsfn_events_()
 {
+    Log("Constructor started");
 
     Napi::Env env = info.Env();
 
@@ -66,10 +69,14 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
         "--intf=dummy",
         "--no-plugins-cache"};
 
-    printf("[VLC Core] CALL: libvlc_new(argc=%zu, args=[...])\n", sizeof(args) / sizeof(args[0]));
+    Log("CALL: libvlc_new(argc=%zu, args=[...])\n", sizeof(args) / sizeof(args[0]));
     vlc_instance_ = libvlc_new(sizeof(args) / sizeof(args[0]), args);
-    printf("[VLC Core] RETURN: vlc_instance=%p\n", (void *)vlc_instance_);
-    fflush(stdout);
+    Log("RETURN: vlc_instance=%p\n", (void *)vlc_instance_);
+
+    Log("Creating Win32Window instance in constructor...");
+    osd_window_ = new Win32Window(this);
+    // Note: Window will be created later via CreateChildWindowInternal with proper dimensions
+
 #elif defined(__linux__)
     const char *plugin_path = getenv("VLC_PLUGIN_PATH");
     if (!plugin_path)
@@ -109,9 +116,11 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
 
     if (!vlc_instance_)
     {
+        Log("ERROR: Failed to initialize libVLC instance");
         Napi::Error::New(env, "Failed to initialize libVLC").ThrowAsJavaScriptException();
         return;
     }
+    Log("libVLC instance created successfully");
 
     printf("[VLC Core] CALL: libvlc_media_player_new(vlc_instance=%p)\n", (void *)vlc_instance_);
     media_player_ = libvlc_media_player_new(vlc_instance_);
@@ -120,24 +129,33 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
 
     if (!media_player_)
     {
+        Log("ERROR: Failed to create media player");
         libvlc_release(vlc_instance_);
         vlc_instance_ = nullptr;
         Napi::Error::New(env, "Failed to create media player").ThrowAsJavaScriptException();
         return;
     }
+    Log("Media player created successfully");
 
     // Initialize default keyboard shortcuts
+    Log("Initializing default shortcuts...");
     InitializeDefaultShortcuts();
 
+    Log("Setting up event callbacks...");
     SetupEventCallbacks();
+
+    Log("Constructor completed successfully");
 }
 
 VlcPlayer::~VlcPlayer()
 {
+    Log("Destructor started (disposed_=%d)", (int)disposed_);
     if (!disposed_)
     {
         // Cleanup window (handles OSD cleanup internally)
+        Log("Calling DestroyChildWindowInternal...");
         DestroyChildWindowInternal();
+        Log("DestroyChildWindowInternal completed");
 
         CleanupEventCallbacks();
 

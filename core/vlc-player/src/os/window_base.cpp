@@ -9,10 +9,12 @@
  */
 std::shared_ptr<OSDWindow> OSWindow::FindOrCreateOSD(OSDType type, bool allow_visible_reuse)
 {
+    VlcPlayer::Log("FindOrCreateOSD(type=%d, allow_visible_reuse=%d)", (int)type, allow_visible_reuse);
     std::lock_guard<std::mutex> lock(osd_mutex_);
     auto now = std::chrono::steady_clock::now();
 
     // Try to find existing OSD of same type
+    VlcPlayer::Log("Searching for existing OSD (active_osds_.size=%zu)", active_osds_.size());
     for (auto &osd : active_osds_)
     {
         if (osd->GetType() != type)
@@ -22,24 +24,30 @@ std::shared_ptr<OSDWindow> OSWindow::FindOrCreateOSD(OSDType type, bool allow_vi
         if (!allow_visible_reuse && osd->IsCurrentlyVisible(now))
             continue;
 
+        VlcPlayer::Log("Found existing OSD, reusing");
         return osd;
     }
 
     // Not found, create new
+    VlcPlayer::Log("Creating new OSD window...");
     try
     {
         auto osd = CreateOSDWindow();
         if (!osd)
         {
+            VlcPlayer::Log("ERROR: CreateOSDWindow returned null for type %d", (int)type);
             fprintf(stderr, "CreateOSDWindow returned null for type %d\n", (int)type);
             return nullptr;
         }
+        VlcPlayer::Log("OSD window created, setting type...");
         osd->SetType(type);
         active_osds_.push_back(osd);
+        VlcPlayer::Log("OSD added to active list (total=%zu)", active_osds_.size());
         return osd;
     }
     catch (const std::exception &e)
     {
+        VlcPlayer::Log("ERROR: Exception creating OSD: %s", e.what());
         fprintf(stderr, "Failed to create OSD window: %s\n", e.what());
         return nullptr;
     }
@@ -50,12 +58,21 @@ std::shared_ptr<OSDWindow> OSWindow::FindOrCreateOSD(OSDType type, bool allow_vi
  */
 void OSWindow::ShowVolumeOSD(float progress)
 {
+    VlcPlayer::Log("ShowVolumeOSD(progress=%.2f) called", progress);
+
     if (!IsCreated() || !IsVisible())
+    {
+        VlcPlayer::Log("Window not created or not visible, skipping OSD");
         return;
+    }
 
     auto osd = FindOrCreateOSD(OSDType::VOLUME, true);
     if (!osd)
+    {
+        VlcPlayer::Log("ERROR: Failed to find/create volume OSD");
         return;
+    }
+    VlcPlayer::Log("Volume OSD ready, setting data...");
 
     auto now = std::chrono::steady_clock::now();
 
@@ -205,12 +222,19 @@ void OSWindow::ClearOSDs()
  */
 void OSWindow::StartOSDRenderLoop()
 {
-    if (osd_thread_running_)
-        return;
+    VlcPlayer::Log("StartOSDRenderLoop() called");
 
+    if (osd_thread_running_)
+    {
+        VlcPlayer::Log("OSD render loop already running, skipping");
+        return;
+    }
+
+    VlcPlayer::Log("Starting OSD render thread...");
     osd_thread_running_ = true;
     osd_render_thread_ = std::thread([this]()
                                      {
+        VlcPlayer::Log("OSD render thread started");
         const auto frame_duration = std::chrono::milliseconds(16); // ~60 FPS
         const auto timing = 1.0f / frame_duration.count();
 
@@ -286,30 +310,42 @@ OSWindow::OSWindow(VlcPlayer *player)
 
 OSWindow::~OSWindow()
 {
+    VlcPlayer::Log("OSWindow destructor started");
     StopOSDRenderLoop();
+    VlcPlayer::Log("OSD render loop stopped");
     ClearOSDs();
+    VlcPlayer::Log("OSDs cleared");
 
     // Note: Fonts and colors are cleaned up by derived classes in their Destroy() methods
     // We cannot call virtual methods (DestroyFont/DestroyColor) from base class destructor
     // as the derived class vtable has already been destroyed at this point.
+    VlcPlayer::Log("OSWindow destructor completed");
 }
 
 void OSWindow::Initialize()
 {
+    VlcPlayer::Log("OSWindow::Initialize() started");
+
     // Initialize colors (platform-specific CreateColor implementation)
+    VlcPlayer::Log("Creating colors...");
     background = CreateColor(0x1a, 0x1a, 0x1a, 0xE0);
     text_primary = CreateColor(0xff, 0xff, 0xff, 0xff);
     text_secondary = CreateColor(0xb0, 0xb0, 0xb0, 0xff);
     progress_fg = CreateColor(0x4a, 0x9e, 0xff, 0xff);
     progress_bg = CreateColor(0x3a, 0x3a, 0x3a, 0xff);
     border = CreateColor(0x2a, 0x2a, 0x2a, 0xff);
+    VlcPlayer::Log("Colors created (background=%p, text_primary=%p)", background, text_primary);
 
     // Initialize fonts (platform-specific CreateFont implementation)
+    VlcPlayer::Log("Creating fonts...");
     defaultFont = CreateOSDFont(false);
     boldFont = CreateOSDFont(true);
+    VlcPlayer::Log("Fonts created (defaultFont=%p, boldFont=%p)", defaultFont, boldFont);
 
     // Start OSD system
+    VlcPlayer::Log("Starting OSD render loop...");
     StartOSDRenderLoop();
+    VlcPlayer::Log("OSWindow::Initialize() completed");
 }
 
 // =================================================================================================

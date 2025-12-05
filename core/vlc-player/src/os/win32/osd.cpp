@@ -1,5 +1,6 @@
 #include "osd.h"
 #include "../window_base.h"
+#include "../../vlc_player.h"
 #include <algorithm>
 
 // Win32 window class name for OSD windows
@@ -39,9 +40,11 @@ Win32OSDWindow::Win32OSDWindow(OSWindow *parent)
       bitmap_bits_(nullptr),
       current_opacity_(0.0f)
 {
+    VlcPlayer::Log("Win32OSDWindow constructor started");
     // Register window class once
     if (!g_window_class_registered)
     {
+        VlcPlayer::Log("Registering OSD window class...");
         WNDCLASSEXW wc = {};
         wc.cbSize = sizeof(WNDCLASSEXW);
         wc.lpfnWndProc = OSDWindowProc;
@@ -51,9 +54,15 @@ Win32OSDWindow::Win32OSDWindow(OSWindow *parent)
 
         if (RegisterClassExW(&wc))
         {
+            VlcPlayer::Log("OSD window class registered successfully");
             g_window_class_registered = true;
         }
+        else
+        {
+            VlcPlayer::Log("ERROR: Failed to register OSD window class, error: %lu", GetLastError());
+        }
     }
+    VlcPlayer::Log("Win32OSDWindow constructor completed");
 }
 
 Win32OSDWindow::~Win32OSDWindow()
@@ -76,10 +85,16 @@ bool Win32OSDWindow::isWindowCreated() const
 
 void Win32OSDWindow::CreateWindowInternal(int x, int y)
 {
+    VlcPlayer::Log("Win32OSDWindow::CreateWindowInternal(x=%d, y=%d, width=%d, height=%d)", x, y, width(), height());
+
     if (isWindowCreated())
+    {
+        VlcPlayer::Log("OSD window already created, skipping");
         return;
+    }
 
     // Create layered window (transparent, topmost, no input)
+    VlcPlayer::Log("Creating layered OSD window...");
     hwnd_ = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         OSD_WINDOW_CLASS,
@@ -89,9 +104,15 @@ void Win32OSDWindow::CreateWindowInternal(int x, int y)
         NULL, NULL, GetModuleHandleW(NULL), NULL);
 
     if (!hwnd_)
+    {
+        VlcPlayer::Log("ERROR: Failed to create OSD window, error: %lu", GetLastError());
         return;
+    }
+    VlcPlayer::Log("OSD window created successfully (hwnd=%p)", hwnd_);
 
+    VlcPlayer::Log("Initializing graphics...");
     InitializeGraphics();
+    VlcPlayer::Log("Graphics initialized");
 }
 
 void Win32OSDWindow::DestroyWindowInternal()

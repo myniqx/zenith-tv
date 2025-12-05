@@ -87,14 +87,18 @@ Win32Window::Win32Window(VlcPlayer *player)
       measure_dc_(nullptr),
       next_menu_id_(1000)
 {
+    VlcPlayer::Log("Win32Window constructor started");
     bounds_ = {0, 0, 0, 0};
     client_area_ = {0, 0, 0, 0};
     current_style_ = {true, true, true, true, false, false};
+    VlcPlayer::Log("Win32Window constructor completed");
 }
 
 Win32Window::~Win32Window()
 {
+    VlcPlayer::Log("Win32Window destructor started");
     Destroy();
+    VlcPlayer::Log("Win32Window destructor completed");
 }
 
 // =================================================================================================
@@ -103,29 +107,44 @@ Win32Window::~Win32Window()
 
 bool Win32Window::Create(int width, int height)
 {
+    VlcPlayer::Log("Win32Window::Create called (width=%d, height=%d)", width, height);
+
     if (is_created_)
+    {
+        VlcPlayer::Log("Window already created, returning true");
         return true;
+    }
 
     // Register window class first (outside thread)
+    VlcPlayer::Log("Registering window class...");
     RegisterWindowClass();
+    VlcPlayer::Log("Window class registered");
 
     // Start message pump thread
+    VlcPlayer::Log("Starting message pump thread...");
     message_thread_running_ = true;
     message_thread_ = std::thread([this, width, height]()
                                   {
+        VlcPlayer::Log("Message pump thread started");
         // Store thread ID for debugging
         window_thread_id_ = GetCurrentThreadId();
+        VlcPlayer::Log("Thread ID: %lu", window_thread_id_);
 
         // Initialize GDI+
+        VlcPlayer::Log("Initializing GDI+...");
         Gdiplus::GdiplusStartupInput gdiplusStartupInput;
         Gdiplus::GdiplusStartup(&gdiplus_token_, &gdiplusStartupInput, NULL);
+        VlcPlayer::Log("GDI+ initialized");
 
         // Create measure DC for text measurement
+        VlcPlayer::Log("Creating measure DC...");
         measure_dc_ = CreateCompatibleDC(NULL);
         measure_graphics_ = new Gdiplus::Graphics(measure_dc_);
         measure_graphics_->SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+        VlcPlayer::Log("Measure DC created");
 
         // Create main window
+        VlcPlayer::Log("Creating Windows window...");
         hwnd_ = CreateWindowExW(
             0,
             WINDOW_CLASS_NAME,
@@ -139,6 +158,7 @@ bool Win32Window::Create(int width, int height)
 
         if (!hwnd_)
         {
+            VlcPlayer::Log("ERROR: CreateWindowExW failed! Error code: %lu", GetLastError());
             if (measure_graphics_)
             {
                 delete measure_graphics_;
@@ -153,15 +173,19 @@ bool Win32Window::Create(int width, int height)
             message_thread_running_ = false;
             return;
         }
+        VlcPlayer::Log("Windows window created successfully (hwnd=%p)", hwnd_);
 
         // Show window
+        VlcPlayer::Log("Showing window...");
         ShowWindow(hwnd_, SW_SHOW);
         UpdateWindow(hwnd_);
+        VlcPlayer::Log("Window shown");
 
         // Update state
         is_created_ = true;
         is_visible_ = true;
         is_minimized_ = false;
+        VlcPlayer::Log("Window state updated");
 
         // Get initial bounds
         RECT rect;
@@ -170,6 +194,7 @@ bool Win32Window::Create(int width, int height)
 
         UpdateClientArea();
 
+        VlcPlayer::Log("Starting message loop...");
         // Message loop (~60fps with 16ms sleep)
         MSG msg;
         while (message_thread_running_)

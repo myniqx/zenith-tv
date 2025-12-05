@@ -10,6 +10,7 @@ typedef SSIZE_T ssize_t;
 #endif
 
 #include <cstdint>
+#include <cstdarg>
 #include <vlc/vlc.h>
 #include <string>
 #include <vector>

@@ -6,10 +6,12 @@
 
 Napi::Value VlcPlayer::Open(const Napi::CallbackInfo &info)
 {
+    Log("Open() called");
     Napi::Env env = info.Env();
 
     if (info.Length() < 1 || !info[0].IsObject())
     {
+        Log("ERROR: Open() - Options object expected");
         Napi::TypeError::New(env, "Options object expected").ThrowAsJavaScriptException();
         return env.Undefined();
     }
@@ -18,11 +20,13 @@ Napi::Value VlcPlayer::Open(const Napi::CallbackInfo &info)
 
     if (!options.Has("file") || !options.Get("file").IsString())
     {
+        Log("ERROR: Open() - File path/url is required");
         Napi::Error::New(env, "File path/url is required").ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
     std::string url = options.Get("file").As<Napi::String>().Utf8Value();
+    Log("Open() - URL: %s", url.c_str());
 
     media_options_.clear();
 
@@ -50,14 +54,18 @@ Napi::Value VlcPlayer::Open(const Napi::CallbackInfo &info)
 
     std::lock_guard<std::mutex> lock(mutex_);
 
+    Log("Creating child window (width=%d, height=%d)...", window_width, window_height);
     CreateChildWindowInternal(window_width, window_height);
+    Log("Child window creation call completed, osd_window_=%p", (void*)osd_window_);
 
     if (current_media_)
     {
+        Log("Releasing previous media...");
         libvlc_media_release(current_media_);
     }
 
     bool is_url = url.find("://") != std::string::npos;
+    Log("Creating media (is_url=%d)...", is_url);
     if (is_url)
     {
         current_media_ = libvlc_media_new_location(vlc_instance_, url.c_str());
@@ -69,9 +77,11 @@ Napi::Value VlcPlayer::Open(const Napi::CallbackInfo &info)
 
     if (!current_media_)
     {
+        Log("ERROR: Failed to create media");
         Napi::Error::New(env, "Failed to create media").ThrowAsJavaScriptException();
         return env.Undefined();
     }
+    Log("Media created successfully");
 
     for (const auto &opt : media_options_)
     {
@@ -88,23 +98,43 @@ Napi::Value VlcPlayer::Open(const Napi::CallbackInfo &info)
 
 Napi::Value VlcPlayer::Playback(const Napi::CallbackInfo &info)
 {
+    Log("Playback() called");
     Napi::Env env = info.Env();
     if (info.Length() < 1 || !info[0].IsObject())
+    {
+        Log("ERROR: Playback() - Options object expected");
         return env.Undefined();
+    }
 
     Napi::Object options = info[0].As<Napi::Object>();
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!media_player_)
+    {
+        Log("ERROR: Playback() - media_player_ is null");
         return env.Undefined();
+    }
 
     if (options.Has("action"))
     {
         std::string action = options.Get("action").As<Napi::String>().Utf8Value();
+        Log("Playback() - action: %s", action.c_str());
         if (action == "play")
         {
-            osd_window_->Bind(media_player_);
+            Log("Playback action: play");
+            if (osd_window_)
+            {
+                Log("Binding osd_window_ to media player...");
+                osd_window_->Bind(media_player_);
+                Log("Bind completed");
+            }
+            else
+            {
+                Log("WARNING: osd_window_ is null, skipping Bind()");
+            }
+            Log("Starting playback...");
             libvlc_media_player_play(media_player_);
+            Log("Playback started");
         }
         else if (action == "pause")
         {
