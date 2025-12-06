@@ -430,8 +430,9 @@ Napi::Value VlcPlayer::Dispose(const Napi::CallbackInfo &info)
     // Cleanup event callbacks after setting disposed flag
     CleanupEventCallbacks();
 
-    // Cleanup window (handles OSD cleanup internally)
+#ifdef __linux__
     DestroyChildWindowInternal();
+#endif
 
     // Acquire mutex for cleanup operations
     std::lock_guard<std::mutex> lock(mutex_);

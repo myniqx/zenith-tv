@@ -72,7 +72,16 @@ Thumbs.db
 # VLC SDK binaries (downloaded at build time)
 core/vlc-player/lib/win32*/*.dll
 core/vlc-player/lib/win32*/plugins/
-core/vlc-player/lib/win32*/sdk/
 core/vlc-player/lib/darwin/*.dylib
 core/vlc-player/lib/darwin/*.framework/
 core/vlc-player/build/
+
+# VLC SDK x64 (all ignored)
+core/vlc-player/lib/win32/sdk/
+
+# VLC SDK ARM64 (ignore all except .lib and .def)
+core/vlc-player/lib/win32-arm64/sdk/*
+!core/vlc-player/lib/win32-arm64/sdk/lib/
+core/vlc-player/lib/win32-arm64/sdk/lib/*
+!core/vlc-player/lib/win32-arm64/sdk/lib/*.lib
+!core/vlc-player/lib/win32-arm64/sdk/lib/*.def
