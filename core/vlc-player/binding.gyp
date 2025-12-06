@@ -24,6 +24,54 @@
         "node_modules/node-addon-api"
       ],
       "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
+      "msvs_settings": {
+        "VCCLCompilerTool": {
+          "ExceptionHandling": 1,
+          "RuntimeLibrary": 3,
+          "MultiProcessorCompilation": "true",
+          "AdditionalOptions": ["/MP"]
+        }
+      },
+      "configurations": {
+        "Debug": {
+          "msvs_settings": {
+            "VCCLCompilerTool": {
+              "RuntimeLibrary": 3,
+              "Optimization": 0,
+              "MinimalRebuild": "false",
+              "OmitFramePointers": "false",
+              "BasicRuntimeChecks": 3
+            },
+            "VCLinkerTool": {
+              "LinkIncremental": 2,
+              "GenerateDebugInformation": "true"
+            }
+          },
+          "defines": ["DEBUG", "_DEBUG"]
+        },
+        "Release": {
+          "msvs_settings": {
+            "VCCLCompilerTool": {
+              "RuntimeLibrary": 2,
+              "Optimization": 3,
+              "FavorSizeOrSpeed": 1,
+              "InlineFunctionExpansion": 2,
+              "WholeProgramOptimization": "true",
+              "OmitFramePointers": "true",
+              "EnableFunctionLevelLinking": "true",
+              "EnableIntrinsicFunctions": "true"
+            },
+            "VCLinkerTool": {
+              "LinkTimeCodeGeneration": 1,
+              "OptimizeReferences": 2,
+              "EnableCOMDATFolding": 2,
+              "LinkIncremental": 1,
+              "GenerateDebugInformation": "false"
+            }
+          },
+          "defines": ["NDEBUG"]
+        }
+      },
       "conditions": [
         [
           "OS=='win'",

@@ -237,7 +237,20 @@ void Win32OSDWindow::Flush()
 void Win32OSDWindow::UpdateLayeredWindow()
 {
     if (!isWindowCreated() || !mem_dc_)
+    {
+        VlcPlayer::Log("UpdateLayeredWindow: window not created or mem_dc_ is null");
         return;
+    }
+
+    // Ensure window is visible when flushing
+    if (current_opacity_ > 0.0f && !IsWindowVisible(hwnd_))
+    {
+        VlcPlayer::Log("UpdateLayeredWindow: showing window (opacity=%.2f)", current_opacity_);
+        ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
+        // Ensure it's topmost
+        SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
 
     HDC screen_dc = GetDC(NULL);
     POINT pt_src = {0, 0};
@@ -250,8 +263,16 @@ void Win32OSDWindow::UpdateLayeredWindow()
     blend.SourceConstantAlpha = (BYTE)(current_opacity_ * 255);
     blend.AlphaFormat = AC_SRC_ALPHA; // Use per-pixel alpha
 
-    ::UpdateLayeredWindow(hwnd_, screen_dc, &pt_dst, &size,
-                         mem_dc_, &pt_src, 0, &blend, ULW_ALPHA);
+    VlcPlayer::Log("UpdateLayeredWindow: pos=(%d,%d) size=(%d,%d) opacity=%d",
+                   pt_dst.x, pt_dst.y, size.cx, size.cy, blend.SourceConstantAlpha);
+
+    BOOL result = ::UpdateLayeredWindow(hwnd_, screen_dc, &pt_dst, &size,
+                                         mem_dc_, &pt_src, 0, &blend, ULW_ALPHA);
+
+    if (!result)
+    {
+        VlcPlayer::Log("ERROR: UpdateLayeredWindow failed, error: %lu", GetLastError());
+    }
 
     ReleaseDC(NULL, screen_dc);
 }

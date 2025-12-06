@@ -149,7 +149,7 @@ bool Win32Window::Create(int width, int height)
             0,
             WINDOW_CLASS_NAME,
             L"VLC Player",
-            WS_OVERLAPPEDWINDOW,
+            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
             CW_USEDEFAULT, CW_USEDEFAULT,
             width, height,
             NULL, NULL, hinstance_,
