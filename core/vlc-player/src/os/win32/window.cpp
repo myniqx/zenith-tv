@@ -194,6 +194,9 @@ bool Win32Window::Create(int width, int height)
 
         UpdateClientArea();
 
+        defaultFont = CreateOSDFont(false);
+        boldFont = CreateOSDFont(true);
+
         VlcPlayer::Log("Starting message loop...");
         // Message loop (~60fps with 16ms sleep)
         MSG msg;
@@ -467,10 +470,25 @@ OSDColor Win32Window::CreateColor(int r, int g, int b, int a)
 
 OSDFont Win32Window::CreateOSDFont(bool bold)
 {
+    if (!measure_graphics_)
+        return nullptr;
+
     auto *font = new Gdiplus::Font(
         L"Segoe UI",
         12.0f,
         bold ? Gdiplus::FontStyleBold : Gdiplus::FontStyleRegular);
+
+    if (font->GetLastStatus() != Gdiplus::Ok)
+    {
+        delete font;
+        font = new Gdiplus::Font(L"Arial", 12.0f, bold ? Gdiplus::FontStyleBold : Gdiplus::FontStyleRegular);
+        if (font->GetLastStatus() != Gdiplus::Ok)
+        {
+            delete font;
+            return nullptr;
+        }
+    }
+
     fonts_.push_back(font);
     return static_cast<OSDFont>(font);
 }
@@ -508,7 +526,6 @@ Dimension Win32Window::MeasureText(OSDFont font, const std::string &text)
     if (!measure_graphics_ || text.empty())
         return {0, 0};
 
-    // Convert UTF-8 to wide string
     int wlen = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, NULL, 0);
     if (wlen <= 0)
         return {0, 0};
@@ -516,7 +533,6 @@ Dimension Win32Window::MeasureText(OSDFont font, const std::string &text)
     wchar_t *wtext = new wchar_t[wlen];
     MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, wtext, wlen);
 
-    // Get font (use default if null)
     Gdiplus::Font *gdi_font = font ? static_cast<Gdiplus::Font *>(font) : static_cast<Gdiplus::Font *>(defaultFont);
     if (!gdi_font)
     {
@@ -524,7 +540,6 @@ Dimension Win32Window::MeasureText(OSDFont font, const std::string &text)
         return {0, 0};
     }
 
-    // Measure text
     Gdiplus::RectF layout(0, 0, 10000, 10000);
     Gdiplus::RectF boundingBox;
     measure_graphics_->MeasureString(wtext, -1, gdi_font, layout, &boundingBox);

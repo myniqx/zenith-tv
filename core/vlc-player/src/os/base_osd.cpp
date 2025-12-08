@@ -1,5 +1,6 @@
 #include "base_osd.h"
 #include "window_base.h"
+#include "../vlc_player.h"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -10,6 +11,10 @@
 #include <chrono>
 #include <thread>
 #include <algorithm>
+
+#ifdef DrawText
+#undef DrawText
+#endif
 
 void OSDWindow::Hide()
 {
@@ -62,18 +67,33 @@ void OSDWindow::SetData(
 
   case OSDType::PLAYBACK:
   case OSDType::NOTIFICATION:
-    // Use provided text directly
     this->text = text;
     this->subtext = subtext;
     break;
   }
 
-  // Dynamic sizing for notifications
-  if (_type == OSDType::NOTIFICATION)
+  // Measure and store text dimensions
+  text_dim_ = window->MeasureText(window->defaultFont, this->text);
+  if (!this->subtext.empty())
   {
-    auto dimension = window->MeasureText(window->defaultFont, this->text);
-    _width = dimension.width + 30;
-    _height = dimension.height + 20;
+    subtext_dim_ = window->MeasureText(window->boldFont, this->subtext);
+  }
+  else
+  {
+    subtext_dim_ = {0, 0};
+  }
+
+  // Dynamic sizing for notifications and playback
+  if (_type == OSDType::NOTIFICATION || _type == OSDType::PLAYBACK)
+  {
+    int icon_width = (icon != NONE) ? (ICON_SIZE_SMALL + SPACING) : 0;
+    int new_width = text_dim_.width + icon_width + PADDING * 2;
+    int new_height = std::max(text_dim_.height + PADDING * 2, 50);
+
+    if (_width != new_width || _height != new_height)
+    {
+      SetSize(new_width, new_height);
+    }
   }
 }
 
@@ -250,9 +270,6 @@ void OSDWindow::SetType(OSDType type)
 
 void OSDWindow::Update(WindowBounds bounds, int offsetY, float time)
 {
-  if (_type == OSDType::SEEK || _type == OSDType::VOLUME || _opacity <= 0)
-    return;
-
   auto now = std::chrono::steady_clock::now();
   const float fade_duration = 200.0f; // 200ms fade in/out
 
@@ -309,7 +326,7 @@ void OSDWindow::Update(WindowBounds bounds, int offsetY, float time)
     x = bounds.x + bounds.width - _width - 20;
     if (_offsetY <= offsetY)
     {
-      _offsetY = offsetY; // reset the offset
+      _offsetY = offsetY;
     }
     else
     {
@@ -340,13 +357,13 @@ void OSDWindow::Render()
 
   ClearDrawable(0, 0, _width, _height, window->background);
 
-  Flush();
   switch (GetType())
   {
   case OSDType::VOLUME:
     RenderVolume();
     break;
 
+  case OSDType::PLAYBACK:
   case OSDType::NOTIFICATION:
     RenderPlayback();
     break;
@@ -358,46 +375,70 @@ void OSDWindow::Render()
   default:
     break;
   }
-  SetOpacity(_opacity);
+
+  Flush();
 }
 
 void OSDWindow::RenderVolume()
 {
-  DrawIcon(
-      progress == 0.0f ? VOLUME_MUTE : VOLUME_UP,
-      15, 10, 24, window->text_primary);
+  int content_height = ICON_SIZE_LARGE + SPACING + PROGRESS_BAR_HEIGHT_THICK;
+  int start_y = (_height - content_height) / 2;
 
-  DrawText(text, 50, 25, window->text_primary, nullptr);
+  DrawIcon(progress == 0.0f ? VOLUME_MUTE : VOLUME_UP,
+           PADDING, start_y, ICON_SIZE_LARGE, window->text_primary);
 
-  DrawProgressBar(15, 45, 190, 16, progress,
-                  window->progress_fg, window->progress_bg);
+  int text_x = PADDING + ICON_SIZE_LARGE + SPACING;
+  int text_y = start_y + ICON_SIZE_LARGE / 2 + text_dim_.height / 2 - 4;
+  DrawText(text, text_x, text_y, window->text_primary, window->defaultFont);
+
+  int bar_y = start_y + ICON_SIZE_LARGE + SPACING;
+  int bar_width = _width - PADDING * 2;
+  DrawProgressBar(PADDING, bar_y, bar_width, PROGRESS_BAR_HEIGHT_THICK,
+                  progress, window->progress_fg, window->progress_bg);
 }
 
 void OSDWindow::RenderPlayback()
 {
+  int icon_width = (icon != NONE) ? (ICON_SIZE_SMALL + SPACING) : 0;
+  int total_width = icon_width + text_dim_.width;
+
+  int start_x = (_width - total_width) / 2;
+  int center_y = _height / 2;
+
   if (icon != NONE)
   {
-    DrawIcon(icon, 15, 15, 20, window->text_primary);
-  }
+    int icon_y = center_y - ICON_SIZE_SMALL / 2;
+    DrawIcon(icon, start_x, icon_y, ICON_SIZE_SMALL, window->text_primary);
 
-  int text_x = (icon != NONE) ? 45 : 15;
-  DrawText(text, text_x, 30, window->text_primary, nullptr);
+    int text_x = start_x + ICON_SIZE_SMALL + SPACING;
+    int text_y = center_y + text_dim_.height / 2 - 4;
+    DrawText(text, text_x, text_y, window->text_primary, window->defaultFont);
+  }
+  else
+  {
+    int text_y = center_y + text_dim_.height / 2 - 4;
+    DrawText(text, start_x, text_y, window->text_primary, window->defaultFont);
+  }
 }
 
 void OSDWindow::RenderSeek()
 {
-  if (!subtext.empty())
+  if (!subtext.empty() && subtext_dim_.width > 0)
   {
-    int text_x = (_width - static_cast<int>(subtext.length() * 8)) / 2;
-    DrawText(subtext, text_x, 30, window->text_primary, nullptr);
+    int text_x = (_width - subtext_dim_.width) / 2;
+    int text_y = PADDING + subtext_dim_.height;
+    DrawText(subtext, text_x, text_y, window->text_primary, window->boldFont);
   }
 
-  DrawProgressBar(10, 50, 580, 24, progress,
-                  window->progress_fg, window->progress_bg);
+  int bar_y = _height - PROGRESS_BAR_HEIGHT_THIN - PADDING - 12;
+  int bar_width = _width - PADDING * 2;
+
+  DrawProgressBar(PADDING, bar_y, bar_width, PROGRESS_BAR_HEIGHT_THIN,
+                  progress, window->progress_fg, window->progress_bg);
 
   if (progress > 0.0f && progress < 1.0f)
   {
-    int marker_x = 10 + static_cast<int>(580 * progress);
-    DrawCircle(marker_x - 6, 50 + 12 - 6, 12, window->text_primary);
+    int marker_x = PADDING + static_cast<int>(bar_width * progress);
+    DrawCircle(marker_x, bar_y + PROGRESS_BAR_HEIGHT_THIN / 2, 6, window->text_primary);
   }
 }

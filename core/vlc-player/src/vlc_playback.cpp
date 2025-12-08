@@ -98,7 +98,6 @@ Napi::Value VlcPlayer::Open(const Napi::CallbackInfo &info)
 
 Napi::Value VlcPlayer::Playback(const Napi::CallbackInfo &info)
 {
-    Log("Playback() called");
     Napi::Env env = info.Env();
     if (info.Length() < 1 || !info[0].IsObject())
     {
@@ -118,23 +117,18 @@ Napi::Value VlcPlayer::Playback(const Napi::CallbackInfo &info)
     if (options.Has("action"))
     {
         std::string action = options.Get("action").As<Napi::String>().Utf8Value();
-        Log("Playback() - action: %s", action.c_str());
         if (action == "play")
         {
             Log("Playback action: play");
             if (osd_window_)
             {
-                Log("Binding osd_window_ to media player...");
                 osd_window_->Bind(media_player_);
-                Log("Bind completed");
             }
             else
             {
                 Log("WARNING: osd_window_ is null, skipping Bind()");
             }
-            Log("Starting playback...");
             libvlc_media_player_play(media_player_);
-            Log("Playback started");
         }
         else if (action == "pause")
         {

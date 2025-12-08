@@ -85,18 +85,11 @@ bool Win32OSDWindow::isWindowCreated() const
 
 void Win32OSDWindow::CreateWindowInternal(int x, int y)
 {
-    VlcPlayer::Log("Win32OSDWindow::CreateWindowInternal(x=%d, y=%d, width=%d, height=%d)", x, y, width(), height());
-
     if (isWindowCreated())
-    {
-        VlcPlayer::Log("OSD window already created, skipping");
         return;
-    }
 
-    // Create layered window (transparent, topmost, no input)
-    VlcPlayer::Log("Creating layered OSD window...");
     hwnd_ = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         OSD_WINDOW_CLASS,
         L"VLC OSD",
         WS_POPUP,
@@ -105,14 +98,13 @@ void Win32OSDWindow::CreateWindowInternal(int x, int y)
 
     if (!hwnd_)
     {
-        VlcPlayer::Log("ERROR: Failed to create OSD window, error: %lu", GetLastError());
+        VlcPlayer::Log("ERROR: Failed to create OSD window at (%d,%d) %dx%d, error: %lu",
+                       x, y, width(), height(), GetLastError());
         return;
     }
-    VlcPlayer::Log("OSD window created successfully (hwnd=%p)", hwnd_);
 
-    VlcPlayer::Log("Initializing graphics...");
+    VlcPlayer::Log("OSD window created: hwnd=%p pos=(%d,%d) size=(%dx%d)", hwnd_, x, y, width(), height());
     InitializeGraphics();
-    VlcPlayer::Log("Graphics initialized");
 }
 
 void Win32OSDWindow::DestroyWindowInternal()
@@ -131,8 +123,11 @@ void Win32OSDWindow::MoveInternal(int x, int y)
     if (!isWindowCreated())
         return;
 
-    SetWindowPos(hwnd_, HWND_TOPMOST, x, y, 0, 0,
-                 SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    UINT flags = SWP_NOSIZE | SWP_NOACTIVATE;
+    if (current_opacity_ > 0.0f)
+        flags |= SWP_SHOWWINDOW;
+
+    SetWindowPos(hwnd_, HWND_TOPMOST, x, y, 0, 0, flags);
 }
 
 void Win32OSDWindow::SetSizeInternal(int width, int height)
@@ -154,7 +149,6 @@ void Win32OSDWindow::SetOpacityInternal(float opacity)
     if (!isWindowCreated())
         return;
 
-    // Opacity applied via UpdateLayeredWindow in Flush()
     if (opacity <= 0.0f)
     {
         ShowWindow(hwnd_, SW_HIDE);
@@ -237,20 +231,7 @@ void Win32OSDWindow::Flush()
 void Win32OSDWindow::UpdateLayeredWindow()
 {
     if (!isWindowCreated() || !mem_dc_)
-    {
-        VlcPlayer::Log("UpdateLayeredWindow: window not created or mem_dc_ is null");
         return;
-    }
-
-    // Ensure window is visible when flushing
-    if (current_opacity_ > 0.0f && !IsWindowVisible(hwnd_))
-    {
-        VlcPlayer::Log("UpdateLayeredWindow: showing window (opacity=%.2f)", current_opacity_);
-        ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
-        // Ensure it's topmost
-        SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
 
     HDC screen_dc = GetDC(NULL);
     POINT pt_src = {0, 0};
@@ -261,20 +242,29 @@ void Win32OSDWindow::UpdateLayeredWindow()
     blend.BlendOp = AC_SRC_OVER;
     blend.BlendFlags = 0;
     blend.SourceConstantAlpha = (BYTE)(current_opacity_ * 255);
-    blend.AlphaFormat = AC_SRC_ALPHA; // Use per-pixel alpha
-
-    VlcPlayer::Log("UpdateLayeredWindow: pos=(%d,%d) size=(%d,%d) opacity=%d",
-                   pt_dst.x, pt_dst.y, size.cx, size.cy, blend.SourceConstantAlpha);
+    blend.AlphaFormat = AC_SRC_ALPHA;
 
     BOOL result = ::UpdateLayeredWindow(hwnd_, screen_dc, &pt_dst, &size,
                                          mem_dc_, &pt_src, 0, &blend, ULW_ALPHA);
 
     if (!result)
     {
-        VlcPlayer::Log("ERROR: UpdateLayeredWindow failed, error: %lu", GetLastError());
+        VlcPlayer::Log("ERROR: UpdateLayeredWindow failed at (%d,%d) %dx%d opacity=%d, error: %lu",
+                       pt_dst.x, pt_dst.y, size.cx, size.cy, blend.SourceConstantAlpha, GetLastError());
     }
 
     ReleaseDC(NULL, screen_dc);
+
+    if (current_opacity_ > 0.0f)
+    {
+        if (!IsWindowVisible(hwnd_))
+        {
+            ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
+        }
+
+        SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
 }
 
 // =================================================================================================

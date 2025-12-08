@@ -106,6 +106,8 @@ public:
 
     std::vector<MenuItem> BuildContextMenu();
 
+    void EmitShortcut(const std::string &action);
+
 private:
     // Unified API Methods
     Napi::Value Open(const Napi::CallbackInfo &info);
@@ -222,7 +224,6 @@ private:
     Napi::Object GetMediaInfoObject(Napi::Env env);
 
     // Event emission helpers
-    void EmitShortcut(const std::string &action);
     void EmitCurrentVideo(std::function<void(Napi::Env, Napi::Object &)> builder);
     void EmitPlayerInfo(std::function<void(Napi::Env, Napi::Object &)> builder);
     void EmitMediaInfo();

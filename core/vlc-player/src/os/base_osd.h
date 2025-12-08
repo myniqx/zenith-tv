@@ -12,17 +12,27 @@ class OSDWindow
   int _opacity; /* 0-100*/
   OSWindow *window = nullptr;
   float _offsetY = 0;
-  std::string text;    // Primary text
-  std::string subtext; // Secondary text (e.g., time display)
-  float progress;      // 0.0-1.0 for progress bars
+  std::string text;
+  std::string subtext;
+  float progress;
   OSDIcon icon;
   int duration;
 
-  // Lifecycle
   std::chrono::steady_clock::time_point created_at;
   std::chrono::steady_clock::time_point expire_at;
 
+  // Layout constants
+  static constexpr int PADDING = 15;
+  static constexpr int ICON_SIZE_LARGE = 24;
+  static constexpr int ICON_SIZE_SMALL = 20;
+  static constexpr int SPACING = 10;
+  static constexpr int PROGRESS_BAR_HEIGHT_THICK = 8;
+  static constexpr int PROGRESS_BAR_HEIGHT_THIN = 4;
+
 protected:
+  Dimension text_dim_ = {0, 0};
+  Dimension subtext_dim_ = {0, 0};
+
   virtual void MoveInternal(int x, int y) = 0;
   virtual void SetSizeInternal(int width, int height) = 0;
   virtual void CreateWindowInternal(int x, int y) = 0;
