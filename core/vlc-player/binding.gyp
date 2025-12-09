@@ -139,10 +139,23 @@
         [
           "OS=='linux'",
           {
-            "sources+": ["src/vlc_window_linux.cpp", "src/vlc_context_menu_linux.cpp", "src/vlc_osd_linux.cpp"],
+            "sources+": [
+              "src/os/linux/window.cpp",
+              "src/os/linux/context_menu.cpp",
+              "src/os/linux/osd.cpp"
+            ],
             "cflags_cc": ["-std=c++17"],
-            "include_dirs": ["/usr/include/vlc"],
-            "libraries": ["-lvlc", "-lX11"]
+            "include_dirs": [
+              "/usr/include/vlc",
+              "/usr/include/freetype2"
+            ],
+            "libraries": [
+              "-lvlc",
+              "-lX11",
+              "-lXft",
+              "-lXrender",
+              "-lXcomposite"
+            ]
           }
         ],
         [

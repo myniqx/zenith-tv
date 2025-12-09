@@ -18,7 +18,7 @@ export const VideoPlaceholder = () => {
   }, []);
 
   const onClick = () => {
-    window({ onTop: true })
+    window({ screenMode: 'sticky' })
   };
 
   return (

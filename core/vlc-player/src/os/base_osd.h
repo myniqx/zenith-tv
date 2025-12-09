@@ -10,7 +10,6 @@ class OSDWindow
   OSDType _type;
   int _x, _y, _width, _height;
   int _opacity; /* 0-100*/
-  OSWindow *window = nullptr;
   float _offsetY = 0;
   std::string text;
   std::string subtext;
@@ -32,6 +31,8 @@ class OSDWindow
 protected:
   Dimension text_dim_ = {0, 0};
   Dimension subtext_dim_ = {0, 0};
+
+  OSWindow *window = nullptr;
 
   virtual void MoveInternal(int x, int y) = 0;
   virtual void SetSizeInternal(int width, int height) = 0;

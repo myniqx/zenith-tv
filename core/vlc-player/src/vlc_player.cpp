@@ -1,5 +1,10 @@
 #include "vlc_player.h"
+
+#ifdef _WIN32
 #include "os/win32/window.h"
+#elif defined(__linux__)
+#include "os/linux/window.h"
+#endif
 
 Napi::Object VlcPlayer::Init(Napi::Env env, Napi::Object exports)
 {
@@ -41,20 +46,14 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
       media_player_(nullptr),
       current_media_(nullptr),
       osd_window_(nullptr),
-#ifdef __linux__
-      display_(nullptr),
-      child_window_(0),
-      parent_window_(0),
-#elif defined(__APPLE__)
-      child_nsview_(nullptr),
-      parent_nsview_(nullptr),
-#endif
+
+
       video_width_(0),
       video_height_(0),
       video_pitch_(0),
       frame_ready_(false),
-      event_manager_(nullptr),
-      tsfn_events_()
+      tsfn_events_(),
+      event_manager_(nullptr)
 {
     Log("Constructor started");
 
@@ -78,6 +77,10 @@ VlcPlayer::VlcPlayer(const Napi::CallbackInfo &info)
     osd_window_->Initialize();
 
 #elif defined(__linux__)
+    Log("Creating LinuxWindow instance in constructor...");
+    osd_window_ = new LinuxWindow(this);
+    osd_window_->Initialize();
+
     const char *plugin_path = getenv("VLC_PLUGIN_PATH");
     if (!plugin_path)
     {
@@ -430,9 +433,7 @@ Napi::Value VlcPlayer::Dispose(const Napi::CallbackInfo &info)
     // Cleanup event callbacks after setting disposed flag
     CleanupEventCallbacks();
 
-#ifdef __linux__
-    DestroyChildWindowInternal();
-#endif
+
 
     // Acquire mutex for cleanup operations
     std::lock_guard<std::mutex> lock(mutex_);
@@ -479,11 +480,11 @@ std::string VlcPlayer::FormatTime(int64_t time_ms)
         char buffer[32];
         if (hours > 0)
         {
-            snprintf(buffer, sizeof(buffer), "%02lld:%02lld:%02lld", hours, minutes, seconds);
+            snprintf(buffer, sizeof(buffer), "%02lld:%02lld:%02lld", (long long)hours, (long long)minutes, (long long)seconds);
         }
         else
         {
-            snprintf(buffer, sizeof(buffer), "%02lld:%02lld", minutes, seconds);
+            snprintf(buffer, sizeof(buffer), "%02lld:%02lld", (long long)minutes, (long long)seconds);
         }
         return std::string(buffer);
     }

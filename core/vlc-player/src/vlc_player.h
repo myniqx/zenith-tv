@@ -68,30 +68,6 @@ public:
     std::atomic<bool> disposed_{false};
     OSWindow *osd_window_;
 
-    // Child window handles (platform-specific - kept for Linux/Mac compatibility)
-#ifdef __linux__
-    Display *display_;
-    ::Window child_window_;
-    ::Window parent_window_;
-    std::atomic<bool> event_loop_running_{false};
-    std::atomic<bool> was_playing_before_minimize_{false};
-    std::mutex window_mutex_; // Protects child_window_ access
-
-    // Cached X11 atoms (initialized in CreateChildWindowInternal)
-    Atom wm_delete_window_atom_;
-    Atom wm_state_atom_;
-    Atom wm_state_fullscreen_atom_;
-    Atom wm_state_above_atom_;
-    Atom wm_state_skip_taskbar_atom_;
-    Atom motif_hints_atom_;
-
-    void StartEventLoop();
-    void StopEventLoop();
-    void SendWindowStateMessage(Atom state_atom, bool enable);
-#elif defined(__APPLE__)
-    void *child_nsview_;
-    void *parent_nsview_;
-#endif
 
     // Video memory (vmem) callback support
     unsigned int video_width_;
@@ -147,58 +123,6 @@ private:
 
     // Helper methods for OSD (delegates to osd_window_)
     std::string FormatTime(int64_t time_ms);
-
-#ifdef __linux__
-    struct MenuColors
-    {
-        unsigned long background;
-        unsigned long foreground;
-        unsigned long hoverBackground;
-        unsigned long hoverForeground;
-        unsigned long border;
-        unsigned long separator;
-        unsigned long disabledText;
-    };
-
-    // Enhanced menu state for multi-level support
-    struct MenuWindowState
-    {
-        ::Window window;
-        Pixmap backBuffer;
-        std::vector<MenuItem> items;
-        int hoveredItem;
-        int selectedItem; // For keyboard navigation
-        int width;
-        int height;
-        int posX;
-        int posY;
-        MenuWindowState *parent;
-        MenuWindowState *child;
-        bool active;
-
-        MenuWindowState()
-            : window(0), backBuffer(0), hoveredItem(-1), selectedItem(-1),
-              width(0), height(0), posX(0), posY(0),
-              parent(nullptr), child(nullptr), active(false) {}
-    };
-
-    // Helper methods for menu rendering (Linux X11)
-    MenuColors GetGtkThemeColors();
-    unsigned long AllocColor(unsigned long rgb);
-    void DrawMenuItem(::Window window, GC gc, const MenuItem &item, int yPos,
-                      int width, int height, bool hovered, bool selected, const MenuColors &colors);
-    void RedrawMenu(MenuWindowState *menu, GC gc, const MenuColors &colors);
-    MenuWindowState *CreateMenuState(int x, int y, const std::vector<MenuItem> &items,
-                                     const MenuColors &colors, MenuWindowState *parent = nullptr);
-    void DestroyMenuState(MenuWindowState *menu);
-    void CloseChildMenus(MenuWindowState *menu);
-    bool OpenSubmenu(MenuWindowState *menu, int itemIndex, GC gc, const MenuColors &colors);
-    bool HandleMenuEvent(MenuWindowState *rootMenu, XEvent &event, GC gc,
-                         const MenuColors &colors, bool &menuActive);
-    int CalculateMenuHeight(const std::vector<MenuItem> &items);
-    bool IsPointInMenu(MenuWindowState *menu, int x, int y);
-    void SetMenuOpacity(::Window window, double opacity);
-#endif
 
     // Event manager
     libvlc_event_manager_t *event_manager_;

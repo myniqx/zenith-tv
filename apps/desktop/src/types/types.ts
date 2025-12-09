@@ -11,7 +11,7 @@ export type VlcState =
   | 'error'
   | 'unknown';
 
-export type ScreenMode = 'free' | 'sticky' | 'fullscreen';
+export type ScreenMode = 'free' | 'free_ontop' | 'sticky' | 'fullscreen';
 
 export interface VlcTrack {
   id: number;
@@ -67,10 +67,8 @@ export interface WindowStyleOptions {
 
 export interface WindowOptions {
   resize?: WindowResizeOptions;
-  fullscreen?: boolean;
-  onTop?: boolean;
   visible?: boolean;
-  style?: WindowStyleOptions;
+  screenMode?: ScreenMode;
 }
 
 // Shortcut action types

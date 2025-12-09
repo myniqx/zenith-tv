@@ -440,18 +440,14 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     // Handle mode transitions
     switch (mode) {
       case 'fullscreen':
-        windowApi({ fullscreen: true, onTop: false }).catch(err => {
+        windowApi({ screenMode: 'fullscreen' }).catch(err => {
           console.error('[VLC] Failed to set fullscreen:', err);
         });
         break;
 
       case 'free':
         windowApi({
-          fullscreen: false,
-          onTop: false,
-          style: {
-            border: true, titleBar: true, resizable: true, taskbar: true
-          }
+          screenMode: 'free'
         }).catch(err => {
           console.error('[VLC] Failed to exit fullscreen:', err);
         });
@@ -462,9 +458,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
       case 'sticky':
         windowApi({
-          fullscreen: false,
-          onTop: true,
-          style: { border: false, titleBar: false, resizable: false, taskbar: false }
+          screenMode: 'sticky'
         }).catch(err => {
           console.error('[VLC] Failed to set sticky mode:', err);
         });
