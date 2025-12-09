@@ -164,6 +164,7 @@ protected:
     void OnClose();
     void OnResize(int x, int y, int width, int height);
     void OnStyleChange(const WindowStyle &style);
+    void OnContextMenuClose();
 
     VlcPlayer *player = nullptr;
 

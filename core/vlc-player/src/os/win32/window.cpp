@@ -580,9 +580,22 @@ void Win32Window::CreateContextMenu(std::vector<MenuItem> items, int x, int y)
     POINT pt = {x, y};
     ClientToScreen(hwnd_, &pt);
 
-    // Show menu
-    TrackPopupMenu(hmenu_, TPM_RIGHTBUTTON,
-                   pt.x, pt.y, 0, hwnd_, NULL);
+    // CRITICAL: Set foreground window before showing menu
+    // Without this, the menu may appear but WM_COMMAND won't be received
+    SetForegroundWindow(hwnd_);
+
+    // Show menu (use TrackPopupMenuEx for better control)
+    // NOTE: This call BLOCKS until menu is closed
+    TrackPopupMenuEx(hmenu_,
+                     TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,
+                     pt.x, pt.y, hwnd_, NULL);
+
+    // Menu is closed now - clean up state
+    // This handles ESC, click outside, and menu selection
+    OnContextMenuClose();
+
+    // Post WM_NULL to ensure menu cleanup (Windows menu quirk)
+    PostMessage(hwnd_, WM_NULL, 0, 0);
 }
 
 void Win32Window::BuildWin32Menu(HMENU menu, const std::vector<MenuItem> &items)
@@ -664,7 +677,7 @@ void Win32Window::HandleMenuCommand(UINT command_id)
     }
 
     // Clean up menu after command execution
-    DestroyContextMenu();
+    OnContextMenuClose();
 }
 
 // =================================================================================================
@@ -805,6 +818,7 @@ LRESULT Win32Window::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_LBUTTONDOWN:
     case WM_RBUTTONDOWN:
     case WM_MBUTTONDOWN:
+        VlcPlayer::Log("WM_*BUTTONDOWN received: msg=0x%X", msg);
         HandleMouseButton(msg, wParam, lParam);
         return 0;
 
@@ -865,6 +879,8 @@ void Win32Window::HandleMouseButton(UINT msg, WPARAM wParam, LPARAM lParam)
     bool left = (msg == WM_LBUTTONDOWN);
     bool middle = (msg == WM_MBUTTONDOWN);
     bool right = (msg == WM_RBUTTONDOWN);
+
+    VlcPlayer::Log("HandleMouseButton: right=%d, pos=(%d,%d)", right, x, y);
 
     if (right)
     {

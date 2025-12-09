@@ -16,6 +16,14 @@
 #undef DrawText
 #endif
 
+#ifdef max
+#undef max
+#endif
+
+#ifdef min
+#undef min
+#endif
+
 void OSDWindow::Hide()
 {
   SetOpacity(0);
@@ -103,11 +111,42 @@ void OSDWindow::DrawProgressBar(int x, int y,
                                 OSDColor fg_color,
                                 OSDColor bg_color)
 {
+  int radius = std::min(4, height / 2);  // Radius can't be larger than half height
+
+  // Adjust padding based on height (thin bars need less padding)
+  int padding = (height >= 8) ? 2 : 1;
+
+  // Draw background (full bar)
+  DrawRoundedRect(x, y, width, height, bg_color, radius);
+
+  // Draw filled portion on top (with inner padding)
   if (progress > 0.0f)
   {
-    int padding = 2;
-    int filled_width = static_cast<int>(width * progress) - padding * 2;
-    DrawRoundedRect(x + padding, y + padding, filled_width, height - padding * 2, fg_color, 4);
+    int inner_x = x + padding;
+    int inner_y = y + padding;
+    int inner_width = width - padding * 2;
+    int inner_height = height - padding * 2;
+
+    // Safety check: ensure inner_height is at least 1px
+    if (inner_height < 1)
+      inner_height = 1;
+
+    int filled_width = static_cast<int>(inner_width * progress);
+
+    // Use smaller radius for inner bar (proportional to height)
+    int inner_radius = std::min(radius - 1, inner_height / 2);
+
+    // If progress is 100%, use rounded corners on right side too
+    // Otherwise, use sharp corners on right side (bar continues)
+    if (progress >= 1.0f)
+    {
+      DrawRoundedRect(inner_x, inner_y, filled_width, inner_height, fg_color, inner_radius);
+    }
+    else
+    {
+      // Draw with rounded left corners only
+      DrawRoundedRect(inner_x, inner_y, filled_width, inner_height, fg_color, 0);
+    }
   }
 }
 
@@ -247,11 +286,13 @@ void OSDWindow::SetType(OSDType type)
     break;
 
   case OSDType::PLAYBACK:
+  {
     auto dimension = window->MeasureText(window->defaultFont, "Pause");
     _width = dimension.width + 30;
     _height = dimension.height + 20;
     duration = 2000;
     break;
+  }
 
   case OSDType::SEEK:
     _width = 600;
@@ -387,8 +428,9 @@ void OSDWindow::RenderVolume()
   DrawIcon(progress == 0.0f ? VOLUME_MUTE : VOLUME_UP,
            PADDING, start_y, ICON_SIZE_LARGE, window->text_primary);
 
+  // Position text vertically centered with icon
   int text_x = PADDING + ICON_SIZE_LARGE + SPACING;
-  int text_y = start_y + ICON_SIZE_LARGE / 2 + text_dim_.height / 2 - 4;
+  int text_y = start_y + (ICON_SIZE_LARGE / 2) - (text_dim_.height / 2);
   DrawText(text, text_x, text_y, window->text_primary, window->defaultFont);
 
   int bar_y = start_y + ICON_SIZE_LARGE + SPACING;
@@ -410,32 +452,38 @@ void OSDWindow::RenderPlayback()
     int icon_y = center_y - ICON_SIZE_SMALL / 2;
     DrawIcon(icon, start_x, icon_y, ICON_SIZE_SMALL, window->text_primary);
 
+    // Position text vertically centered with icon
     int text_x = start_x + ICON_SIZE_SMALL + SPACING;
-    int text_y = center_y + text_dim_.height / 2 - 4;
+    int text_y = center_y - text_dim_.height / 2;
     DrawText(text, text_x, text_y, window->text_primary, window->defaultFont);
   }
   else
   {
-    int text_y = center_y + text_dim_.height / 2 - 4;
+    // Center text when no icon
+    int text_y = center_y - text_dim_.height / 2;
     DrawText(text, start_x, text_y, window->text_primary, window->defaultFont);
   }
 }
 
 void OSDWindow::RenderSeek()
 {
-  if (!subtext.empty() && subtext_dim_.width > 0)
-  {
-    int text_x = (_width - subtext_dim_.width) / 2;
-    int text_y = PADDING + subtext_dim_.height;
-    DrawText(subtext, text_x, text_y, window->text_primary, window->boldFont);
-  }
-
+  // Calculate progress bar position first
   int bar_y = _height - PROGRESS_BAR_HEIGHT_THIN - PADDING - 12;
   int bar_width = _width - PADDING * 2;
 
+  // Position text above progress bar with spacing
+  if (!subtext.empty() && subtext_dim_.width > 0)
+  {
+    int text_x = (_width - subtext_dim_.width) / 2;
+    int text_y = bar_y - subtext_dim_.height - 8; // 8px spacing above bar
+    DrawText(subtext, text_x, text_y, window->text_primary, window->boldFont);
+  }
+
+  // Draw progress bar
   DrawProgressBar(PADDING, bar_y, bar_width, PROGRESS_BAR_HEIGHT_THIN,
                   progress, window->progress_fg, window->progress_bg);
 
+  // Draw position marker (circle)
   if (progress > 0.0f && progress < 1.0f)
   {
     int marker_x = PADDING + static_cast<int>(bar_width * progress);

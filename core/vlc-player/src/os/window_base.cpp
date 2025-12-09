@@ -294,6 +294,7 @@ OSWindow::OSWindow(VlcPlayer *player)
 OSWindow::~OSWindow()
 {
     StopOSDRenderLoop();
+    OnContextMenuClose();
     ClearOSDs();
 }
 
@@ -389,24 +390,40 @@ void OSWindow::SetStyle(const WindowStyle &style)
 void OSWindow::OnInput(const std::string &key_code, bool ctrl, bool shift, bool alt, bool meta)
 {
     player->ProcessKeyPress(key_code);
-    if (_contextMenuActive)
-    {
-        _contextMenuActive = false;
-        DestroyContextMenu();
-    }
+    OnContextMenuClose();
 }
 
 void OSWindow::OnRightClick(int x, int y)
 {
+    VlcPlayer::Log("OnRightClick called: _contextMenuActive=%d", _contextMenuActive);
+    OnContextMenuClose();
+
     auto menu = player->BuildContextMenu();
-    CreateContextMenu(menu, x, y);
-    _contextMenuActive = true;
+    _contextMenuActive = true; // Set BEFORE CreateContextMenu (it blocks)
+
+    VlcPlayer::Log("About to call CreateContextMenu, _contextMenuActive=%d", _contextMenuActive);
+    CreateContextMenu(menu, x, y); // This call blocks until menu closes
+    VlcPlayer::Log("CreateContextMenu returned, _contextMenuActive=%d", _contextMenuActive);
+}
+
+void OSWindow::OnContextMenuClose()
+{
+    VlcPlayer::Log("OnContextMenuClose called: _contextMenuActive=%d", _contextMenuActive);
+    if (_contextMenuActive)
+    {
+        _contextMenuActive = false;
+        DestroyContextMenu();
+        VlcPlayer::Log("Menu destroyed, _contextMenuActive now=%d", _contextMenuActive);
+    }
+    else
+        VlcPlayer::Log("OnContextMenuClose: Menu was not active, doing nothing");
 }
 
 void OSWindow::OnMinimize(bool minimized)
 {
     if (minimized)
     {
+        OnContextMenuClose();
         // Clear all OSDs when minimizing
         ClearOSDs();
 
@@ -434,14 +451,15 @@ void OSWindow::OnMinimize(bool minimized)
 
 void OSWindow::OnClose()
 {
+    OnContextMenuClose();
     StopOSDRenderLoop();
     ClearOSDs();
-    player->EmitShortcut("close");
+    player->EmitShortcut("stop");
 }
 
 void OSWindow::OnResize(int x, int y, int width, int height)
 {
-    if (_screenMode == ScreenMode::FREE)
+    if (_screenMode == ScreenMode::FREE || _screenMode == ScreenMode::FREE_ON_TOP)
     {
         _freeBounds = {x, y, width, height};
     }
