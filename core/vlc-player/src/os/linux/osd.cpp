@@ -311,6 +311,7 @@ void LinuxOSDWindow::CreateWindowInternal(int x, int y)
 
     // Map window
     XMapWindow(display_, window_);
+    XRaiseWindow(display_, window_); // Ensure it's on top
     XFlush(display_);
 
     VlcPlayer::Log("LinuxOSDWindow created (Window ID: 0x%lx, ARGB: %s)", window_, has_alpha ? "yes" : "no");
@@ -392,8 +393,14 @@ void LinuxOSDWindow::SetOpacityInternal(float opacity)
 
 void LinuxOSDWindow::Flush()
 {
-    if (!display_ || !window_ || !pixmap_picture_ || !window_picture_)
+    if (!display_ || !window_)
     {
+        return;
+    }
+
+    if (!pixmap_picture_ || !window_picture_)
+    {
+        XFlush(display_);
         return;
     }
 
@@ -410,6 +417,9 @@ void LinuxOSDWindow::Flush()
         width(), height());
 
     XFlush(display_);
+    
+    // Ensure window stays on top (some WMs might lower override_redirect windows)
+    XRaiseWindow(display_, window_);
 }
 
 // =================================================================================================
@@ -439,8 +449,10 @@ void LinuxOSDWindow::SetXRenderColor(const XRenderColor *color)
         return;
     }
 
-    // Convert XRenderColor to X11 pixel value (approximate, no alpha)
-    unsigned long pixel = ((color->red >> 8) << 16) |
+    // Convert XRenderColor to X11 pixel value (approximate)
+    // For ARGB32, we need to include alpha. Assuming standard layout (A R G B)
+    unsigned long pixel = ((color->alpha >> 8) << 24) |
+                          ((color->red >> 8) << 16) |
                           ((color->green >> 8) << 8) |
                           (color->blue >> 8);
 
@@ -652,7 +664,9 @@ void LinuxOSDWindow::DrawText(const std::string &text, int x, int y, OSDColor co
     XftColor *xft_color = static_cast<XftColor *>(color);
     XftFont *xft_font = static_cast<XftFont *>(font);
 
-    XftDrawStringUtf8(xft_draw_, xft_color, xft_font, x, y,
+    // XftDrawStringUtf8 uses baseline coordinates, but we are passed top-left.
+    // Add ascent to y to correct this.
+    XftDrawStringUtf8(xft_draw_, xft_color, xft_font, x, y + xft_font->ascent,
                       reinterpret_cast<const XftChar8 *>(text.c_str()),
                       static_cast<int>(text.length()));
 }

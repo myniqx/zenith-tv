@@ -3,6 +3,11 @@
 #include "../../vlc_player.h"
 #include <vlc/vlc.h>
 #include <X11/Xatom.h>
+#include <X11/Xlib.h>
+#include <X11/keysym.h>
+#include <cstring>
+#include <algorithm>
+#include <mutex>
 #include <X11/keysym.h>
 #include <cstring>
 #include <algorithm>
@@ -66,11 +71,26 @@ bool LinuxWindow::Create(int width, int height)
 {
     std::lock_guard<std::mutex> lock(window_mutex_);
 
+    // Initialize X11 threading support (must be first Xlib call)
+    static std::once_flag x11_init_flag;
+    std::call_once(x11_init_flag, []() {
+        Status status = XInitThreads();
+        VlcPlayer::Log("XInitThreads() called, status: %d", status);
+    });
+
     if (is_created_)
     {
         VlcPlayer::Log("Window already created");
         return true;
     }
+
+    // Set X11 Error Handler
+    XSetErrorHandler([](Display *d, XErrorEvent *e) -> int {
+        char buffer[1024];
+        XGetErrorText(d, e->error_code, buffer, sizeof(buffer));
+        VlcPlayer::Log("X11 ERROR: Request: %d, Error: %s", e->request_code, buffer);
+        return 0;
+    });
 
     VlcPlayer::Log("Creating Linux X11 window (%dx%d)", width, height);
 
@@ -163,6 +183,10 @@ bool LinuxWindow::Create(int width, int height)
     saved_state_ = bounds_;
     is_created_ = true;
     is_visible_ = true;
+
+    // Re-initialize colors now that display is ready
+    // (The first call in constructor failed because display_ was null)
+    Initialize();
 
     // Start message loop
     StartMessageLoop();
