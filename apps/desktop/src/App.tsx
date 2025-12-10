@@ -36,10 +36,11 @@ function App() {
   const [lastProfileLoaded, setLastProfileLoaded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [p2pEnabled, setP2pEnabled] = useState(false);
-  const [p2pDeviceInfo, setP2pDeviceInfo] = useState<unknown>(null);
-  const [pairingRequest, setPairingRequest] = useState<unknown>(null);
-  const [controlledBy, setControlledBy] = useState<string | null>(null);
+  // P2P Logic temporarily removed for refactoring
+  // const [p2pEnabled, setP2pEnabled] = useState(false);
+  // const [p2pDeviceInfo, setP2pDeviceInfo] = useState<unknown>(null);
+  // const [pairingRequest, setPairingRequest] = useState<unknown>(null);
+  // const [controlledBy, setControlledBy] = useState<string | null>(null);
 
   const debouncedSearchQuery = useDebounce(localSearchQuery, 300);
 
@@ -139,6 +140,7 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  /*
   useEffect(() => {
     const startP2P = async () => {
       try {
@@ -156,74 +158,7 @@ function App() {
       window.electron.p2p.stop();
     };
   }, []);
-
-  useEffect(() => {
-    window.electron.p2p.onPairingRequest((request) => {
-      setPairingRequest(request);
-    });
-
-    window.electron.p2p.onPlay(({ item, position }) => {
-      const { play } = usePlayerStore.getState();
-      play(item);
-      if (position !== undefined) {
-        const videoElement = document.querySelector('video');
-        if (videoElement) {
-          videoElement.currentTime = position;
-        }
-      }
-    });
-
-    window.electron.p2p.onPause(() => {
-      const videoElement = document.querySelector('video');
-      if (videoElement) {
-        videoElement.pause();
-      }
-    });
-
-    window.electron.p2p.onSeek((position) => {
-      const videoElement = document.querySelector('video');
-      if (videoElement) {
-        videoElement.currentTime = position;
-      }
-    });
-
-    window.electron.p2p.onSetVolume((volume) => {
-      const { setVolume } = usePlayerStore.getState();
-      setVolume(volume);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!p2pEnabled) return;
-
-    const { currentItem, state, position, volume } = usePlayerStore.getState();
-
-    const broadcastState = () => {
-      window.electron.p2p.broadcastState({
-        currentItem,
-        state,
-        position,
-        volume,
-      });
-    };
-
-    const interval = setInterval(broadcastState, 2000);
-
-    return () => clearInterval(interval);
-  }, [p2pEnabled]);
-
-  const handleAcceptPairing = async (deviceId: string, pin: string) => {
-    const accepted = await window.electron.p2p.acceptPairing(deviceId, pin);
-    if (accepted && pairingRequest) {
-      setControlledBy(pairingRequest.deviceName);
-      setPairingRequest(null);
-    }
-  };
-
-  const handleRejectPairing = (deviceId: string) => {
-    window.electron.p2p.rejectPairing(deviceId);
-    setPairingRequest(null);
-  };
+  */
 
 
   return (
@@ -372,6 +307,7 @@ function App() {
         </PanelGroup>
       </main>
 
+      {/* 
       {pairingRequest && (
         <PairingDialog
           deviceName={pairingRequest.deviceName}
@@ -386,6 +322,7 @@ function App() {
         isServerRunning={p2pEnabled}
         deviceInfo={p2pDeviceInfo}
       />
+      */}
 
       <ToastContainer />
     </div>

@@ -9,29 +9,19 @@ export function registerP2PHandlers(mainWindow: BrowserWindow): void {
 
   // Setup event handlers for P2P
   p2pServer.setEventHandlers({
-    onPairingRequest: (pairing) => {
+    onConnection: (connectionId, ip) => {
       if (mainWindow) {
-        mainWindow.webContents.send('p2p:pairing-request', pairing)
+        mainWindow.webContents.send('p2p:connection', { connectionId, ip })
       }
     },
-    onPlayCommand: (item, position) => {
+    onMessage: (connectionId, message) => {
       if (mainWindow) {
-        mainWindow.webContents.send('p2p:play', { item, position })
+        mainWindow.webContents.send('p2p:message', { connectionId, message })
       }
     },
-    onPauseCommand: () => {
+    onDisconnection: (connectionId) => {
       if (mainWindow) {
-        mainWindow.webContents.send('p2p:pause')
-      }
-    },
-    onSeekCommand: (position) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('p2p:seek', position)
-      }
-    },
-    onSetVolumeCommand: (volume) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('p2p:set-volume', volume)
+        mainWindow.webContents.send('p2p:disconnection', connectionId)
       }
     }
   })
@@ -49,19 +39,14 @@ export function registerP2PHandlers(mainWindow: BrowserWindow): void {
     return true
   })
 
-  ipcMain.handle('p2p:acceptPairing', async (_event: IpcMainInvokeEvent, deviceId: string, pin: string) => {
+  ipcMain.handle('p2p:send', async (_event: IpcMainInvokeEvent, connectionId: string, message: unknown) => {
     if (!p2pServer) return false
-    return p2pServer.acceptPairing(deviceId, pin)
+    return p2pServer.send(connectionId, message)
   })
 
-  ipcMain.handle('p2p:rejectPairing', async (_event: IpcMainInvokeEvent, deviceId: string) => {
+  ipcMain.handle('p2p:broadcast', async (_event: IpcMainInvokeEvent, message: unknown) => {
     if (!p2pServer) return
-    p2pServer.rejectPairing(deviceId)
-  })
-
-  ipcMain.handle('p2p:broadcastState', async (_event: IpcMainInvokeEvent, state: unknown) => {
-    if (!p2pServer) return
-    p2pServer.broadcastState(state)
+    p2pServer.broadcast(message)
   })
 
   ipcMain.handle('p2p:getDeviceInfo', async () => {

@@ -8,17 +8,14 @@ contextBridge.exposeInMainWorld('electron', {
   p2p: {
     start: (port) => ipcRenderer.invoke('p2p:start', port),
     stop: () => ipcRenderer.invoke('p2p:stop'),
-    acceptPairing: (deviceId, pin) => ipcRenderer.invoke('p2p:acceptPairing', deviceId, pin),
-    rejectPairing: (deviceId) => ipcRenderer.invoke('p2p:rejectPairing', deviceId),
-    broadcastState: (state) => ipcRenderer.invoke('p2p:broadcastState', state),
+    send: (connectionId, message) => ipcRenderer.invoke('p2p:send', connectionId, message),
+    broadcast: (message) => ipcRenderer.invoke('p2p:broadcast', message),
     getDeviceInfo: () => ipcRenderer.invoke('p2p:getDeviceInfo'),
 
     // Event listeners
-    onPairingRequest: (callback) => ipcRenderer.on('p2p:pairing-request', (_, data) => callback(data)),
-    onPlay: (callback) => ipcRenderer.on('p2p:play', (_, data) => callback(data)),
-    onPause: (callback) => ipcRenderer.on('p2p:pause', () => callback()),
-    onSeek: (callback) => ipcRenderer.on('p2p:seek', (_, position) => callback(position)),
-    onSetVolume: (callback) => ipcRenderer.on('p2p:set-volume', (_, volume) => callback(volume)),
+    onConnection: (callback) => ipcRenderer.on('p2p:connection', (_, data) => callback(data)),
+    onMessage: (callback) => ipcRenderer.on('p2p:message', (_, data) => callback(data)),
+    onDisconnection: (callback) => ipcRenderer.on('p2p:disconnection', (_, connectionId) => callback(connectionId)),
   },
 
   // File System API

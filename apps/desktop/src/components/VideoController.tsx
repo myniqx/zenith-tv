@@ -54,7 +54,7 @@ export function VideoController() {
     vlc.init();
   }, []);
 
-  const isSourceOpen = vlc.playerState !== 'stopped';
+
 
 
   // Setup keyboard shortcuts for VLC native window

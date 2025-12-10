@@ -8,17 +8,15 @@ declare global {
       version: string;
 
       p2p: {
-        start: (port: number) => Promise<void>;
-        stop: () => Promise<void>;
-        acceptPairing: (deviceId: string, pin: string) => Promise<void>;
-        rejectPairing: (deviceId: string) => Promise<void>;
-        broadcastState: (state: any) => Promise<void>;
-        getDeviceInfo: () => Promise<any>;
-        onPairingRequest: (callback: (data: any) => void) => void;
-        onPlay: (callback: (data: any) => void) => void;
-        onPause: (callback: () => void) => void;
-        onSeek: (callback: (position: number) => void) => void;
-        onSetVolume: (callback: (volume: number) => void) => void;
+        start: (port?: number) => Promise<boolean>;
+        stop: () => Promise<boolean>;
+        send: (connectionId: string, message: unknown) => Promise<boolean>;
+        broadcast: (message: unknown) => Promise<void>;
+        getDeviceInfo: () => Promise<{ id: string; name: string; port: number } | null>;
+
+        onConnection: (callback: (data: { connectionId: string; ip: string }) => void) => void;
+        onMessage: (callback: (data: { connectionId: string; message: unknown }) => void) => void;
+        onDisconnection: (callback: (connectionId: string) => void) => void;
       };
 
       vlc: {
