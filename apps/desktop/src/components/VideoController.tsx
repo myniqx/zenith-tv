@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { usePlayerStore } from '@zenith-tv/ui/stores/player';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
-import { useVlcPlayerStore } from '../stores/vlcPlayer';
+import { useUniversalPlayerStore } from '../stores/universalPlayerStore';
 import { Button } from '@zenith-tv/ui/button';
 import { Slider } from '@zenith-tv/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@zenith-tv/ui/select';
@@ -47,8 +47,8 @@ export function VideoController() {
 
   const { getNextEpisode } = useContentStore();
 
-  // Initialize VLC store on mount
-  const vlc = useVlcPlayerStore();
+  // Initialize Universal Player store on mount
+  const vlc = useUniversalPlayerStore();
 
   useEffect(() => {
     vlc.init();

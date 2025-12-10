@@ -5,13 +5,14 @@ import { CategoryBrowser } from './components/CategoryBrowser';
 import { ContentGrid } from './components/ContentGrid';
 import { ToastContainer } from './components/ToastContainer';
 import { HeaderBar } from './components/HeaderBar';
-import { PairingDialog } from './components/PairingDialog';
-import { RemoteControlIndicator } from './components/RemoteControlIndicator';
+import { PairingRequestToast } from './components/P2P/PairingRequestToast';
+import { P2PManager } from './components/P2P/P2PManager';
+// import { RemoteControlIndicator } from './components/RemoteControlIndicator'; // Replaced by DeviceSelector
 import { useContentStore } from './stores/content';
 import { useProfilesStore } from './stores/profiles';
-import { usePlayerStore } from '@zenith-tv/ui/stores/player';
 import { useSettingsStore } from './stores/settings';
 import { useVlcPlayerStore } from './stores/vlcPlayer';
+// import { useP2PStore } from './stores/p2pStore';
 import { useDebounce } from './hooks/useDebounce';
 import { Button } from '@zenith-tv/ui/button';
 import { Input } from '@zenith-tv/ui/input';
@@ -36,11 +37,7 @@ function App() {
   const [lastProfileLoaded, setLastProfileLoaded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // P2P Logic temporarily removed for refactoring
-  // const [p2pEnabled, setP2pEnabled] = useState(false);
-  // const [p2pDeviceInfo, setP2pDeviceInfo] = useState<unknown>(null);
-  // const [pairingRequest, setPairingRequest] = useState<unknown>(null);
-  // const [controlledBy, setControlledBy] = useState<string | null>(null);
+  // const { startServer, stopServer } = useP2PStore();
 
   const debouncedSearchQuery = useDebounce(localSearchQuery, 300);
 
@@ -140,26 +137,16 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Initialize P2P Server
+  // Removed auto-start, now controlled by P2PControl
   /*
   useEffect(() => {
-    const startP2P = async () => {
-      try {
-        const info = await window.electron.p2p.start(8080);
-        setP2pDeviceInfo(info);
-        setP2pEnabled(true);
-      } catch (error) {
-        console.error('Failed to start P2P server:', error);
-      }
-    };
-
-    startP2P();
-
+    startServer();
     return () => {
-      window.electron.p2p.stop();
+      stopServer();
     };
   }, []);
   */
-
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
@@ -307,23 +294,8 @@ function App() {
         </PanelGroup>
       </main>
 
-      {/* 
-      {pairingRequest && (
-        <PairingDialog
-          deviceName={pairingRequest.deviceName}
-          pin={pairingRequest.pin}
-          onAccept={(pin) => handleAcceptPairing(pairingRequest.deviceId, pin)}
-          onReject={() => handleRejectPairing(pairingRequest.deviceId)}
-        />
-      )}
-
-      <RemoteControlIndicator
-        controlledBy={controlledBy}
-        isServerRunning={p2pEnabled}
-        deviceInfo={p2pDeviceInfo}
-      />
-      */}
-
+      <P2PManager />
+      <PairingRequestToast />
       <ToastContainer />
     </div>
   );

@@ -1,6 +1,7 @@
 import { useContentStore } from '../stores/content';
 import { useProfilesStore } from '../stores/profiles';
 import { ProfileManager } from './ProfileManager';
+import { P2PControl } from './Header/P2PControl';
 import { Settings } from './Settings';
 import { GroupObject } from '@/m3u/group';
 import { ChevronRight } from 'lucide-react';
@@ -39,8 +40,8 @@ export function HeaderBar() {
           <button
             onClick={() => setGroup(null)}
             className={`text-sm px-2 py-1 rounded transition-colors ${currentGroup === null
-                ? 'text-foreground font-medium'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+              ? 'text-foreground font-medium'
+              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }`}
           >
             All
@@ -52,8 +53,8 @@ export function HeaderBar() {
               <button
                 onClick={() => setGroup(crumb)}
                 className={`text-sm px-2 py-1 rounded transition-colors ${index === breadcrumbs.length - 1
-                    ? 'text-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                  ? 'text-foreground font-medium'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                   }`}
               >
                 {crumb.Name}
@@ -64,6 +65,7 @@ export function HeaderBar() {
       </div>
 
       <div className="flex items-center gap-2">
+        <P2PControl />
         <Settings />
         <ProfileManager />
       </div>
