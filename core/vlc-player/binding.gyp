@@ -17,17 +17,69 @@
         "src/vlc_vmem.cpp",
         "src/vlc_context_menu.cpp",
         "src/vlc_context_menu_actions.cpp",
-        "src/vlc_osd.cpp"
+        "src/os/window_base.cpp",
+        "src/os/base_osd.cpp"
       ],
       "include_dirs": [
         "node_modules/node-addon-api"
       ],
       "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
+      "msvs_settings": {
+        "VCCLCompilerTool": {
+          "ExceptionHandling": 1,
+          "RuntimeLibrary": 3,
+          "MultiProcessorCompilation": "true",
+          "AdditionalOptions": ["/MP"]
+        }
+      },
+      "configurations": {
+        "Debug": {
+          "msvs_settings": {
+            "VCCLCompilerTool": {
+              "RuntimeLibrary": 3,
+              "Optimization": 0,
+              "MinimalRebuild": "false",
+              "OmitFramePointers": "false",
+              "BasicRuntimeChecks": 3
+            },
+            "VCLinkerTool": {
+              "LinkIncremental": 2,
+              "GenerateDebugInformation": "true"
+            }
+          },
+          "defines": ["DEBUG", "_DEBUG"]
+        },
+        "Release": {
+          "msvs_settings": {
+            "VCCLCompilerTool": {
+              "RuntimeLibrary": 2,
+              "Optimization": 3,
+              "FavorSizeOrSpeed": 1,
+              "InlineFunctionExpansion": 2,
+              "WholeProgramOptimization": "true",
+              "OmitFramePointers": "true",
+              "EnableFunctionLevelLinking": "true",
+              "EnableIntrinsicFunctions": "true"
+            },
+            "VCLinkerTool": {
+              "LinkTimeCodeGeneration": 1,
+              "OptimizeReferences": 2,
+              "EnableCOMDATFolding": 2,
+              "LinkIncremental": 1,
+              "GenerateDebugInformation": "false"
+            }
+          },
+          "defines": ["NDEBUG"]
+        }
+      },
       "conditions": [
         [
           "OS=='win'",
           {
-            "sources+": ["src/vlc_window_win32.cpp", "src/vlc_context_menu_win32.cpp", "src/vlc_osd_win32.cpp"]
+            "sources+": [
+              "src/os/win32/window.cpp",
+              "src/os/win32/osd.cpp"
+            ]
           }
         ],
         [
@@ -87,10 +139,24 @@
         [
           "OS=='linux'",
           {
-            "sources+": ["src/vlc_window_linux.cpp", "src/vlc_context_menu_linux.cpp", "src/vlc_osd_linux.cpp"],
+            "sources+": [
+              "src/os/linux/window.cpp",
+              "src/os/linux/context_menu.cpp",
+              "src/os/linux/osd.cpp",
+              "src/os/linux/draw.cpp"
+            ],
             "cflags_cc": ["-std=c++17"],
-            "include_dirs": ["/usr/include/vlc"],
-            "libraries": ["-lvlc", "-lX11"]
+            "include_dirs": [
+              "/usr/include/vlc",
+              "/usr/include/freetype2"
+            ],
+            "libraries": [
+              "-lvlc",
+              "-lX11",
+              "-lXft",
+              "-lXrender",
+              "-lXcomposite"
+            ]
           }
         ],
         [

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { usePlayerStore } from '@zenith-tv/ui/stores/player';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
@@ -17,6 +17,7 @@ import {
   StickyNote,
   Maximize,
   Square,
+  Layers,
 } from 'lucide-react';
 import { TvShowWatchableObject, WatchableObject } from '../m3u/watchable';
 import {
@@ -29,7 +30,7 @@ import {
 import { VideoSettings } from './Settings';
 import { Settings as SettingsIcon } from 'lucide-react';
 
-type ScreenType = 'free' | 'sticky' | 'fullscreen';
+type ScreenType = 'free' | 'free_ontop' | 'sticky' | 'fullscreen';
 
 
 export function VideoController() {
@@ -53,26 +54,24 @@ export function VideoController() {
     vlc.init();
   }, []);
 
-  const [screenType, setScreenType] = useState<ScreenType>('free');
-  const [isMuted, setIsMuted] = useState(false);
-  const [localVolume, setLocalVolume] = useState(defaultVolume * 100);
+  const isSourceOpen = vlc.playerState !== 'stopped';
+
 
   // Setup keyboard shortcuts for VLC native window
   useEffect(() => {
     if (!vlc.isAvailable) return;
 
     // Map settings shortcuts to VLC format: { "Space": "playPause", "Escape": "exitFullscreen" }
-    const vlcShortcuts: Record<string, string> = {};
+    const vlcShortcuts: Record<string, string[]> = {};
 
     Object.entries(keyboardShortcuts).forEach(([action, keyCombos]) => {
       // Convert "ctrl+KeyF" to just "KeyF" for VLC (modifiers not supported in native yet)
-      for (const keyCombo of keyCombos) {
-        const key = keyCombo.split('+').pop() || keyCombo;
-        vlcShortcuts[key] = action;
-      }
+      const comboArray = Array.isArray(keyCombos) ? keyCombos : [keyCombos];
+      const cleanKeys = comboArray.map(keyCombo => keyCombo.split('+').pop() || keyCombo);
+      vlcShortcuts[action] = cleanKeys;
     });
 
-    vlc.shortcut({ shortcuts: vlcShortcuts }).catch(err => {
+    vlc.shortcut({ shortcuts: vlcShortcuts as Record<any, string[]> }).catch(err => {
       console.error('[VLC] Failed to setup shortcuts:', err);
     });
   }, [vlc.isAvailable, keyboardShortcuts, vlc]);
@@ -84,8 +83,8 @@ export function VideoController() {
     const setupAndPlay = async () => {
       // Start Playback
       try {
-        await vlc.audio({ volume: defaultVolume * 100 });
         await vlc.open(currentItem.Url);
+        await vlc.audio({ volume: defaultVolume * 100, mute: vlc.isMuted });
         await vlc.playback({ action: 'play' });
 
         // Resume logic
@@ -182,18 +181,15 @@ export function VideoController() {
 
   const handleVolume = async (vals: number[]) => {
     const vol = vals[0];
-    setLocalVolume(vol);
     setStoreVolume(vol / 100);
     await vlc.audio({ volume: vol });
   };
 
   const toggleMute = async () => {
-    await vlc.audio({ mute: !isMuted });
-    setIsMuted(!isMuted);
+    await vlc.audio({ mute: !vlc.isMuted });
   };
 
   const handleScreenTypeChange = (type: ScreenType) => {
-    setScreenType(type);
     vlc.setScreenMode(type);
   };
 
@@ -214,50 +210,40 @@ export function VideoController() {
       const key = e.code;
       const fullKey = [...modifiers, key].join('+');
 
-      // Check which shortcut was pressed
-      if (fullKey === keyboardShortcuts.playPause) {
-        e.preventDefault();
+      if (keyboardShortcuts.playPause.includes(fullKey)) {
         handlePlayPause();
-      } else if (fullKey === keyboardShortcuts.seekForward) {
-        e.preventDefault();
+      } else if (keyboardShortcuts.seekForward.includes(fullKey)) {
         const newTime = Math.min(vlc.time + 10000, vlc.duration);
         vlc.playback({ time: newTime });
-      } else if (fullKey === keyboardShortcuts.seekBackward) {
-        e.preventDefault();
+      } else if (keyboardShortcuts.seekBackward.includes(fullKey)) {
         const newTime = Math.max(vlc.time - 10000, 0);
         vlc.playback({ time: newTime });
-      } else if (fullKey === keyboardShortcuts.seekForwardSmall) {
-        e.preventDefault();
+      } else if (keyboardShortcuts.seekForwardSmall.includes(fullKey)) {
         const newTime = Math.min(vlc.time + 3000, vlc.duration);
         vlc.playback({ time: newTime });
-      } else if (fullKey === keyboardShortcuts.seekBackwardSmall) {
-        e.preventDefault();
+      } else if (keyboardShortcuts.seekBackwardSmall.includes(fullKey)) {
         const newTime = Math.max(vlc.time - 3000, 0);
         vlc.playback({ time: newTime });
-      } else if (fullKey === keyboardShortcuts.volumeUp) {
-        e.preventDefault();
-        const newVol = Math.min(localVolume + 5, 100);
-        setLocalVolume(newVol);
+      } else if (keyboardShortcuts.volumeUp.includes(fullKey)) {
+        const newVol = Math.min(vlc.volume + 5, 100);
         setStoreVolume(newVol / 100);
         vlc.audio({ volume: newVol });
-      } else if (fullKey === keyboardShortcuts.volumeDown) {
-        e.preventDefault();
-        const newVol = Math.max(localVolume - 5, 0);
-        setLocalVolume(newVol);
+      } else if (keyboardShortcuts.volumeDown.includes(fullKey)) {
+        const newVol = Math.max(vlc.volume - 5, 0);
         setStoreVolume(newVol / 100);
         vlc.audio({ volume: newVol });
-      } else if (fullKey === keyboardShortcuts.toggleMute) {
-        e.preventDefault();
+      } else if (keyboardShortcuts.toggleMute.includes(fullKey)) {
         toggleMute();
-      } else if (fullKey === keyboardShortcuts.toggleFullscreen) {
-        e.preventDefault();
-        setScreenType(screenType === 'fullscreen' ? 'free' : 'fullscreen');
-        vlc.setScreenMode(screenType === 'fullscreen' ? 'free' : 'fullscreen');
-      } else if (fullKey === keyboardShortcuts.exitFullscreen) {
-        e.preventDefault();
-        setScreenType('free');
+      } else if (keyboardShortcuts.toggleFullscreen.includes(fullKey)) {
+        vlc.setScreenMode(vlc.screenMode === 'fullscreen' ? 'free' : 'fullscreen');
+      } else if (keyboardShortcuts.exitFullscreen.includes(fullKey)) {
         vlc.setScreenMode('free');
       }
+      else {
+        return;
+      }
+
+      e.preventDefault();
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -265,8 +251,6 @@ export function VideoController() {
   }, [
     keyboardShortcuts,
     vlc,
-    screenType,
-    localVolume,
     setStoreVolume,
     handlePlayPause,
     toggleMute,
@@ -281,7 +265,8 @@ export function VideoController() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const isDisabled = !currentItem;
+  const isDisabled = vlc.playerState === 'stopped';
+  const hasItem = !!currentItem;
 
   // Helper to get episode info safely
   const getEpisodeInfo = () => {
@@ -318,21 +303,21 @@ export function VideoController() {
 
           {/* Left: Playback & Volume */}
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={handlePlayPause} disabled={isDisabled}>
+            <Button variant="ghost" size="icon" onClick={handlePlayPause} disabled={!hasItem}>
               {vlc.playerState === 'playing' ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
             </Button>
 
-            <Button variant="ghost" size="icon" onClick={handleStop} disabled={isDisabled}>
+            <Button variant="ghost" size="icon" onClick={handleStop} disabled={!hasItem}>
               <Square className="h-5 w-5 fill-current" />
             </Button>
 
             <div className="flex items-center gap-2 group">
-              <Button variant="ghost" size="icon" onClick={toggleMute} disabled={isDisabled}>
-                {isMuted || localVolume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+              <Button variant="ghost" size="icon" onClick={toggleMute} disabled={!hasItem}>
+                {vlc.isMuted || vlc.volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </Button>
               <div className="w-0 overflow-hidden group-hover:w-24 transition-all duration-300">
                 <Slider
-                  value={[isMuted ? 0 : localVolume]}
+                  value={[vlc.isMuted ? 0 : vlc.volume]}
                   max={100}
                   step={1}
                   onValueChange={handleVolume}
@@ -399,33 +384,27 @@ export function VideoController() {
             <div className="h-6 w-px bg-border mx-2" />
 
             {/* Screen Mode */}
-            <Select
-              value={screenType}
-              onValueChange={(val) => handleScreenTypeChange(val as ScreenType)}
-              disabled={isDisabled}
-            >
-              <SelectTrigger className="w-[120px] h-8 text-xs">
-                <Monitor className="h-3 w-3 mr-2" />
-                <SelectValue placeholder="Screen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="free">
-                  <div className="flex items-center">
-                    <Monitor className="h-3 w-3 mr-2" /> Free
-                  </div>
-                </SelectItem>
-                <SelectItem value="sticky">
-                  <div className="flex items-center">
-                    <StickyNote className="h-3 w-3 mr-2" /> Sticky
-                  </div>
-                </SelectItem>
-                <SelectItem value="fullscreen">
-                  <div className="flex items-center">
-                    <Maximize className="h-3 w-3 mr-2" /> Fullscreen
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Screen Mode Grid */}
+            <div className="grid grid-cols-2 gap-px bg-border rounded overflow-hidden border border-border">
+              {[
+                { mode: 'free', icon: Monitor, title: 'Free' },
+                { mode: 'free_ontop', icon: Layers, title: 'Always on Top' },
+                { mode: 'sticky', icon: StickyNote, title: 'Sticky' },
+                { mode: 'fullscreen', icon: Maximize, title: 'Fullscreen' },
+              ].map(({ mode, icon: Icon, title }) => (
+                <Button
+                  key={mode}
+                  variant={vlc.screenMode === mode ? 'outline' : 'ghost'}
+                  size="icon"
+                  className={`h-5 w-5 rounded-none p-3 ${vlc.screenMode === mode ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'}`}
+                  onClick={() => handleScreenTypeChange(mode as ScreenType)}
+                  title={title}
+                  disabled={isDisabled}
+                >
+                  <Icon className="h-full w-full" />
+                </Button>
+              ))}
+            </div>
 
             <div className="h-6 w-px bg-border mx-2" />
 

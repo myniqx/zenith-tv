@@ -55,6 +55,7 @@ interface VlcPlayerState {
 
   // Screen mode
   screenMode: ScreenMode;
+  prevScreenMode: ScreenMode;
   stickyElement: HTMLElement | null;
   wasPlayingBeforeMinimize: boolean;
 
@@ -124,6 +125,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   audioDelay: 0,
   subtitleDelay: 0,
   screenMode: 'free',
+  prevScreenMode: 'free',
   stickyElement: null,
   wasPlayingBeforeMinimize: false,
 
@@ -230,6 +232,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         if (eventData.playerInfo.volume !== undefined) updates.volume = eventData.playerInfo.volume;
         if (eventData.playerInfo.muted !== undefined) updates.isMuted = eventData.playerInfo.muted;
         if (eventData.playerInfo.rate !== undefined) updates.rate = eventData.playerInfo.rate;
+        if (eventData.playerInfo.screenMode !== undefined) updates.screenMode = eventData.playerInfo.screenMode;
 
         if (Object.keys(updates).length > 0) {
           set(updates);
@@ -431,40 +434,39 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
   // Set screen mode and handle mode transitions
   setScreenMode: (mode: ScreenMode) => {
-    const prevMode = get().screenMode;
-    set({ screenMode: mode });
+    const currentMode = get().screenMode;
+    if (currentMode === mode) {
+      mode = get().prevScreenMode;
+    }
 
     const { isAvailable, window: windowApi } = get();
     if (!isAvailable) return;
 
+    set({ prevScreenMode: currentMode });
+
     // Handle mode transitions
     switch (mode) {
       case 'fullscreen':
-        windowApi({ fullscreen: true, onTop: false }).catch(err => {
+        windowApi({ screenMode: 'fullscreen' }).catch(err => {
           console.error('[VLC] Failed to set fullscreen:', err);
         });
         break;
 
+      case 'free_ontop':
       case 'free':
         windowApi({
-          fullscreen: false,
-          onTop: false,
-          style: {
-            border: true, titleBar: true, resizable: true, taskbar: true
-          }
+          screenMode: mode
         }).catch(err => {
-          console.error('[VLC] Failed to exit fullscreen:', err);
+          console.error('[VLC] Failed to set screen mode:', err);
         });
-        if (prevMode === 'sticky') {
+        if (currentMode === 'sticky') {
           get()._cleanupStickyMode();
         }
         break;
 
       case 'sticky':
         windowApi({
-          fullscreen: false,
-          onTop: true,
-          style: { border: false, titleBar: false, resizable: false, taskbar: false }
+          screenMode: 'sticky'
         }).catch(err => {
           console.error('[VLC] Failed to set sticky mode:', err);
         });
