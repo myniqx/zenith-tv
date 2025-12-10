@@ -54,6 +54,7 @@ export function VideoController() {
     vlc.init();
   }, []);
 
+  const isSourceOpen = vlc.playerState !== 'stopped';
 
 
   // Setup keyboard shortcuts for VLC native window
@@ -82,8 +83,8 @@ export function VideoController() {
     const setupAndPlay = async () => {
       // Start Playback
       try {
-        await vlc.audio({ volume: defaultVolume * 100 });
         await vlc.open(currentItem.Url);
+        await vlc.audio({ volume: defaultVolume * 100, mute: vlc.isMuted });
         await vlc.playback({ action: 'play' });
 
         // Resume logic
@@ -264,7 +265,8 @@ export function VideoController() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const isDisabled = !currentItem;
+  const isDisabled = vlc.playerState === 'stopped';
+  const hasItem = !!currentItem;
 
   // Helper to get episode info safely
   const getEpisodeInfo = () => {
@@ -301,16 +303,16 @@ export function VideoController() {
 
           {/* Left: Playback & Volume */}
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={handlePlayPause} disabled={isDisabled}>
+            <Button variant="ghost" size="icon" onClick={handlePlayPause} disabled={!hasItem}>
               {vlc.playerState === 'playing' ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
             </Button>
 
-            <Button variant="ghost" size="icon" onClick={handleStop} disabled={isDisabled}>
+            <Button variant="ghost" size="icon" onClick={handleStop} disabled={!hasItem}>
               <Square className="h-5 w-5 fill-current" />
             </Button>
 
             <div className="flex items-center gap-2 group">
-              <Button variant="ghost" size="icon" onClick={toggleMute} disabled={isDisabled}>
+              <Button variant="ghost" size="icon" onClick={toggleMute} disabled={!hasItem}>
                 {vlc.isMuted || vlc.volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </Button>
               <div className="w-0 overflow-hidden group-hover:w-24 transition-all duration-300">
@@ -392,11 +394,12 @@ export function VideoController() {
               ].map(({ mode, icon: Icon, title }) => (
                 <Button
                   key={mode}
-                  variant={vlc.screenMode === mode ? 'secondary' : 'ghost'}
+                  variant={vlc.screenMode === mode ? 'outline' : 'ghost'}
                   size="icon"
                   className={`h-5 w-5 rounded-none p-3 ${vlc.screenMode === mode ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'}`}
                   onClick={() => handleScreenTypeChange(mode as ScreenType)}
                   title={title}
+                  disabled={isDisabled}
                 >
                   <Icon className="h-full w-full" />
                 </Button>

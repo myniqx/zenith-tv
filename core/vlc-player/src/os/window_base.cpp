@@ -68,7 +68,7 @@ void OSWindow::ShowVolumeOSD(float progress)
     // Skip fade_in if already visible
     if (osd->IsCurrentlyVisible(now))
     {
-        osd->SetCreatedAt(now + std::chrono::milliseconds(200));
+        osd->SetCreatedAt(now - std::chrono::milliseconds(200));
     }
     else
     {
@@ -105,7 +105,7 @@ void OSWindow::ShowSeekOSD(int64_t time, int64_t duration)
     // Skip fade_in if already visible
     if (osd->IsCurrentlyVisible(now))
     {
-        osd->SetCreatedAt(now + std::chrono::milliseconds(200));
+        osd->SetCreatedAt(now - std::chrono::milliseconds(200));
     }
     else
     {
@@ -158,7 +158,7 @@ void OSWindow::ShowPlaybackOSD(const std::string &state)
     // Skip fade_in if already visible
     if (osd->IsCurrentlyVisible(now))
     {
-        osd->SetCreatedAt(now + std::chrono::milliseconds(200));
+        osd->SetCreatedAt(now - std::chrono::milliseconds(200));
     }
     else
     {
@@ -278,8 +278,7 @@ void OSWindow::StopOSDRenderLoop()
 // =================================================================================================
 
 OSWindow::OSWindow(VlcPlayer *player)
-    : osd_thread_running_(false),
-      background(nullptr),
+    : background(nullptr),
       text_primary(nullptr),
       text_secondary(nullptr),
       progress_fg(nullptr),
@@ -287,7 +286,8 @@ OSWindow::OSWindow(VlcPlayer *player)
       border(nullptr),
       defaultFont(nullptr),
       boldFont(nullptr),
-      player(player)
+      player(player),
+      osd_thread_running_(false)
 {
 }
 

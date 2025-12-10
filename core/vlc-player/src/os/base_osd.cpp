@@ -393,7 +393,7 @@ void OSDWindow::Update(WindowBounds bounds, int offsetY, float time)
 
 void OSDWindow::Render()
 {
-  if (_opacity <= 0)
+  if (_opacity < 0)
     return;
 
   ClearDrawable(0, 0, _width, _height, window->background);

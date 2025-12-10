@@ -188,6 +188,10 @@ bool LinuxWindow::Create(int width, int height)
     // (The first call in constructor failed because display_ was null)
     Initialize();
 
+    // Initialize fonts explicitly for Linux (Win32 handles this separately)
+    defaultFont = CreateOSDFont(false);
+    boldFont = CreateOSDFont(true);
+
     // Start message loop
     StartMessageLoop();
 
@@ -325,6 +329,29 @@ void LinuxWindow::GetBounds(WindowBounds *bounds) const
 
 WindowBounds LinuxWindow::GetClientArea() const
 {
+    // Query X11 for real-time position to ensure OSD syncs with window movement
+    if (display_ && window_)
+    {
+        Window child;
+        int x, y;
+        // Translate window coordinates (0,0) to root window coordinates
+        if (XTranslateCoordinates(display_, window_, RootWindow(display_, screen_), 
+                                  0, 0, &x, &y, &child))
+        {
+            // Get current dimensions
+            Window root_return;
+            int x_return, y_return;
+            unsigned int width_return, height_return, border_width_return, depth_return;
+            
+            if (XGetGeometry(display_, window_, &root_return, &x_return, &y_return, 
+                             &width_return, &height_return, &border_width_return, &depth_return))
+            {
+                return {x, y, static_cast<int>(width_return), static_cast<int>(height_return)};
+            }
+        }
+    }
+    
+    // Fallback to cached bounds if query fails
     return client_area_;
 }
 
@@ -409,6 +436,7 @@ OSDFont LinuxWindow::CreateOSDFont(bool bold)
     if (font)
     {
         fonts_.push_back(font);
+        VlcPlayer::Log("Loaded font: %s", pattern);
     }
     else
     {

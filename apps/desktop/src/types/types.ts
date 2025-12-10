@@ -107,6 +107,7 @@ export interface PlayerSettings {
   volume?: number;
   muted?: boolean;
   rate?: number;
+  screenMode?: ScreenMode;
 }
 
 export interface CurrentVideoState {

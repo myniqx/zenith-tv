@@ -142,7 +142,8 @@
             "sources+": [
               "src/os/linux/window.cpp",
               "src/os/linux/context_menu.cpp",
-              "src/os/linux/osd.cpp"
+              "src/os/linux/osd.cpp",
+              "src/os/linux/draw.cpp"
             ],
             "cflags_cc": ["-std=c++17"],
             "include_dirs": [
