@@ -345,7 +345,12 @@ Dimension LinuxWindow::MeasureText(OSDFont font, const std::string &text)
                        reinterpret_cast<const XftChar8 *>(text.c_str()),
                        static_cast<int>(text.length()), &extents);
 
-    return {extents.width, extents.height};
+    // Use xOff for accurate width (includes spacing)
+    // Use ascent + descent for accurate height (full font line height)
+    return {
+        static_cast<int>(extents.xOff),
+        static_cast<int>(xft_font->ascent + xft_font->descent)
+    };
 }
 
 // =================================================================================================

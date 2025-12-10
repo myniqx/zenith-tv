@@ -438,7 +438,9 @@ XRenderColor LinuxOSDWindow::ConvertToXRenderColor(OSDColor color)
     render_color.red = xft_color->color.red;
     render_color.green = xft_color->color.green;
     render_color.blue = xft_color->color.blue;
-    render_color.alpha = xft_color->color.alpha;
+    render_color.alpha = static_cast<unsigned short>(
+        xft_color->color.alpha * current_opacity_
+    );
     return render_color;
 }
 
@@ -664,9 +666,15 @@ void LinuxOSDWindow::DrawText(const std::string &text, int x, int y, OSDColor co
     XftColor *xft_color = static_cast<XftColor *>(color);
     XftFont *xft_font = static_cast<XftFont *>(font);
 
+    // Apply current opacity to text color
+    XftColor modified_color = *xft_color;
+    modified_color.color.alpha = static_cast<unsigned short>(
+        xft_color->color.alpha * current_opacity_
+    );
+
     // XftDrawStringUtf8 uses baseline coordinates, but we are passed top-left.
     // Add ascent to y to correct this.
-    XftDrawStringUtf8(xft_draw_, xft_color, xft_font, x, y + xft_font->ascent,
+    XftDrawStringUtf8(xft_draw_, &modified_color, xft_font, x, y + xft_font->ascent,
                       reinterpret_cast<const XftChar8 *>(text.c_str()),
                       static_cast<int>(text.length()));
 }
