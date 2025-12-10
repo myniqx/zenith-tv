@@ -14,11 +14,13 @@ import type {
 } from '../types/types';
 import { useSettingsStore } from './settings';
 import { shortcutActions } from './helpers/shortcutAction';
+import { WatchableObject } from '../m3u/watchable';
 
 // Event listeners state - module scope (singleton)
-let listenersInitialized = false;
 let resizeObserver: ResizeObserver | null = null;
-let lastWindowPosition: { x: number; y: number; scaleFactor: number } | null = null;
+let lastWindowPosition: { x: number; y: number; scaleFactor: number } | undefined = undefined;
+let initializationPromise: Promise<void> | null = null;
+let listenersInitialized = false;
 
 interface VlcPlayerState {
   // State
@@ -57,10 +59,13 @@ interface VlcPlayerState {
   screenMode: ScreenMode;
   prevScreenMode: ScreenMode;
   stickyElement: HTMLElement | null;
+  lastStickyBounds: { x: number; y: number; width: number; height: number; } | undefined;
   wasPlayingBeforeMinimize: boolean;
+  currentItem: WatchableObject | null;
 
   // Actions
   init: () => Promise<void>;
+  play: (item: WatchableObject) => Promise<void>;
   setScreenMode: (mode: ScreenMode) => void;
   setStickyElement: (element: HTMLElement | null) => void;
 
@@ -83,20 +88,6 @@ interface VlcPlayerState {
   // Helpers
   shouldStickyPanelVisible: () => boolean;
 }
-
-/* bilinen buglar
-
-1. bir video oynatilirken %95'in altında izlendi ise bu videonun timestampını kaydetmeliyiz, %95'in üzerinde izlendi ise video bitmiş olmalı
- 1.a ) bitmemiş video tekrardan oynatılmak istendiğinde otomatik olarak kaldığı yerden devam etmesi lazım content.ts saveWatchProgress fonksiyonu
- 1.b ) bitmiş video'nın son kalınan yer kaydının kaldırılması lazım. content.ts saveWatchProgress (silmeli.)
- 1.c ) bu saveWatchProgress fonksiyonu pause veya stop anında çalışmalı.
-
-2. bir video play tuşuna basıldığında vlc tarafında pencere yeniden oluşturuluyor. yani bu store üzerindeki statelerden vlc'nin haberi olmuyor
-  dolayısı ile bu veriler ile güncelleme gönderilmeli.
-
-3. 
-
-*/
 
 export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   // Initial state
@@ -127,7 +118,9 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   screenMode: 'free',
   prevScreenMode: 'free',
   stickyElement: null,
+  lastStickyBounds: undefined,
   wasPlayingBeforeMinimize: false,
+  currentItem: null,
 
   _setupVlcCore: async () => {
     // Register keyboard shortcuts from settings
@@ -152,29 +145,43 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     // Already initialized
     if (state.isInitialized) return;
 
-    try {
-      const available = await window.electron.vlc.isAvailable();
-      set({ isAvailable: available });
-
-      if (available) {
-        const result = await window.electron.vlc.init();
-        if (result.success) {
-          set({ isInitialized: true });
-          console.log('[VLC] Player initialized successfully');
-
-          // Setup event listeners once
-          state._setupEventListeners();
-        } else {
-          const errorMsg = result.error || 'Failed to initialize VLC';
-          set({ error: errorMsg });
-          console.error('[VLC] Initialization failed:', result.error);
-        }
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Failed to check availability';
-      console.error('[VLC] Failed to check availability:', error);
-      set({ isAvailable: false, error: errorMsg });
+    // Return existing promise if initialization is in progress
+    if (initializationPromise) {
+      return initializationPromise;
     }
+
+    initializationPromise = (async () => {
+      try {
+        const available = await window.electron.vlc.isAvailable();
+        set({ isAvailable: available });
+
+        if (available) {
+          const result = await window.electron.vlc.init();
+          if (result.success) {
+            set({ isInitialized: true });
+            console.log('[VLC] Player initialized successfully');
+
+            // Setup event listeners once
+            state._setupEventListeners();
+          } else {
+            const errorMsg = result.error || 'Failed to initialize VLC';
+            set({ error: errorMsg });
+            console.error('[VLC] Initialization failed:', result.error);
+          }
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Failed to check availability';
+        console.error('[VLC] Failed to check availability:', error);
+        set({ isAvailable: false, error: errorMsg });
+      } finally {
+        // Reset promise on completion (success or fail)
+        // If successful, isInitialized will block future calls.
+        // If failed, we allow retry.
+        initializationPromise = null;
+      }
+    })();
+
+    return initializationPromise;
   },
 
   // Setup event listeners (called once during init)
@@ -309,7 +316,13 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     }) => {
       const state = get();
 
-      // Only handle if in sticky mode
+      // Always update last known position
+      lastWindowPosition = { x: data.x, y: data.y, scaleFactor: data.scaleFactor };
+
+      // Always try to sync/cache bounds
+      state._syncWindowBounds(lastWindowPosition);
+
+      // Only handle visibility/playback if in sticky mode
       if (state.screenMode !== 'sticky') return;
 
       if (data.minimized) {
@@ -328,13 +341,9 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         });
       } else {
         // Window not minimized - sync bounds and show VLC
-        lastWindowPosition = { x: data.x, y: data.y, scaleFactor: data.scaleFactor };
-
         state.window({ visible: true }).catch(err => {
           console.error('[VLC] Failed to show on restore:', err);
         });
-
-        state._syncWindowBounds(lastWindowPosition);
 
         // Resume if was playing before minimize
         if (state.wasPlayingBeforeMinimize) {
@@ -408,27 +417,16 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
       height: screenHeight,
     };
 
-    console.log('[VLC Sticky] Sync:', {
-      electronWindow: { x: windowPos.x, y: windowPos.y, scale: windowPos.scaleFactor },
-      stickyElement: {
-        left: Math.round(rect.left),
-        right: Math.round(rect.right),
-        top: Math.round(rect.top),
-        bottom: Math.round(rect.bottom),
-        x: Math.round(rect.x),
-        y: Math.round(rect.y),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height)
-      },
-      calculated: bounds,
-      formula: `${windowPos.x} + ${Math.round(rect.x)} = ${screenX}`,
-    });
 
     // Only update if bounds are valid
     if (bounds.width > 0 && bounds.height > 0) {
-      get().window({ resize: bounds }).catch(err => {
-        console.error('[VLC] Failed to sync window bounds:', err);
-      });
+      if (get().screenMode === 'sticky') {
+        get().window({ resize: bounds }).catch(err => {
+          console.error('[VLC] Failed to sync window bounds:', err);
+        });
+      } else {
+        set({ lastStickyBounds: bounds });
+      }
     }
   },
 
@@ -465,12 +463,13 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         break;
 
       case 'sticky':
+        const { lastStickyBounds } = get();
         windowApi({
-          screenMode: 'sticky'
+          screenMode: 'sticky',
+          resize: lastStickyBounds
         }).catch(err => {
           console.error('[VLC] Failed to set sticky mode:', err);
         });
-        // Setup will be called when element is set
         break;
     }
   },
@@ -485,6 +484,13 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     } else {
       get()._cleanupStickyMode();
     }
+  },
+
+  // Play item
+  play: async (item: WatchableObject) => {
+    const { open } = get();
+    set({ currentItem: item });
+    await open(item.Url);
   },
 
   // Unified API: Open media

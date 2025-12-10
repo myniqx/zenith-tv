@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { WatchableObject } from '@/m3u/watchable';
 import { useContentStore } from '@/stores/content';
-import { usePlayerStore } from '@zenith-tv/ui/stores/player';
+import { useUniversalPlayerStore } from '@/stores/universalPlayerStore';
 import { Badge } from '@zenith-tv/ui/badge';
 import { Button } from '@zenith-tv/ui/button';
 import { Play, Star, Radio, Tv, Film } from 'lucide-react';
@@ -13,7 +13,7 @@ interface ContentCardProps {
 
 export const ContentCard = memo(function ContentCard({ item, isSelected }: ContentCardProps) {
   const { toggleFavorite } = useContentStore();
-  const { play } = usePlayerStore();
+  const { play } = useUniversalPlayerStore();
 
   const getCategoryBadge = () => {
     if (item.category === 'LiveStream') {

@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { usePlayerStore } from '@zenith-tv/ui/stores/player';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
 import { useUniversalPlayerStore } from '../stores/universalPlayerStore';
@@ -34,17 +33,7 @@ type ScreenType = 'free' | 'free_ontop' | 'sticky' | 'fullscreen';
 
 
 export function VideoController() {
-  const { defaultVolume, autoPlayNext, keyboardShortcuts } = useSettingsStore();
-  const {
-    currentItem,
-    state,
-    setState,
-    updatePosition,
-    updateDuration,
-    play: playItem,
-    setVolume: setStoreVolume,
-  } = usePlayerStore();
-
+  const { autoPlayNext, keyboardShortcuts } = useSettingsStore();
   const { getNextEpisode } = useContentStore();
 
   // Initialize Universal Player store on mount
@@ -76,81 +65,13 @@ export function VideoController() {
     });
   }, [vlc.isAvailable, keyboardShortcuts, vlc]);
 
-  // Initialize VLC and Window Management
-  useEffect(() => {
-    if (!vlc.isAvailable || !currentItem) return;
-
-    const setupAndPlay = async () => {
-      // Start Playback
-      try {
-        await vlc.open(currentItem.Url);
-        await vlc.audio({ volume: defaultVolume * 100, mute: vlc.isMuted });
-        await vlc.playback({ action: 'play' });
-
-        // Resume logic
-        if (currentItem.userData?.watchProgress && currentItem.userData.watchProgress > 0) {
-          setTimeout(async () => {
-            if (vlc.duration > 0) {
-              const pos = ((currentItem.userData?.watchProgress || 0) / 100) * vlc.duration;
-              await vlc.playback({ time: pos });
-            }
-          }, 1000);
-        }
-
-      } catch (err) {
-        console.error('Playback error:', err);
-        setState('error');
-      }
-    };
-
-    setupAndPlay();
-  }, [vlc.isAvailable, currentItem?.Url, defaultVolume]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (vlc.isAvailable) {
-        vlc.playback({ action: 'stop' }).catch(() => {
-          // Ignore errors on cleanup
-        });
-      }
-    };
-
-  }, []);
-
-  // Sync State
-  useEffect(() => {
-    if (!vlc.isInitialized) return;
-    const stateMap: Record<string, typeof state> = {
-      idle: 'idle',
-      opening: 'loading',
-      buffering: 'buffering',
-      playing: 'playing',
-      paused: 'paused',
-      stopped: 'idle',
-      ended: 'idle',
-      error: 'error',
-      unknown: 'idle',
-    };
-    const mapped = stateMap[vlc.playerState] || 'idle';
-    if (mapped !== state) setState(mapped);
-  }, [vlc.playerState, state, setState]);
-
-  // Sync Time & Duration
-  useEffect(() => {
-    if (vlc.isInitialized) {
-      if (vlc.time > 0) updatePosition(vlc.time / 1000);
-      if (vlc.duration > 0) updateDuration(vlc.duration / 1000);
-    }
-  }, [vlc.time, vlc.duration, updatePosition, updateDuration]);
-
   // Auto Play Next
   useEffect(() => {
-    if (vlc.playerState === 'ended' && autoPlayNext && currentItem) {
-      const next = getNextEpisode(currentItem as WatchableObject);
-      if (next) setTimeout(() => playItem(next), 500);
+    if (vlc.playerState === 'ended' && autoPlayNext && vlc.currentItem) {
+      const next = getNextEpisode(vlc.currentItem as WatchableObject);
+      if (next) setTimeout(() => vlc.play(next), 500);
     }
-  }, [vlc.playerState, autoPlayNext, currentItem, getNextEpisode, playItem]);
+  }, [vlc.playerState, autoPlayNext, vlc.currentItem, getNextEpisode, vlc.play]);
 
 
 
@@ -160,8 +81,8 @@ export function VideoController() {
       await vlc.playback({ action: 'pause' });
     } else if (vlc.playerState === 'stopped' || vlc.playerState === 'ended' || vlc.playerState === 'idle') {
       // If stopped/ended/idle, need to re-open and play
-      if (currentItem) {
-        await vlc.open(currentItem.Url);
+      if (vlc.currentItem) {
+        await vlc.open(vlc.currentItem.Url);
         await vlc.playback({ action: 'play' });
       }
     } else {
@@ -172,7 +93,6 @@ export function VideoController() {
 
   const handleStop = async () => {
     await vlc.playback({ action: 'stop' });
-    setState('idle');
   };
 
   const handleSeek = async (vals: number[]) => {
@@ -181,7 +101,6 @@ export function VideoController() {
 
   const handleVolume = async (vals: number[]) => {
     const vol = vals[0];
-    setStoreVolume(vol / 100);
     await vlc.audio({ volume: vol });
   };
 
@@ -226,11 +145,9 @@ export function VideoController() {
         vlc.playback({ time: newTime });
       } else if (keyboardShortcuts.volumeUp.includes(fullKey)) {
         const newVol = Math.min(vlc.volume + 5, 100);
-        setStoreVolume(newVol / 100);
         vlc.audio({ volume: newVol });
       } else if (keyboardShortcuts.volumeDown.includes(fullKey)) {
         const newVol = Math.max(vlc.volume - 5, 0);
-        setStoreVolume(newVol / 100);
         vlc.audio({ volume: newVol });
       } else if (keyboardShortcuts.toggleMute.includes(fullKey)) {
         toggleMute();
@@ -251,7 +168,6 @@ export function VideoController() {
   }, [
     keyboardShortcuts,
     vlc,
-    setStoreVolume,
     handlePlayPause,
     toggleMute,
   ]);
@@ -266,14 +182,14 @@ export function VideoController() {
   };
 
   const isDisabled = vlc.playerState === 'stopped';
-  const hasItem = !!currentItem;
+  const hasItem = !!vlc.currentItem;
 
   // Helper to get episode info safely
   const getEpisodeInfo = () => {
-    if (!currentItem || currentItem.category !== 'Series') return null;
+    if (!vlc.currentItem || vlc.currentItem.category !== 'Series') return null;
     // Cast to TvShowWatchableObject to access Season/Episode
     // We assume currentItem is compatible if category is Series
-    const tvItem = currentItem as unknown as TvShowWatchableObject;
+    const tvItem = vlc.currentItem as unknown as TvShowWatchableObject;
     if (tvItem.Season !== undefined && tvItem.Episode !== undefined) {
       return `S${tvItem.Season}E${tvItem.Episode}`;
     }
@@ -327,10 +243,10 @@ export function VideoController() {
               </div>
             </div>
 
-            {currentItem && (
+            {vlc.currentItem && (
               <div className="flex flex-col ml-2">
-                <span className="text-sm font-medium truncate max-w-[200px]">{currentItem.Name}</span>
-                {currentItem.category === 'Series' && (
+                <span className="text-sm font-medium truncate max-w-[200px]">{vlc.currentItem.Name}</span>
+                {vlc.currentItem.category === 'Series' && (
                   <span className="text-xs text-muted-foreground">
                     {getEpisodeInfo()}
                   </span>

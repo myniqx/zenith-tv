@@ -83,7 +83,7 @@ class VlcProcessManager extends EventEmitter {
 
       // STDERR forwarding for debugging
       this.process.stderr.on('data', (data) => {
-        console.error('[VLC Process stderr]', data.toString());
+        console.error(data.toString());
       });
 
       // Exit handling

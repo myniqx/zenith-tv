@@ -14,6 +14,7 @@ import type {
   WindowOptions,
   ShortcutOptions,
 } from '../types/types';
+import { WatchableObject } from '../m3u/watchable';
 
 // Define the interface (same as VlcPlayerState)
 interface UniversalPlayerState {
@@ -54,9 +55,11 @@ interface UniversalPlayerState {
   prevScreenMode: ScreenMode;
   stickyElement: HTMLElement | null;
   wasPlayingBeforeMinimize: boolean;
+  currentItem: WatchableObject | null;
 
   // Actions
   init: () => Promise<void>;
+  play: (item: WatchableObject) => Promise<void>;
   setScreenMode: (mode: ScreenMode) => void;
   setStickyElement: (element: HTMLElement | null) => void;
 
@@ -115,6 +118,7 @@ export const useUniversalPlayerStore = create<UniversalPlayerState>((set) => {
 
     // Actions (Proxy)
     init: async () => getActiveStore().init(),
+    play: async (item) => getActiveStore().play(item),
     setScreenMode: (mode) => getActiveStore().setScreenMode(mode),
     setStickyElement: (element) => getActiveStore().setStickyElement(element),
     open: async (opts) => getActiveStore().open(opts),

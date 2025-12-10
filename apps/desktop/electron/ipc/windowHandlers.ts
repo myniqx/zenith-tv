@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, screen } from 'electron';
+import { BrowserWindow, screen } from 'electron';
 
 export interface WindowPositionData {
   x: number;
@@ -30,5 +30,6 @@ export function registerWindowHandlers(mainWindow: BrowserWindow) {
   mainWindow.on('move', sendPositionChanged);
   mainWindow.on('resize', sendPositionChanged);
   mainWindow.on('minimize', sendPositionChanged);
+  mainWindow.on('restore', sendPositionChanged);
   mainWindow.on('restore', sendPositionChanged);
 }

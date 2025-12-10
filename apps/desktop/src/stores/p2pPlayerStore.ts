@@ -13,6 +13,7 @@ import type {
   WindowOptions,
   ShortcutOptions,
 } from '../types/types';
+import { WatchableObject } from '../m3u/watchable';
 
 // We need to define the same interface as VlcPlayerState but for P2P
 // Ideally we should extract a common interface, but for now we'll duplicate the structure
@@ -56,9 +57,11 @@ interface P2PPlayerState {
   prevScreenMode: ScreenMode;
   stickyElement: HTMLElement | null;
   wasPlayingBeforeMinimize: boolean;
+  currentItem: WatchableObject | null;
 
   // Actions
   init: () => Promise<void>;
+  play: (item: WatchableObject) => Promise<void>;
   setScreenMode: (mode: ScreenMode) => void;
   setStickyElement: (element: HTMLElement | null) => void;
 
@@ -108,6 +111,7 @@ export const useP2PPlayerStore = create<P2PPlayerState>((set, get) => ({
   prevScreenMode: 'free',
   stickyElement: null,
   wasPlayingBeforeMinimize: false,
+  currentItem: null,
 
   init: async () => {
     get()._setupListeners();
@@ -126,6 +130,11 @@ export const useP2PPlayerStore = create<P2PPlayerState>((set, get) => ({
   },
 
   // Actions - Send commands via P2P
+  play: async (item) => {
+    set({ currentItem: item });
+    await get().open(item.Url);
+  },
+
   open: async (options) => {
     await useP2PStore.getState().sendCommand({
       type: 'open',

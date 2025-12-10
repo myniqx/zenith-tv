@@ -39,18 +39,6 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // VLC window position/size sync (for always-on-top window management)
-  // These events will forward to VLC process manager for window sync
-  mainWindow.on('move', () => {
-    // Position sync handled by renderer when needed
-    // VLC standalone window will be managed independently
-  });
-
-  mainWindow.on('resize', () => {
-    // Size sync handled by renderer when needed
-    // VLC standalone window will be managed independently
-  });
-
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -59,10 +47,6 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 }
-
-
-// Fix for X11/GPU sandbox conflict
-app.commandLine.appendSwitch("disable-gpu-sandbox");
 
 app.whenReady().then(async () => {
   // Setup workspace root path

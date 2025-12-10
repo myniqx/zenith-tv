@@ -1,5 +1,4 @@
 import { useContentStore } from '../stores/content';
-import { Separator } from '@zenith-tv/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@zenith-tv/ui/tooltip';
 import { ChevronRight, ChevronDown, LayoutGrid } from 'lucide-react';
 import { GroupObject } from '@/m3u/group';
@@ -218,24 +217,6 @@ export function CategoryBrowser({ isCollapsed = false }: CategoryBrowserProps) {
             />
           ))}
         </nav>
-
-        {/* Footer - Hidden when collapsed */}
-        {!isCollapsed && (
-          <>
-            <Separator />
-            <div className="p-4">
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p className="font-medium mb-2">Keyboard Shortcuts:</p>
-                <div className="space-y-1 font-mono text-[10px]">
-                  <p><kbd className="px-1.5 py-0.5 bg-secondary rounded text-xs">Space</kbd> Play/Pause</p>
-                  <p><kbd className="px-1.5 py-0.5 bg-secondary rounded text-xs">F</kbd> Fullscreen</p>
-                  <p><kbd className="px-1.5 py-0.5 bg-secondary rounded text-xs">M</kbd> Mute</p>
-                  <p><kbd className="px-1.5 py-0.5 bg-secondary rounded text-xs">←/→</kbd> Skip ±10s</p>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
       </aside>
     </TooltipProvider>
   );

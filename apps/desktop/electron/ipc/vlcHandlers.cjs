@@ -41,6 +41,23 @@ function registerVlcHandlers(mainWindow) {
       const manager = await getVlcManager();
       // Try to initialize to verify it works
       await manager.call('init');
+
+      // Trigger initial window position event for sticky mode
+      // This will be handled by windowHandlers if registered
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const { screen } = require('electron');
+        const bounds = mainWindow.getBounds();
+        const contentBounds = mainWindow.getContentBounds();
+        const display = screen.getDisplayMatching(bounds);
+
+        mainWindow.webContents.send('window:positionChanged', {
+          x: contentBounds.x,
+          y: contentBounds.y,
+          scaleFactor: display.scaleFactor,
+          minimized: mainWindow.isMinimized(),
+        });
+      }
+
       return true;
     } catch (error) {
       console.error('[VLC] Availability check failed:', error);
@@ -62,22 +79,6 @@ function registerVlcHandlers(mainWindow) {
           mainWindow.webContents.send('vlc:event', eventData);
         }
       });
-
-      // Trigger initial window position event for sticky mode
-      // This will be handled by windowHandlers if registered
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        const { screen } = require('electron');
-        const bounds = mainWindow.getBounds();
-        const contentBounds = mainWindow.getContentBounds();
-        const display = screen.getDisplayMatching(bounds);
-
-        mainWindow.webContents.send('window:positionChanged', {
-          x: contentBounds.x,
-          y: contentBounds.y,
-          scaleFactor: display.scaleFactor,
-          minimized: mainWindow.isMinimized(),
-        });
-      }
 
       return { success: true };
     } catch (error) {
