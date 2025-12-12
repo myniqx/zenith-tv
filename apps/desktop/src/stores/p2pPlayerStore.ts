@@ -13,7 +13,7 @@ import type {
   WindowOptions,
   ShortcutOptions,
 } from '../types/types';
-import { WatchableObject } from '../m3u/watchable';
+import { WatchableObject } from '@zenith-tv/content';
 
 // We need to define the same interface as VlcPlayerState but for P2P
 // Ideally we should extract a common interface, but for now we'll duplicate the structure

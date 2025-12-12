@@ -1,9 +1,9 @@
 import { useContentStore } from '../stores/content';
 import { useProfilesStore } from '../stores/profiles';
 import { ProfileManager } from './ProfileManager';
-import { P2PControl } from './Header/P2PControl';
+import { P2PControl } from './P2P/P2PControl';
 import { Settings } from './Settings';
-import { GroupObject } from '@/m3u/group';
+import { GroupObject } from '@zenith-tv/content';
 import { ChevronRight } from 'lucide-react';
 
 function getBreadcrumbs(group: GroupObject | null): GroupObject[] {

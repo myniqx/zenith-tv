@@ -7,8 +7,12 @@ declare global {
       platform: string;
       version: string;
 
+      network: {
+        getLocalIP: () => Promise<string>;
+      };
+
       p2p: {
-        start: (port?: number) => Promise<boolean>;
+        start: (port?: number, deviceName?: string) => Promise<boolean>;
         stop: () => Promise<boolean>;
         send: (connectionId: string, message: unknown) => Promise<boolean>;
         broadcast: (message: unknown) => Promise<void>;

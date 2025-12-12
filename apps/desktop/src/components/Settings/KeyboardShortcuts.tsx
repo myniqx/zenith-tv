@@ -7,7 +7,7 @@ import { ShortcutAction } from '@/types/types';
 import { Button } from '@zenith-tv/ui/button';
 import { Label } from '@zenith-tv/ui/label';
 import { Separator } from '@zenith-tv/ui/separator';
-import { RotateCcw, Play, Navigation, Tv, Subtitles, X } from 'lucide-react';
+import { RotateCcw, Play, Tv, Subtitles, X } from 'lucide-react';
 
 const shortcutLabels: Record<ShortcutAction, string> = {
   // Player controls
@@ -230,9 +230,6 @@ export function KeyboardShortcuts() {
 
       // If recording slot 0, replace first key
       if (recordingSlot === 0) {
-        const currentKeys = keyboardShortcuts[recordingAction] || [];
-        const newKeys = currentKeys[1] ? [fullKey, currentKeys[1]] : [fullKey];
-
         // Remove from other actions
         Object.entries(keyboardShortcuts).forEach(([otherAction, keys]) => {
           if (otherAction !== recordingAction && keys.includes(fullKey)) {

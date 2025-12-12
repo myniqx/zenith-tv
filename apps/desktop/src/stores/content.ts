@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { parseM3U } from '../services/m3u-parser';
 import { useToastStore } from './toast';
-import { GroupObject, TvShowGroupObject, TvShowSeasonGroupObject } from '@/m3u/group';
+import { GroupObject, TvShowGroupObject, TvShowSeasonGroupObject } from '@zenith-tv/content';
 import { LucideCircleCheckBig, LucideFlame, LucideHeart, LucidePodcast, LucideTheater, LucideTv } from 'lucide-react';
-import { TvShowWatchableObject, WatchableObject } from '@/m3u/watchable';
-import { M3UObject } from '@/m3u/m3u';
+import { TvShowWatchableObject, WatchableObject } from '@zenith-tv/content';
+import { M3UObject } from '@zenith-tv/content';
 import { FileSyncedState, syncFile } from '@/tools/fileSync';
 import { UserData } from '@/types/userdata';
 import { fileSystem, http } from '@/libs';

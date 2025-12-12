@@ -1,8 +1,8 @@
 import { LucideCheck, LucideHeart, LucidePodcast, LucideTheater, LucideTv } from "lucide-react";
-import { ListType, LucideIcon } from "./types";
+import { ListType, LucideIcon } from "../types/ui-types";
 import { ViewObject } from "./view-object";
-import { M3UObject } from "./m3u";
-import { UserItemData } from "@/types/userdata";
+import { M3UObject } from "../types/m3u-types";
+import { UserItemData } from "../types/user-data";
 import { PlayableItem } from "@zenith-tv/types";
 
 export class WatchableObject extends ViewObject implements PlayableItem {

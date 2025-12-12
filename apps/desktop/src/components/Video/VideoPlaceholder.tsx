@@ -1,9 +1,9 @@
 import { useVlcPlayerStore } from "@/stores/vlcPlayer";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 
 
 export const VideoPlaceholder = () => {
-  const stickyContainerRef = useRef<HTMLDivElement>(null);
+  const stickyContainerRef = React.useRef<HTMLDivElement>(null);
   const { setStickyElement, window } = useVlcPlayerStore();
 
   useEffect(() => {

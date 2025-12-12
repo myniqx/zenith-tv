@@ -21,6 +21,7 @@
 		"@zenith-tv/types": "workspace:*",
 		"@zenith-tv/ui": "workspace:*",
 		"@zenith-tv/vlc-player": "workspace:*",
+		"@zenith-tv/content": "workspace:*",
 		"clsx": "^2.1.1",
 		"electron-is": "^3.0.0",
 		"lucide-react": "0.554.0",

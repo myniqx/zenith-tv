@@ -114,6 +114,9 @@ export function registerFetchHandlers(): void {
           const total = contentLength ? parseInt(contentLength, 10) : 0;
 
           let loaded = 0;
+          if (!response.body) {
+            throw new Error('Response body is null');
+          }
           const reader = response.body.getReader();
           const chunks = [];
 
@@ -145,9 +148,9 @@ export function registerFetchHandlers(): void {
 
           return content;
         }
-      } catch (error: Error) {
+      } catch (error: unknown) {
         console.error('[M3U Manager] Fetch error:', error);
-        throw new Error(`Failed to fetch M3U: ${error.message}`);
+        throw new Error(`Failed to fetch M3U: ${(error as Error).message}`);
       }
     }
   )

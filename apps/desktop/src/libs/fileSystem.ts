@@ -38,7 +38,7 @@ export const fileSystem = {
    */
   async writeJSON<T>(path: string, data: T, options?: FileWriteOptions): Promise<void> {
     // Development-only diff logging helpers
-    const isDev = import.meta.env.DEV;
+    const isDev = process.env.NODE_ENV === 'development';
 
     const formatValue = (value: unknown): string => {
       if (value === null) return 'null';

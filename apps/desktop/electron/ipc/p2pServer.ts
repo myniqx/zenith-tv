@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import { randomBytes } from 'crypto'
-import type { IncomingMessage } from 'http'
+import http from 'http'
+import type { IncomingMessage, ServerResponse } from 'http'
 
 export interface P2PEventHandlers {
   onConnection?: (connectionId: string, ip: string) => void
@@ -10,6 +11,7 @@ export interface P2PEventHandlers {
 
 export class P2PServer {
   private wss: WebSocketServer | null = null
+  private httpServer: http.Server | null = null
   private port: number = 8080
   private deviceId: string
   private deviceName: string = 'Zenith TV Desktop'
@@ -20,6 +22,39 @@ export class P2PServer {
     this.deviceId = this.generateDeviceId()
   }
 
+  private handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+    // Handle OPTIONS preflight
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204)
+      res.end()
+      return
+    }
+
+    // Handle discovery endpoint
+    if (req.method === 'GET' && req.url === '/api/discover') {
+      const response = {
+        deviceId: this.deviceId,
+        deviceName: this.deviceName,
+        port: this.port,
+        version: '1.0.0',
+        role: 'controller'
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(response))
+      return
+    }
+
+    // 404 for other routes
+    res.writeHead(404, { 'Content-Type': 'text/plain' })
+    res.end('Not Found')
+  }
+
   setEventHandlers(handlers: P2PEventHandlers): void {
     this.eventHandlers = handlers
   }
@@ -28,9 +63,17 @@ export class P2PServer {
     return randomBytes(16).toString('hex')
   }
 
-  start(port: number = 8080): void {
+  start(port: number = 8080, deviceName?: string): void {
     this.port = port
-    this.wss = new WebSocketServer({ port: this.port })
+    if (deviceName) {
+      this.deviceName = deviceName
+    }
+
+    // Create HTTP server with request handler
+    this.httpServer = http.createServer((req, res) => this.handleHttpRequest(req, res))
+
+    // Create WebSocket server on top of HTTP server
+    this.wss = new WebSocketServer({ server: this.httpServer })
 
     this.wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
       const ip = req.socket.remoteAddress || 'unknown'
@@ -78,7 +121,12 @@ export class P2PServer {
       })
     })
 
-    console.log(`[P2P] Server started on port ${this.port}`)
+    // Start listening
+    this.httpServer.listen(this.port, () => {
+      console.log(`[P2P] Server started on port ${this.port}`)
+      console.log(`[P2P] Device: ${this.deviceName} (${this.deviceId})`)
+      console.log(`[P2P] Discovery endpoint: http://localhost:${this.port}/api/discover`)
+    })
   }
 
   send(connectionId: string, message: unknown): boolean {
@@ -119,8 +167,11 @@ export class P2PServer {
   stop(): void {
     if (this.wss) {
       this.wss.close()
-      this.clients.clear()
-      console.log('[P2P] Server stopped')
     }
+    if (this.httpServer) {
+      this.httpServer.close()
+    }
+    this.clients.clear()
+    console.log('[P2P] Server stopped')
   }
 }

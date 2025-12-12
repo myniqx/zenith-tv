@@ -31,10 +31,6 @@ interface SettingsState {
   // Keyboard Shortcuts (ShortcutAction -> string[])
   keyboardShortcuts: Record<ShortcutAction, string[]>;
 
-  // TODO: Enable when P2P is ready
-  deviceName: string;
-  serverPort: number;
-
   // Actions
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Language) => void;
@@ -55,8 +51,6 @@ interface SettingsState {
   getAllShortcuts: () => Record<ShortcutAction, string[]>;
   resetKeyboardShortcuts: () => void;
 
-  setDeviceName: (name: string) => void;
-  setServerPort: (port: number) => void;
   resetSettings: () => void;
 }
 
@@ -97,8 +91,6 @@ const defaultSettings = {
   lastProfileUsername: null as string | null,
   lastProfileUUID: null as string | null,
   keyboardShortcuts: defaultKeyboardShortcuts,
-  deviceName: 'Zenith TV',
-  serverPort: 8080,
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -173,10 +165,6 @@ export const useSettingsStore = create<SettingsState>()(
 
       resetKeyboardShortcuts: () =>
         set({ keyboardShortcuts: defaultKeyboardShortcuts }),
-
-      setDeviceName: (name) => set({ deviceName: name }),
-
-      setServerPort: (port) => set({ serverPort: port }),
 
       resetSettings: () => set(defaultSettings),
     }),

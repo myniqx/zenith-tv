@@ -27,9 +27,9 @@ export function registerP2PHandlers(mainWindow: BrowserWindow): void {
   })
 
   // Register IPC handlers
-  ipcMain.handle('p2p:start', async (_event: IpcMainInvokeEvent, port?: number) => {
+  ipcMain.handle('p2p:start', async (_event: IpcMainInvokeEvent, port?: number, deviceName?: string) => {
     if (!p2pServer) return false
-    p2pServer.start(port)
+    p2pServer.start(port, deviceName)
     return true
   })
 

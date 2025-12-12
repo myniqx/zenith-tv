@@ -18,7 +18,7 @@ import {
   Square,
   Layers,
 } from 'lucide-react';
-import { TvShowWatchableObject, WatchableObject } from '../m3u/watchable';
+import { TvShowWatchableObject, WatchableObject } from '@zenith-tv/content';
 import {
   Dialog,
   DialogContent,

@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { GroupObject } from '@/m3u/group';
-import { WatchableObject } from '@/m3u/watchable';
+import { GroupObject } from '@zenith-tv/content';
+import { WatchableObject } from '@zenith-tv/content';
 import { GroupCard } from './GroupCard';
 import { ContentCard } from './ContentCard';
 import { Button } from '@zenith-tv/ui/button';

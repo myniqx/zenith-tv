@@ -14,7 +14,7 @@ import type {
 } from '../types/types';
 import { useSettingsStore } from './settings';
 import { shortcutActions } from './helpers/shortcutAction';
-import { WatchableObject } from '../m3u/watchable';
+import { WatchableObject } from '@zenith-tv/content';
 
 // Event listeners state - module scope (singleton)
 let resizeObserver: ResizeObserver | null = null;

@@ -14,7 +14,7 @@ import type {
   WindowOptions,
   ShortcutOptions,
 } from '../types/types';
-import { WatchableObject } from '../m3u/watchable';
+import { WatchableObject } from '@zenith-tv/content';
 
 // Define the interface (same as VlcPlayerState)
 interface UniversalPlayerState {

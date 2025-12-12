@@ -1,0 +1,19 @@
+{
+  "name": "@zenith-tv/content",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./models": "./src/models/index.ts",
+    "./types": "./src/types/index.ts"
+  },
+  "dependencies": {
+    "@zenith-tv/types": "workspace:*",
+    "lucide-react": "^0.468.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

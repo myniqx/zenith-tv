@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@zenith-tv/ui/select';
 import { Monitor, Tv, Smartphone, Wifi, Settings2, Power } from 'lucide-react';
-import { P2PSettingsDialog } from '../P2P/P2PSettingsDialog';
+import { P2PSettingsDialog } from './P2PSettingsDialog';
 
 export function P2PControl() {
   const {
@@ -69,7 +69,7 @@ export function P2PControl() {
         value={selectedDeviceId || 'local'}
         onValueChange={handleValueChange}
       >
-        <SelectTrigger className="w-[180px] h-9 gap-2">
+        <SelectTrigger className="w-[220px] h-9 gap-2">
           {selectedDeviceId ? <Tv className="w-4 h-4" /> : <Wifi className="w-4 h-4" />}
           <SelectValue placeholder="Select Device" />
         </SelectTrigger>

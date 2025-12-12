@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { WatchableObject } from '@/m3u/watchable';
+import { WatchableObject } from '@zenith-tv/content';
 import { useContentStore } from '@/stores/content';
 import { useUniversalPlayerStore } from '@/stores/universalPlayerStore';
 import { Badge } from '@zenith-tv/ui/badge';

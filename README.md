@@ -11,7 +11,8 @@ Modern cross-platform IPTV player with peer-to-peer remote control support.
 ### Desktop App (100% Complete)
 
 - 🎬 **Universal IPTV Player**: Watch any M3U playlist with live streams, movies, and TV series
-- 🔄 **P2P Remote Control**: Control playback from other devices on your local network
+- � **Native VLC Engine**: **NEW!** Built-in native VLC player support for maximum format compatibility (MKV, AVI, MP4, HLS, DASH, etc.) and hardware acceleration
+- �🔄 **P2P Remote Control**: Control playback from other devices on your local network
 - 📺 **Smart Categorization**: Automatic content organization (Movies, Series, Live TV)
 - 🎯 **Episode Detection**: Intelligent parsing of series episodes (S01E01, 1x01, etc.)
 - 🎨 **Modern UI**: Clean, responsive interface with dark theme
@@ -40,6 +41,7 @@ Modern cross-platform IPTV player with peer-to-peer remote control support.
 
 ### Core Technologies
 
+- **Video Engine**: Native libVLC (via Node.js C++ Addon)
 - **Parser**: Rust (compiled to WASM for web, FFI for native)
 - **Storage**:
   - Desktop: File-based JSON (profiles, cache, user data)
@@ -130,12 +132,40 @@ userData/
 - Each update compares old vs new M3U
 - Shows +X new items, -Y removed items
 
+### Player Architecture
+
+The application uses a layered store architecture to support both local playback and remote control transparently to the UI.
+
+#### Layer 1: Universal Player Store (`universalPlayerStore.ts`)
+- The single source of truth for all UI components (`VideoController`, `VideoPlayer`, etc.)
+- Acts as a proxy/facade that delegates actions to the *active* underlying store
+- Automatically switches between Local and Remote modes based on P2P connection status
+- **Components only interact with this layer**
+
+#### Layer 2: Implementation Stores
+- **Local:** `vlcPlayerStore.ts`
+  - Controls the native libVLC instance directly via Electron IPC
+  - Manages the local video window and OSD
+- **Remote:** `p2pPlayerStore.ts`
+  - Proxies actions/state over WebSocket to a connected device
+  - Maintains a local "shadow state" of the remote player
+
+#### Layer 3: P2P Transport (`p2pStore.ts`)
+- Manages WebSocket connections and device discovery
+- Handles the pairing handshake (PIN verification)
+- Routes abstract `P2PMessage` payloads between peers
+
+
 ## 📁 Project Structure
 
 ```
 zenith-tv/
 ├── core/
-│   └── parser/              # Rust M3U parser (WASM)
+│   ├── parser/              # Rust M3U parser (WASM)
+│   ├── vlc-player/          # Native C++ Node.js Addon (libvlc bindings)
+│   │   ├── src/
+│   │   └── CMakeLists.txt
+│   └── ...
 │       ├── src/
 │       └── pkg/             # WASM output
 ├── shared/
@@ -175,6 +205,8 @@ zenith-tv/
 - **pnpm** >= 8.0.0
 - **Rust** >= 1.75.0 (for building the M3U parser)
 - **wasm-pack** (for WASM builds)
+- **CMake** >= 3.12 (for building native VLC module)
+- **libvlc** development headers
 
 #### Optional (for development)
 
@@ -202,6 +234,9 @@ zenith-tv/
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
 npm install -g pnpm
+
+# Install Build Tools & VLC Dependencies (Required for native player)
+sudo apt-get install -y build-essential cmake libvlc-dev vlc
 
 # Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -292,7 +327,17 @@ cd ../..
 pnpm build:parser
 ```
 
-#### Step 5: Run the Desktop App
+#### Step 5: Build the Native VLC Module
+
+```bash
+# Update submodules if necessary
+git submodule update --init --recursive
+
+# Build the C++ VLC addon
+pnpm build:vlc
+```
+
+#### Step 6: Run the Desktop App
 
 ```bash
 # Development mode with hot reload
@@ -305,7 +350,7 @@ pnpm dev
 
 The app will launch automatically in a new window.
 
-#### Step 6: Build for Production
+#### Step 7: Build for Production
 
 ```bash
 # Build the desktop app for your current platform
@@ -353,6 +398,7 @@ pnpm make --platform=linux
 # Root workspace commands
 pnpm install              # Install all dependencies
 pnpm build:parser         # Build Rust parser to WASM
+pnpm build:vlc            # Build native VLC module
 pnpm dev:desktop          # Run desktop app in dev mode
 pnpm lint                 # Lint all packages
 pnpm format               # Format code with Prettier
@@ -466,41 +512,22 @@ Access settings by clicking the gear icon in the header:
 - **Player**: Default volume, Auto-resume, Auto-play next episode
 - **Network**: P2P server settings (port, device name)
 
-### P2P Remote Control
+### P2P Remote Control Protocol
 
-**WebSocket Protocol:**
+The application exposes a WebSocket server for remote control. Custom clients can connect key into this protocol.
 
-```javascript
-// Connect
-const ws = new WebSocket('ws://192.168.1.100:8080');
+**Connection Flow:**
+1. Connect via WebSocket to `ws://IP:PORT` (default port 8080)
+2. Send `pair_request` with a unique `deviceId` and `deviceName`
+3. If accepted by the user on the desktop, you receive `pair_response`
+4. Once paired, you can send command messages
 
-// Discover device
-ws.send(JSON.stringify({
-  type: 'discover',
-  deviceName: 'My Phone'
-}));
-
-// Request pairing
-ws.send(JSON.stringify({
-  type: 'pair_request',
-  deviceId: 'unique-device-id',
-  deviceName: 'My Phone'
-}));
-// Response: { type: 'pair_response', pin: '1234' }
-
-// Send commands (after paired)
-ws.send(JSON.stringify({ type: 'play', item: {...} }));
-ws.send(JSON.stringify({ type: 'pause' }));
-ws.send(JSON.stringify({ type: 'seek', position: 120 }));
-ws.send(JSON.stringify({ type: 'set_volume', volume: 0.8 }));
-
-// Receive state updates
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  if (data.type === 'state_update') {
-    console.log('Current state:', data.state);
-  }
-};
+**Message Structure:**
+```json
+{
+  "type": "command_type",
+  "payload": { ... }
+}
 ```
 
 ## 🎯 Roadmap
@@ -522,7 +549,6 @@ ws.onmessage = (event) => {
 - ✅ Settings panel
 - ✅ Toast notifications
 - ✅ Loading states and skeleton loaders
-- ✅ Virtual scrolling
 - ✅ M3U caching
 - ✅ Performance optimizations
 

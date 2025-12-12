@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { GroupObject } from '@/m3u/group';
+import { GroupObject } from '@zenith-tv/content';
 import { useContentStore } from '@/stores/content';
 import { Folder } from 'lucide-react';
 

@@ -1,11 +1,23 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { p2p } from '../libs/p2p';
 import { P2PConnection, P2PMessage } from '../types/p2p';
 import { PairingRequestPayload } from '../types/p2p-payloads';
+import { httpDiscovery, DiscoveredController } from '../services/httpDiscovery';
 
 // Extend payload to include connectionId for internal tracking
 interface PendingPairingRequest extends PairingRequestPayload {
   connectionId: string;
+}
+
+// Trusted server for pairing and auto-connect
+export interface TrustedServer {
+  deviceId: string;
+  deviceName: string;
+  lastIp: string;
+  lastPort: number;
+  autoConnect: boolean;
+  pairedAt: number;
 }
 
 type P2PMode = 'off' | 'server' | 'client';
@@ -15,6 +27,12 @@ interface P2PStoreState {
   mode: P2PMode;
   isServerRunning: boolean; // Kept for compatibility, true if mode === 'server'
   connectionStatus: ConnectionStatus;
+
+  // P2P Settings (moved from settings store)
+  deviceName: string;
+  serverPort: number;
+  autoConnect: boolean;
+  trustedServers: TrustedServer[];
 
   // Server specific
   deviceInfo: { id: string; name: string; port: number } | null;
@@ -26,6 +44,8 @@ interface P2PStoreState {
   // Client specific
   serverUrl: string;
   clientSocket: WebSocket | null;
+  discoveredServers: DiscoveredController[];
+  isScanning: boolean;
 
   // Actions
   setMode: (mode: P2PMode) => void;
@@ -40,16 +60,37 @@ interface P2PStoreState {
   sendCommand: <T>(message: P2PMessage<T>) => Promise<boolean>;
   broadcastState: <T>(state: T) => void;
 
+  // Discovery actions
+  startScanning: () => Promise<void>;
+  stopScanning: () => void;
+  connectToDiscoveredServer: (deviceId: string) => Promise<void>;
+
+  // P2P Settings actions (moved from settings store)
+  setDeviceName: (name: string) => void;
+  setServerPort: (port: number) => void;
+  setAutoConnect: (enabled: boolean) => void;
+  addTrustedServer: (server: TrustedServer) => void;
+  removeTrustedServer: (deviceId: string) => void;
+  updateTrustedServer: (deviceId: string, updates: Partial<TrustedServer>) => void;
+
   // Internal
   _handleConnection: (connection: P2PConnection) => void;
   _handleDisconnection: (connectionId: string) => void;
   _handleMessage: (connectionId: string, message: P2PMessage) => void;
 }
 
-export const useP2PStore = create<P2PStoreState>((set, get) => ({
+export const useP2PStore = create<P2PStoreState>()(
+  persist(
+    (set, get) => ({
   mode: 'off',
   isServerRunning: false,
   connectionStatus: 'disconnected',
+
+  // P2P Settings (moved from settings store)
+  deviceName: 'Zenith TV',
+  serverPort: 8080,
+  autoConnect: true,
+  trustedServers: [],
 
   deviceInfo: null,
   connections: [],
@@ -59,6 +100,8 @@ export const useP2PStore = create<P2PStoreState>((set, get) => ({
 
   serverUrl: '',
   clientSocket: null,
+  discoveredServers: [],
+  isScanning: false,
 
   setMode: (mode) => {
     const currentMode = get().mode;
@@ -74,9 +117,11 @@ export const useP2PStore = create<P2PStoreState>((set, get) => ({
     set({ mode });
   },
 
-  startServer: async (port = 8080) => {
+  startServer: async (port?: number) => {
     try {
-      const success = await p2p.start(port);
+      const { deviceName, serverPort } = get();
+      const actualPort = port ?? serverPort;
+      const success = await p2p.start(actualPort, deviceName);
       if (success) {
         const info = await p2p.getDeviceInfo();
         set({
@@ -281,5 +326,85 @@ export const useP2PStore = create<P2PStoreState>((set, get) => ({
     // Let's add `lastReceivedMessage` to state, so components can react to it.
     // Or better, use a transient state or event emitter.
     // Since we are using Zustand, we can just add `lastMessage` and update it.
-  }
-}));
+  },
+
+  startScanning: async () => {
+    set({ isScanning: true });
+
+    try {
+      const servers = await httpDiscovery.scan();
+      set({ discoveredServers: servers });
+
+      // Auto-connect logic
+      const { autoConnect, trustedServers } = get();
+      if (autoConnect && servers.length > 0) {
+        for (const server of servers) {
+          const trusted = trustedServers.find(
+            (ts) => ts.deviceId === server.deviceId && ts.autoConnect
+          );
+
+          if (trusted) {
+            console.log(`[P2P] Auto-connecting to ${server.deviceName}`);
+            await get().connectToServer(server.ip, server.port);
+            break; // Connect to first trusted server found
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[P2P] Scan failed:', error);
+    } finally {
+      set({ isScanning: false });
+    }
+  },
+
+  stopScanning: () => {
+    httpDiscovery.stopScan();
+    set({ isScanning: false });
+  },
+
+  connectToDiscoveredServer: async (deviceId) => {
+    const server = get().discoveredServers.find((s) => s.deviceId === deviceId);
+    if (!server) {
+      console.warn(`[P2P] Server not found: ${deviceId}`);
+      return;
+    }
+
+    await get().connectToServer(server.ip, server.port);
+  },
+
+  // P2P Settings actions (moved from settings store)
+  setDeviceName: (name) => set({ deviceName: name }),
+
+  setServerPort: (port) => set({ serverPort: port }),
+
+  setAutoConnect: (enabled) => set({ autoConnect: enabled }),
+
+  addTrustedServer: (server) =>
+    set((state) => ({
+      trustedServers: [...state.trustedServers, server],
+    })),
+
+  removeTrustedServer: (deviceId) =>
+    set((state) => ({
+      trustedServers: state.trustedServers.filter((s) => s.deviceId !== deviceId),
+    })),
+
+  updateTrustedServer: (deviceId, updates) =>
+    set((state) => ({
+      trustedServers: state.trustedServers.map((s) =>
+        s.deviceId === deviceId ? { ...s, ...updates } : s
+      ),
+    })),
+    }),
+    {
+      name: 'zenith-p2p',
+      partialize: (state) => ({
+        // Only persist user preferences
+        deviceName: state.deviceName,
+        serverPort: state.serverPort,
+        autoConnect: state.autoConnect,
+        trustedServers: state.trustedServers,
+      }),
+    }
+  )
+);

@@ -6,6 +6,7 @@ import { ContentGrid } from './components/ContentGrid';
 import { ToastContainer } from './components/ToastContainer';
 import { HeaderBar } from './components/HeaderBar';
 import { PairingRequestToast } from './components/P2P/PairingRequestToast';
+import { PairingRequestDialog } from './components/P2P/PairingRequestDialog';
 import { P2PManager } from './components/P2P/P2PManager';
 // import { RemoteControlIndicator } from './components/RemoteControlIndicator'; // Replaced by DeviceSelector
 import { useContentStore } from './stores/content';
@@ -296,6 +297,7 @@ function App() {
 
       <P2PManager />
       <PairingRequestToast />
+      <PairingRequestDialog />
       <ToastContainer />
     </div>
   );

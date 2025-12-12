@@ -1,7 +1,7 @@
 import { useContentStore } from '../stores/content';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@zenith-tv/ui/tooltip';
 import { ChevronRight, ChevronDown, LayoutGrid } from 'lucide-react';
-import { GroupObject } from '@/m3u/group';
+import { GroupObject } from '@zenith-tv/content';
 import { useState, useCallback } from 'react';
 import { cn } from '@zenith-tv/ui/lib/cn';
 

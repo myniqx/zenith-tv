@@ -4,7 +4,10 @@
       "Bash(echo:*)",
       "Bash(npx shadcn@latest add:*)",
       "Bash(ls:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(xargs sed -i \"s|from ''''@/m3u/watchable''''|from ''''@zenith-tv/content''''|g\")",
+      "Bash(xargs sed -i \"s|from ''''@/m3u/m3u''''|from ''''@zenith-tv/content''''|g\")",
+      "Bash(xargs sed -i \"s|from ''''@/m3u/view-object''''|from ''''@zenith-tv/content''''|g\")"
     ],
     "deny": [],
     "ask": []

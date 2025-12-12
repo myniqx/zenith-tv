@@ -1,7 +1,8 @@
 import { LucideFolder, LucideIcon, LucideTv } from "lucide-react";
 import { ViewObject } from "./view-object";
 import { TvShowWatchableObject, WatchableObject } from "./watchable";
-import { M3UObject } from "./m3u";
+import { M3UObject } from "../types/m3u-types";
+import { exString } from "../utils/string-matcher";
 
 export class GroupObject extends ViewObject {
 
@@ -289,12 +290,12 @@ export class GroupObject extends ViewObject {
     return str;
   }
 
-  public searchProgress(group: Ref<GroupObject>, parts: string[], abortController: AbortController) {
+  public searchProgress(group: GroupObject, parts: string[], abortController: AbortController) {
     for (const g of this.Groups) {
       if (abortController.signal.aborted) return;
       if (g instanceof TvShowGroupObject) {
         if (exString.hasMatch(parts, g.Name))
-          group.value.Groups.push(g);
+          group.Groups.push(g);
       }
       else
         g.searchProgress(group, parts, abortController);
@@ -302,7 +303,7 @@ export class GroupObject extends ViewObject {
     for (const w of this.Watchables) {
       if (abortController.signal.aborted) return;
       if (exString.hasMatch(parts, w.Name))
-        group.value.Watchables.push(w);
+        group.Watchables.push(w);
     }
   }
 

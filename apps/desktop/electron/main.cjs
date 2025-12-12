@@ -8,6 +8,7 @@ const { registerDialogHandlers } = require('./ipc/dialogHandlers');
 const { registerP2PHandlers, cleanupP2P } = require('./ipc/p2pHandlers');
 const { registerVlcHandlers, cleanupVlc } = require('./ipc/vlcHandlers.cjs');
 const { registerWindowHandlers } = require('./ipc/windowHandlers');
+const { registerNetworkHandlers } = require('./ipc/networkHandlers');
 
 let mainWindow;
 
@@ -66,6 +67,7 @@ app.whenReady().then(async () => {
   registerFileSystemHandlers(workspaceRoot)
   registerFetchHandlers()
   registerDialogHandlers()
+  registerNetworkHandlers()
   registerP2PHandlers(mainWindow)
   registerVlcHandlers(mainWindow)
   registerWindowHandlers(mainWindow)

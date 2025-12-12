@@ -4,9 +4,14 @@ contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
   version: process.versions.electron,
 
+  // Network API
+  network: {
+    getLocalIP: () => ipcRenderer.invoke('network:getLocalIP'),
+  },
+
   // P2P Remote Control
   p2p: {
-    start: (port) => ipcRenderer.invoke('p2p:start', port),
+    start: (port, deviceName) => ipcRenderer.invoke('p2p:start', port, deviceName),
     stop: () => ipcRenderer.invoke('p2p:stop'),
     send: (connectionId, message) => ipcRenderer.invoke('p2p:send', connectionId, message),
     broadcast: (message) => ipcRenderer.invoke('p2p:broadcast', message),

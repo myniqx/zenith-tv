@@ -1,8 +1,7 @@
 import { P2PConnection, P2PMessage, P2PEventData } from '../types/p2p';
 
-
 export const p2p = {
-  start: (port?: number) => window.electron.p2p.start(port),
+  start: (port?: number, deviceName?: string) => window.electron.p2p.start(port, deviceName),
   stop: () => window.electron.p2p.stop(),
 
   send: <T = unknown>(connectionId: string, message: P2PMessage<T>) =>

@@ -3,7 +3,7 @@
  * Wrapper around @zenith-tv/parser WASM module
  */
 
-import { M3UObject } from '@/m3u/m3u';
+import { M3UObject } from '@zenith-tv/content';
 import { initParser, parseM3U as wasmParseM3U } from '@zenith-tv/parser';
 
 let parserInitialized = false;
