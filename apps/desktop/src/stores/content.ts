@@ -1,12 +1,11 @@
 import { create } from 'zustand';
 import { parseM3U } from '../services/m3u-parser';
 import { useToastStore } from './toast';
-import { GroupObject, TvShowGroupObject, TvShowSeasonGroupObject } from '@zenith-tv/content';
+import { GroupObject, TvShowGroupObject, TvShowSeasonGroupObject, UserItemData } from '@zenith-tv/content';
 import { LucideCircleCheckBig, LucideFlame, LucideHeart, LucidePodcast, LucideTheater, LucideTv } from 'lucide-react';
 import { TvShowWatchableObject, WatchableObject } from '@zenith-tv/content';
 import { M3UObject } from '@zenith-tv/content';
 import { FileSyncedState, syncFile } from '@/tools/fileSync';
-import { UserData } from '@/types/userdata';
 import { fileSystem, http } from '@/libs';
 import { useProfilesStore } from './profiles';
 import { useSettingsStore } from './settings';
@@ -16,10 +15,29 @@ export type SortBy = 'name' | 'date' | 'recent';
 export type SortOrder = 'asc' | 'desc';
 export type GroupBy = 'none' | 'group' | 'year' | 'alphabetic';
 
-// Helper function to convert seconds to progress percentage
+export interface LayoutData {
+  categoryBrowser: number;
+  contentBrowser: number;
+}
+
+export interface PlayerData {
+  sortBy: SortBy;
+  sortOrder: SortOrder;
+  groupBy: GroupBy;
+}
+
+export interface UserData {
+  watchables: Record<string, UserItemData>;
+  hiddenGroups: string[];
+  stickyGroups: string[];
+  playerData: PlayerData;
+  layoutData: LayoutData;
+}
+
+// Helper function to convert seconds to progress (0-1)
 const secondsToProgress = (position: number, duration: number): number => {
   if (duration <= 0) return 0;
-  return Math.round((position / duration) * 100);
+  return position / duration;
 };
 
 // Turkish alphabet letters for alphabetic grouping
@@ -88,8 +106,12 @@ type ContentState =
     setSortOrder: (order: SortOrder) => void;
     setGroupBy: (groupBy: GroupBy) => void;
     updateGroupedContent: () => void;
-    toggleFavorite: (watchable: WatchableObject) => Promise<void>;
-    saveWatchProgress: (watchable: WatchableObject, position: number, duration: number) => Promise<void>;
+
+    // User data actions
+    toggleFavorite: (watchable: WatchableObject) => void;
+    toggleHidden: (watchable: WatchableObject) => void;
+    saveWatchProgress: (watchable: WatchableObject, position: number, duration: number) => void;
+    saveTrackSelection: (watchable: WatchableObject, audioTrack?: number, subtitleTrack?: number) => void;
 
     getNextEpisode: (currentItem: WatchableObject) => WatchableObject | undefined;
     getPreviousEpisode: (currentItem: WatchableObject) => WatchableObject | undefined;
@@ -239,10 +261,14 @@ export const useContentStore = create<ContentState>((set, get) => ({
         const userItemData = userData?.watchables?.[item.url];
         if (userItemData) {
           watchable.userData = userItemData;
-          if (userItemData.favorite) {
+
+          // Add to favorite group if marked as favorite
+          if (userItemData.favorite?.value) {
             get().favoriteGroup.AddWatchable(watchable);
           }
-          if (userItemData.watched) {
+
+          // Add to watched group if marked as watched
+          if (userItemData.watchProgress?.watched) {
             get().watchedGroup.AddWatchable(watchable);
           }
         }
@@ -424,14 +450,18 @@ export const useContentStore = create<ContentState>((set, get) => ({
               comparison = new Date(a.AddedDate!).getTime() - new Date(b.AddedDate!).getTime();
               break;
             case 'recent':
-              if (a.userData?.lastWatchedAt && b.userData?.lastWatchedAt) {
-                comparison = new Date(b.userData.lastWatchedAt).getTime() - new Date(a.userData.lastWatchedAt).getTime();
-              } else if (a.userData?.lastWatchedAt) {
-                comparison = -1;
-              } else if (b.userData?.lastWatchedAt) {
-                comparison = 1;
+              {
+                const aLastWatched = a.userData?.watchProgress?.updatedAt;
+                const bLastWatched = b.userData?.watchProgress?.updatedAt;
+                if (aLastWatched && bLastWatched) {
+                  comparison = bLastWatched - aLastWatched;
+                } else if (aLastWatched) {
+                  comparison = -1;
+                } else if (bLastWatched) {
+                  comparison = 1;
+                }
+                break;
               }
-              break;
           }
         } else {
           comparison = a.Name.localeCompare(b.Name);
@@ -614,57 +644,136 @@ export const useContentStore = create<ContentState>((set, get) => ({
     set({ groupedContent: result });
   },
 
-  toggleFavorite: async (watchable) => {
-    const { currentUsername, currentUUID } = get();
+  toggleFavorite: (watchable) => {
+    const { currentUsername, currentUUID, setUserData, favoriteGroup } = get();
     if (!currentUsername || !currentUUID) return;
 
+    const currentFavorite = watchable.userData.favorite?.value ?? false;
+    const newFavoriteValue = !currentFavorite;
+    const now = Date.now();
 
-    try {
-      const { setUserData } = get();
-      const favorite = !watchable.userData.favorite
+    // Update watchable userData
+    watchable.userData.favorite = {
+      value: newFavoriteValue,
+      updatedAt: now
+    };
 
-      watchable.userData.favorite = favorite;
-
-      setUserData(p => ({
-        ...p,
+    // Update userData store
+    setUserData(prev => ({
+      ...prev,
+      watchables: {
+        ...prev.watchables,
         [watchable.Url]: watchable.userData
-      }))
-
-      // Show toast notification
-      if (favorite) {
-        useToastStore.getState().success('Added to favorites');
-      } else {
-        useToastStore.getState().info('Removed from favorites');
       }
-    } catch (error) {
-      console.error('Failed to toggle favorite:', error);
-      useToastStore.getState().error('Failed to update favorite');
+    }));
+
+    // Update favorite group
+    if (newFavoriteValue) {
+      favoriteGroup.AddWatchable(watchable);
+      useToastStore.getState().success('Added to favorites');
+    } else {
+      favoriteGroup.RemoveWatchable(watchable);
+      useToastStore.getState().info('Removed from favorites');
     }
   },
 
-  saveWatchProgress: async (watchable, position, duration) => {
-    const { currentUsername, currentUUID } = get();
+  saveWatchProgress: (watchable, position, duration) => {
+    const { currentUsername, currentUUID, setUserData, watchedGroup } = get();
     if (!currentUsername || !currentUUID) return;
     if (watchable.category === 'LiveStream') return;
 
-    try {
-      // Convert seconds to progress percentage
-      const progress = secondsToProgress(position, duration);
+    const progress = secondsToProgress(position, duration);
+    const now = Date.now();
+    const isWatched = progress > 0.95;
 
-      watchable.userData.watchProgress = progress;
-      if (progress > 95) {
-        watchable.userData.watched = true;
-        watchable.userData.watchedAt = Date.now();
-      }
+    // Check if already marked as watched
+    const previousWatchedTimestamp = watchable.userData.watchProgress?.watched;
+    const wasAlreadyWatched = previousWatchedTimestamp !== null && previousWatchedTimestamp !== undefined;
 
-      get().setUserData(p => ({
-        ...p,
-        [watchable.Url]: watchable.userData
-      }))
-
-    } catch (error) {
-      console.error('Failed to save watch progress:', error);
+    // If already watched and trying to save progress=0, skip (already saved)
+    const previousProgress = watchable.userData.watchProgress?.progress ?? 0;
+    if (wasAlreadyWatched && progress === 0 && previousProgress === 0) {
+      return; // Already reset to 0, no need to save again
     }
+
+    // If >95%, reset progress to 0 so next time starts from beginning
+    const progressToSave = isWatched ? 0 : progress;
+
+    // Update watchable userData
+    watchable.userData.watchProgress = {
+      progress: progressToSave,
+      updatedAt: now,
+      // Keep existing watched timestamp if already set, otherwise set new one if just finished
+      watched: wasAlreadyWatched ? previousWatchedTimestamp : (isWatched ? now : null)
+    };
+
+    // Update userData store
+    setUserData(prev => ({
+      ...prev,
+      watchables: {
+        ...prev.watchables,
+        [watchable.Url]: watchable.userData
+      }
+    }));
+
+    // Add to watched group only if just finished watching (not already watched)
+    if (isWatched && !wasAlreadyWatched) {
+      watchedGroup.AddWatchable(watchable);
+    }
+  },
+
+  toggleHidden: (watchable) => {
+    const { currentUsername, currentUUID, setUserData } = get();
+    if (!currentUsername || !currentUUID) return;
+
+    const currentHidden = watchable.userData.hidden?.value ?? false;
+    const newHiddenValue = !currentHidden;
+    const now = Date.now();
+
+    // Update watchable userData
+    watchable.userData.hidden = {
+      value: newHiddenValue,
+      updatedAt: now
+    };
+
+    // Update userData store
+    setUserData(prev => ({
+      ...prev,
+      watchables: {
+        ...prev.watchables,
+        [watchable.Url]: watchable.userData
+      }
+    }));
+
+    // Show toast notification
+    if (newHiddenValue) {
+      useToastStore.getState().info('Item hidden');
+    } else {
+      useToastStore.getState().info('Item unhidden');
+    }
+  },
+
+  saveTrackSelection: (watchable, audioTrack, subtitleTrack) => {
+    const { currentUsername, currentUUID, setUserData } = get();
+    if (!currentUsername || !currentUUID) return;
+
+    const now = Date.now();
+
+    // Update watchable userData
+    watchable.userData.tracks = {
+      audio: audioTrack,
+      subtitle: subtitleTrack,
+      updatedAt: now
+    };
+
+    // Update userData store
+    setUserData(prev => ({
+      ...prev,
+      watchables: {
+        ...prev.watchables,
+        [watchable.Url]: watchable.userData
+      }
+    }));
   },
 
   getNextEpisode: (currentItem) => {

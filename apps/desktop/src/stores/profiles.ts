@@ -1,9 +1,9 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { parseM3U } from '../services/m3u-parser';
 import { useToastStore } from './toast';
 import { useContentStore } from './content';
 import { Profile } from '@/types/profiles';
-import { syncFile, type FileSyncedState } from '@/tools/fileSync';
 import { dialog, fileSystem, http } from '@/libs';
 
 /**
@@ -12,34 +12,35 @@ import { dialog, fileSystem, http } from '@/libs';
  */
 type M3UMap = Record<string, string>;
 
-type ProfilesState = FileSyncedState<Profile[], 'profiles'> &
-  FileSyncedState<M3UMap, 'm3uMap'> & {
-    // M3U Map helpers
-    getUrlFromUUID: (uuid: string) => string | null;
-    getOrCreateUUID: (url: string) => Promise<string>;
-    removeURLMapping: (url: string) => Promise<void>;
-    isUUIDUsed: (uuid: string) => boolean;
-    cleanupUnusedUUID: (uuid: string) => Promise<void>;
+type ProfilesState = {
+  profiles: Profile[];
+  m3uMap: M3UMap;
 
-    // Current state getters (from content store)
-    getCurrentUsername: () => string | null;
-    getCurrentUUID: () => string | null;
+  // M3U Map helpers
+  getUrlFromUUID: (uuid: string) => string | null;
+  getOrCreateUUID: (url: string) => string;
+  removeURLMapping: (url: string) => void;
+  isUUIDUsed: (uuid: string) => boolean;
+  cleanupUnusedUUID: (uuid: string) => Promise<void>;
 
-    // Profile actions
-    createProfile: (username: string) => Promise<void>;
-    createProfileFromFile: (username: string) => Promise<{ username: string; uuid: string } | null>;
-    deleteProfile: (username: string) => Promise<void>;
-    selectProfile: (username: string, uuid?: string) => Promise<void>;
-    addM3UToProfile: (username: string, m3uUrl: string) => Promise<string>;
-    removeM3UFromProfile: (username: string, uuid: string) => Promise<void>;
-  };
+  // Current state getters (from content store)
+  getCurrentUsername: () => string | null;
+  getCurrentUUID: () => string | null;
 
-export const useProfilesStore = create<ProfilesState>((set, get) => ({
-  // File-synced profiles
-  ...syncFile<Profile[], 'profiles'>('profiles.json', [], 'profiles')(set, get),
+  // Profile actions
+  createProfile: (username: string) => void;
+  createProfileFromFile: (username: string) => Promise<{ username: string; uuid: string } | null>;
+  deleteProfile: (username: string) => Promise<void>;
+  selectProfile: (username: string, uuid?: string) => Promise<void>;
+  addM3UToProfile: (username: string, m3uUrl: string) => string;
+  removeM3UFromProfile: (username: string, uuid: string) => Promise<void>;
+};
 
-  // File-synced M3U URL → UUID mapping
-  ...syncFile<M3UMap, 'm3uMap'>('m3uMap.json', {}, 'm3uMap')(set, get),
+export const useProfilesStore = create<ProfilesState>()(
+  persist(
+    (set, get) => ({
+      profiles: [],
+      m3uMap: {},
 
   // Current state getters (from content store)
   getCurrentUsername: () => {
@@ -56,8 +57,8 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
     return Object.entries(m3uMap).find(([_, id]) => id === uuid)?.[0] || null;
   },
 
-  getOrCreateUUID: async (url) => {
-    const { m3uMap, setM3uMap } = get();
+  getOrCreateUUID: (url) => {
+    const { m3uMap } = get();
 
     if (m3uMap[url]) {
       return m3uMap[url];
@@ -66,20 +67,21 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
     // Generate UUID v4
     const uuid = window.crypto.randomUUID();
 
-    await setM3uMap((prev) => ({
-      ...prev,
-      [url]: uuid,
+    set((state) => ({
+      m3uMap: {
+        ...state.m3uMap,
+        [url]: uuid,
+      },
     }));
 
     return uuid;
   },
 
-  removeURLMapping: async (url) => {
-    const { setM3uMap } = get();
-    await setM3uMap((prev) => {
-      const newMap = { ...prev };
+  removeURLMapping: (url) => {
+    set((state) => {
+      const newMap = { ...state.m3uMap };
       delete newMap[url];
-      return newMap;
+      return { m3uMap: newMap };
     });
   },
 
@@ -89,7 +91,7 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
   },
 
   cleanupUnusedUUID: async (uuid) => {
-    const { isUUIDUsed, m3uMap, setM3uMap } = get();
+    const { isUUIDUsed, m3uMap } = get();
 
     // Check if UUID is still used by any profile
     if (isUUIDUsed(uuid)) {
@@ -109,10 +111,10 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
       // Remove URL mapping from m3uMap
       const urlToRemove = Object.keys(m3uMap).find((url) => m3uMap[url] === uuid);
       if (urlToRemove) {
-        await setM3uMap((prev) => {
-          const newMap = { ...prev };
+        set((state) => {
+          const newMap = { ...state.m3uMap };
           delete newMap[urlToRemove];
-          return newMap;
+          return { m3uMap: newMap };
         });
         console.log(`[Cleanup] Removed M3U URL mapping: ${urlToRemove}`);
       }
@@ -122,8 +124,8 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
   },
 
   // Profile actions
-  createProfile: async (username) => {
-    const { profiles, setProfiles } = get();
+  createProfile: (username) => {
+    const { profiles } = get();
 
     if (profiles.some((p) => p.username === username)) {
       useToastStore.getState().error('Profile already exists');
@@ -137,7 +139,9 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
       lastLogin: Date.now(),
     };
 
-    await setProfiles((prev) => [...prev, newProfile]);
+    set((state) => ({
+      profiles: [...state.profiles, newProfile],
+    }));
     useToastStore.getState().success(`Profile "${username}" created`);
   },
 
@@ -155,14 +159,14 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
         return null;
       }
 
-      const { profiles, setProfiles, getOrCreateUUID } = get();
+      const { profiles, getOrCreateUUID } = get();
 
       if (profiles.some((p) => p.username === username)) {
         useToastStore.getState().error('Profile already exists');
         return null;
       }
 
-      const uuid = await getOrCreateUUID(fileUrl);
+      const uuid = getOrCreateUUID(fileUrl);
 
       const newProfile: Profile = {
         username,
@@ -171,7 +175,9 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
         lastLogin: Date.now(),
       };
 
-      await setProfiles((prev) => [...prev, newProfile]);
+      set((state) => ({
+        profiles: [...state.profiles, newProfile],
+      }));
       useToastStore.getState().success(`Profile "${username}" created from file`);
 
       return { username, uuid };
@@ -183,7 +189,7 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
   },
 
   deleteProfile: async (username) => {
-    const { profiles, setProfiles, cleanupUnusedUUID } = get();
+    const { profiles, cleanupUnusedUUID } = get();
 
     // Get current username before any state changes
     const currentUsername = useContentStore.getState().currentUsername;
@@ -198,7 +204,9 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
     }
 
     // Remove profile
-    await setProfiles((prev) => prev.filter((p) => p.username !== username));
+    set((state) => ({
+      profiles: state.profiles.filter((p) => p.username !== username),
+    }));
 
     // Cleanup unused UUID files
     for (const uuid of uuidsToCleanup) {
@@ -209,7 +217,7 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
   },
 
   selectProfile: async (username, uuid?) => {
-    const { profiles, setProfiles } = get();
+    const { profiles } = get();
     const profile = profiles.find((p) => p.username === username);
 
     if (!profile) {
@@ -226,20 +234,20 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
     }
 
     // Update lastLogin timestamp
-    await setProfiles((prev) =>
-      prev.map((p) =>
+    set((state) => ({
+      profiles: state.profiles.map((p) =>
         p.username === username ? { ...p, lastLogin: Date.now() } : p
-      )
-    );
+      ),
+    }));
 
     // Update content store with selected profile and UUID
     await useContentStore.getState().setContent(username, selectedUUID);
   },
 
-  addM3UToProfile: async (username, m3uUrl) => {
-    const { profiles, setProfiles, getOrCreateUUID } = get();
+  addM3UToProfile: (username, m3uUrl) => {
+    const { profiles, getOrCreateUUID } = get();
 
-    const uuid = await getOrCreateUUID(m3uUrl);
+    const uuid = getOrCreateUUID(m3uUrl);
 
     const profile = profiles.find((p) => p.username === username);
     if (!profile) {
@@ -251,18 +259,18 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
       return uuid;
     }
 
-    await setProfiles((prev) =>
-      prev.map((p) =>
+    set((state) => ({
+      profiles: state.profiles.map((p) =>
         p.username === username ? { ...p, m3uRefs: [...p.m3uRefs, uuid] } : p
-      )
-    );
+      ),
+    }));
 
     useToastStore.getState().success('M3U added to profile');
     return uuid;
   },
 
   removeM3UFromProfile: async (username, uuid) => {
-    const { profiles, setProfiles, getCurrentUUID, cleanupUnusedUUID } = get();
+    const { profiles, getCurrentUUID, cleanupUnusedUUID } = get();
     const currentUUID = getCurrentUUID();
 
     const profile = profiles.find((p) => p.username === username);
@@ -276,13 +284,13 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
     }
 
     // Remove UUID from profile
-    await setProfiles((prev) =>
-      prev.map((p) =>
+    set((state) => ({
+      profiles: state.profiles.map((p) =>
         p.username === username
           ? { ...p, m3uRefs: p.m3uRefs.filter((ref) => ref !== uuid) }
           : p
-      )
-    );
+      ),
+    }));
 
     // Clear content if removed M3U was selected
     if (currentUUID === uuid) {
@@ -294,4 +302,9 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
 
     useToastStore.getState().success('M3U removed from profile');
   },
-}));
+    }),
+    {
+      name: 'zenith-profiles',
+    }
+  )
+);

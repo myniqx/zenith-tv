@@ -15,6 +15,7 @@ import type {
 import { useSettingsStore } from './settings';
 import { shortcutActions } from './helpers/shortcutAction';
 import { WatchableObject } from '@zenith-tv/content';
+import { useContentStore } from './content';
 
 // Event listeners state - module scope (singleton)
 let resizeObserver: ResizeObserver | null = null;
@@ -62,6 +63,7 @@ interface VlcPlayerState {
   lastStickyBounds: { x: number; y: number; width: number; height: number; } | undefined;
   wasPlayingBeforeMinimize: boolean;
   currentItem: WatchableObject | null;
+  lastSavedTime: number;
 
   // Actions
   init: () => Promise<void>;
@@ -121,6 +123,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   lastStickyBounds: undefined,
   wasPlayingBeforeMinimize: false,
   currentItem: null,
+  lastSavedTime: 0,
 
   _setupVlcCore: async () => {
     // Register keyboard shortcuts from settings
@@ -159,19 +162,16 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
           const result = await window.electron.vlc.init();
           if (result.success) {
             set({ isInitialized: true });
-            console.log('[VLC] Player initialized successfully');
 
             // Setup event listeners once
             state._setupEventListeners();
           } else {
             const errorMsg = result.error || 'Failed to initialize VLC';
             set({ error: errorMsg });
-            console.error('[VLC] Initialization failed:', result.error);
           }
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Failed to check availability';
-        console.error('[VLC] Failed to check availability:', error);
         set({ isAvailable: false, error: errorMsg });
       } finally {
         // Reset promise on completion (success or fail)
@@ -194,28 +194,50 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
       // Handle MediaInfo updates
       if (eventData.mediaInfo) {
-        console.log('[VLC] MediaInfo event received:', eventData.mediaInfo);
         const info = eventData.mediaInfo;
-        const { preferredAudioLanguage, preferredSubtitleLanguage } = useSettingsStore.getState();
 
-        // Helper to match track name with language
-        const matchTrack = (trackName: string, language: string) => {
-          return trackName.toLowerCase().includes(language.toLowerCase());
-        };
+        // Priority 1: User's saved tracks (highest priority)
+        const savedTracks = state.currentItem?.userData?.tracks;
+        if (savedTracks) {
 
-        // Auto-select audio track
-        if (preferredAudioLanguage) {
-          const matchedAudio = info.audioTracks.find(t => matchTrack(t.name, preferredAudioLanguage));
-          if (matchedAudio && matchedAudio.id !== -1) {
-            state.audio({ track: matchedAudio.id });
+          // Validate track IDs exist in current media
+          if (savedTracks.audio !== undefined) {
+            const audioExists = info.audioTracks.some(t => t.id === savedTracks.audio);
+            if (audioExists) {
+              await state.audio({ track: savedTracks.audio });
+            }
+          }
+
+          if (savedTracks.subtitle !== undefined) {
+            const subtitleExists = info.subtitleTracks.some(t => t.id === savedTracks.subtitle);
+            if (subtitleExists) {
+              await state.subtitle({ track: savedTracks.subtitle });
+            }
           }
         }
+        // Priority 2: Preferred language (only if no saved tracks)
+        else {
+          const { preferredAudioLanguage, preferredSubtitleLanguage } = useSettingsStore.getState();
 
-        // Auto-select subtitle track
-        if (preferredSubtitleLanguage) {
-          const matchedSubtitle = info.subtitleTracks.find(t => matchTrack(t.name, preferredSubtitleLanguage));
-          if (matchedSubtitle && matchedSubtitle.id !== -1) {
-            state.subtitle({ track: matchedSubtitle.id });
+          // Helper to match track name with language
+          const matchTrack = (trackName: string, language: string) => {
+            return trackName.toLowerCase().includes(language.toLowerCase());
+          };
+
+          // Auto-select audio track by language
+          if (preferredAudioLanguage) {
+            const matchedAudio = info.audioTracks.find(t => matchTrack(t.name, preferredAudioLanguage));
+            if (matchedAudio && matchedAudio.id !== -1) {
+              await state.audio({ track: matchedAudio.id });
+            }
+          }
+
+          // Auto-select subtitle track by language
+          if (preferredSubtitleLanguage) {
+            const matchedSubtitle = info.subtitleTracks.find(t => matchTrack(t.name, preferredSubtitleLanguage));
+            if (matchedSubtitle && matchedSubtitle.id !== -1) {
+              await state.subtitle({ track: matchedSubtitle.id });
+            }
           }
         }
 
@@ -233,7 +255,6 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
       // Handle PlayerInfo updates
       if (eventData.playerInfo) {
-        console.log('[VLC] PlayerInfo event received:', eventData.playerInfo);
         const updates: Partial<VlcPlayerState> = {};
 
         if (eventData.playerInfo.volume !== undefined) updates.volume = eventData.playerInfo.volume;
@@ -252,13 +273,39 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         const updates: Partial<VlcPlayerState> = {};
 
         // Time updates
-        if (cv.time !== undefined) updates.time = cv.time;
+        if (cv.time !== undefined) {
+          updates.time = cv.time;
+
+          // Auto-save progress every 10 seconds
+          if (state.currentItem && state.duration > 0) {
+            const timeSinceLastSave = Math.abs(cv.time - state.lastSavedTime);
+            if (timeSinceLastSave >= 10) {
+              useContentStore.getState().saveWatchProgress(
+                state.currentItem,
+                cv.time,
+                state.duration
+              );
+              updates.lastSavedTime = cv.time;
+            }
+          }
+        }
+
         if (cv.position !== undefined) updates.position = cv.position;
         if (cv.buffering !== undefined) updates.buffering = cv.buffering;
 
         // State updates
         if (cv.state !== undefined) {
           updates.playerState = cv.state as VlcState;
+
+          // Immediate save on pause or stop
+          if ((cv.state === 'paused' || cv.state === 'stopped') && state.currentItem && state.duration > 0) {
+            useContentStore.getState().saveWatchProgress(
+              state.currentItem,
+              state.time,
+              state.duration
+            );
+            updates.lastSavedTime = state.time;
+          }
         }
 
         // Playback info
@@ -276,8 +323,11 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         if (cv.subtitleDelay !== undefined) updates.subtitleDelay = cv.subtitleDelay;
 
         // Track changes
-        if (cv.audioTrack !== undefined) updates.currentAudioTrack = cv.audioTrack;
-        if (cv.subtitleTrack !== undefined) updates.currentSubtitleTrack = cv.subtitleTrack;
+        const audioTrackChanged = cv.audioTrack !== undefined;
+        const subtitleTrackChanged = cv.subtitleTrack !== undefined;
+
+        if (audioTrackChanged) updates.currentAudioTrack = cv.audioTrack;
+        if (subtitleTrackChanged) updates.currentSubtitleTrack = cv.subtitleTrack;
         if (cv.videoTrack !== undefined) updates.currentVideoTrack = cv.videoTrack;
 
         // End reached
@@ -287,7 +337,6 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
         // Error
         if (cv.error) {
-          console.error('[VLC] Error:', cv.error);
           updates.error = cv.error;
           updates.playerState = 'error';
         }
@@ -296,13 +345,21 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         if (Object.keys(updates).length > 0) {
           set(updates);
         }
+
+        // Save track selection AFTER state update (so we have fresh values)
+        if ((audioTrackChanged || subtitleTrackChanged) && state.currentItem) {
+          const freshState = get();
+          useContentStore.getState().saveTrackSelection(
+            state.currentItem,
+            freshState.currentAudioTrack,
+            freshState.currentSubtitleTrack
+          );
+        }
       }
 
       // Handle Shortcut events
       if (eventData.shortcut) {
-        console.log('[VLC] Shortcut received:', eventData.shortcut);
         const action = eventData.shortcut;
-
         shortcutActions(state, action);
       }
     };
@@ -331,25 +388,17 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         set({ wasPlayingBeforeMinimize: isPlaying });
 
         if (isPlaying) {
-          state.playback({ action: 'pause' }).catch(err => {
-            console.error('[VLC] Failed to pause on minimize:', err);
-          });
+          state.playback({ action: 'pause' }).catch(() => {});
         }
 
-        state.window({ visible: false }).catch(err => {
-          console.error('[VLC] Failed to hide on minimize:', err);
-        });
+        state.window({ visible: false }).catch(() => {});
       } else {
         // Window not minimized - sync bounds and show VLC
-        state.window({ visible: true }).catch(err => {
-          console.error('[VLC] Failed to show on restore:', err);
-        });
+        state.window({ visible: true }).catch(() => {});
 
         // Resume if was playing before minimize
         if (state.wasPlayingBeforeMinimize) {
-          state.playback({ action: 'resume' }).catch(err => {
-            console.error('[VLC] Failed to resume on restore:', err);
-          });
+          state.playback({ action: 'resume' }).catch(() => {});
           set({ wasPlayingBeforeMinimize: false });
         }
       }
@@ -362,15 +411,15 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     window.electron.window.onPositionChanged(handlePositionChanged);
 
     listenersInitialized = true;
-    console.log('[VLC] Event listeners initialized');
   },
 
   // Setup sticky mode element tracking
   _setupStickyMode: () => {
-    const { stickyElement, screenMode, isAvailable } = get();
+    const state = get();
+    const { stickyElement, screenMode, isAvailable } = state;
 
     // Cleanup existing observer
-    get()._cleanupStickyMode();
+    state._cleanupStickyMode();
 
     // Only setup if in sticky mode with element and VLC available
     if (screenMode !== 'sticky' || !stickyElement || !isAvailable) {
@@ -385,7 +434,6 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     });
 
     resizeObserver.observe(stickyElement);
-    console.log('[VLC] Sticky mode element tracking setup complete');
   },
 
   // Cleanup sticky mode observers
@@ -398,10 +446,10 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
   // Sync VLC window with sticky element bounds
   _syncWindowBounds: (windowPos: { x: number; y: number; scaleFactor: number }) => {
-    const { stickyElement } = get();
+    const state = get();
+    const { stickyElement, screenMode } = state;
     if (!stickyElement) return;
 
-    console.log('[VLC Sticky] syncWindowBounds called');
     const rect = stickyElement.getBoundingClientRect();
 
     // Convert client coordinates to screen coordinates
@@ -417,13 +465,10 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
       height: screenHeight,
     };
 
-
     // Only update if bounds are valid
     if (bounds.width > 0 && bounds.height > 0) {
-      if (get().screenMode === 'sticky') {
-        get().window({ resize: bounds }).catch(err => {
-          console.error('[VLC] Failed to sync window bounds:', err);
-        });
+      if (screenMode === 'sticky') {
+        state.window({ resize: bounds }).catch(() => {});
       } else {
         set({ lastStickyBounds: bounds });
       }
@@ -432,12 +477,13 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
   // Set screen mode and handle mode transitions
   setScreenMode: (mode: ScreenMode) => {
-    const currentMode = get().screenMode;
+    const state = get();
+    const { screenMode: currentMode, prevScreenMode, isAvailable, lastStickyBounds } = state;
+
     if (currentMode === mode) {
-      mode = get().prevScreenMode;
+      mode = prevScreenMode;
     }
 
-    const { isAvailable, window: windowApi } = get();
     if (!isAvailable) return;
 
     set({ prevScreenMode: currentMode });
@@ -445,31 +491,22 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     // Handle mode transitions
     switch (mode) {
       case 'fullscreen':
-        windowApi({ screenMode: 'fullscreen' }).catch(err => {
-          console.error('[VLC] Failed to set fullscreen:', err);
-        });
+        state.window({ screenMode: 'fullscreen' }).catch(() => {});
         break;
 
       case 'free_ontop':
       case 'free':
-        windowApi({
-          screenMode: mode
-        }).catch(err => {
-          console.error('[VLC] Failed to set screen mode:', err);
-        });
+        state.window({ screenMode: mode }).catch(() => {});
         if (currentMode === 'sticky') {
-          get()._cleanupStickyMode();
+          state._cleanupStickyMode();
         }
         break;
 
       case 'sticky':
-        const { lastStickyBounds } = get();
-        windowApi({
+        state.window({
           screenMode: 'sticky',
           resize: lastStickyBounds
-        }).catch(err => {
-          console.error('[VLC] Failed to set sticky mode:', err);
-        });
+        }).catch(() => {});
         break;
     }
   },
@@ -478,11 +515,12 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   setStickyElement: (element: HTMLElement | null) => {
     set({ stickyElement: element });
 
+    const state = get();
     // Setup sticky mode if element is provided and mode is sticky
-    if (element && get().screenMode === 'sticky') {
-      get()._setupStickyMode();
+    if (element && state.screenMode === 'sticky') {
+      state._setupStickyMode();
     } else {
-      get()._cleanupStickyMode();
+      state._cleanupStickyMode();
     }
   },
 
@@ -557,8 +595,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
     try {
       return await window.electron.vlc.window(options);
-    } catch (error) {
-      console.error('[VLC] Window error:', error);
+    } catch {
       return false;
     }
   },

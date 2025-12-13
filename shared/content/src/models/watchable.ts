@@ -3,9 +3,8 @@ import { ListType, LucideIcon } from "../types/ui-types";
 import { ViewObject } from "./view-object";
 import { M3UObject } from "../types/m3u-types";
 import { UserItemData } from "../types/user-data";
-import { PlayableItem } from "@zenith-tv/types";
 
-export class WatchableObject extends ViewObject implements PlayableItem {
+export class WatchableObject extends ViewObject {
   public Url: string = "";
   public Group: string = "";
   public Year: number | undefined = undefined;

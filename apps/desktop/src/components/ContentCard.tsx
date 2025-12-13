@@ -4,7 +4,7 @@ import { useContentStore } from '@/stores/content';
 import { useUniversalPlayerStore } from '@/stores/universalPlayerStore';
 import { Badge } from '@zenith-tv/ui/badge';
 import { Button } from '@zenith-tv/ui/button';
-import { Play, Star, Radio, Tv, Film } from 'lucide-react';
+import { Play, Star, Radio, Tv, Film, Check } from 'lucide-react';
 
 interface ContentCardProps {
   item: WatchableObject;
@@ -32,6 +32,11 @@ export const ContentCard = memo(function ContentCard({ item, isSelected }: Conte
   const badge = getCategoryBadge();
   const CategoryIcon = badge.icon;
 
+  const isFavorite = item.userData?.favorite?.value ?? false;
+  const watchProgress = item.userData?.watchProgress;
+  const progressPercent = (watchProgress?.progress ?? 0) * 100;
+  const isWatched = watchProgress?.watched !== null && watchProgress?.watched !== undefined;
+
   const handleClick = () => {
     play(item);
   };
@@ -49,7 +54,7 @@ export const ContentCard = memo(function ContentCard({ item, isSelected }: Conte
       tabIndex={isSelected ? 0 : -1}
       aria-label={`${item.Name}. ${badge.text}. ${item.Group || 'No group'}`}
     >
-      <div className={`relative aspect-[2/3] bg-secondary rounded-lg overflow-hidden
+      <div className={`relative aspect-2/3 bg-secondary rounded-lg overflow-hidden
                     hover:ring-2 hover:ring-primary transition-all
                     ${isSelected ? 'ring-4 ring-primary ring-offset-2 ring-offset-background' : ''}`}>
         {item.Logo ? (
@@ -63,7 +68,7 @@ export const ContentCard = memo(function ContentCard({ item, isSelected }: Conte
             }}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary to-muted">
+          <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-secondary to-muted">
             <CategoryIcon className="w-16 h-16 text-muted-foreground/50" />
           </div>
         )}
@@ -90,13 +95,30 @@ export const ContentCard = memo(function ContentCard({ item, isSelected }: Conte
           size="icon"
           onClick={handleToggleFavorite}
           className="absolute top-2 left-2 h-7 w-7 bg-black/50 hover:bg-black/70"
-          title={item.userData?.favorite ? 'Remove from favorites' : 'Add to favorites'}
-          aria-label={item.userData?.favorite ? 'Remove from favorites' : 'Add to favorites'}
+          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         >
           <Star
-            className={`w-4 h-4 ${item.userData?.favorite ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`}
+            className={`w-4 h-4 ${isFavorite ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`}
           />
         </Button>
+
+        {/* Watched badge */}
+        {isWatched && (
+          <div className="absolute bottom-2 right-2 h-6 w-6 rounded-full bg-green-500 flex items-center justify-center">
+            <Check className="w-4 h-4 text-white" />
+          </div>
+        )}
+
+        {/* Watch progress bar */}
+        {watchProgress && progressPercent > 0 && progressPercent < 95 && (
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/50">
+            <div
+              className="h-full bg-primary transition-all"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        )}
 
         {/* Year badge if available */}
         {item.Year && (

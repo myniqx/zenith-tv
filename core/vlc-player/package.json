@@ -23,7 +23,7 @@
 		"download-sdk:win": "node scripts/download-vlc-sdk.js win32",
 		"download-sdk:linux": "node scripts/download-vlc-sdk.js linux",
 		"download-sdk:mac": "node scripts/download-vlc-sdk.js darwin",
-		"install": "bash scripts/build.sh install",
+		"setup": "bash scripts/build.sh install",
 		"build": "bash scripts/build.sh build",
 		"rebuild": "bash scripts/build.sh rebuild",
 		"clean": "bash scripts/build.sh clean"
