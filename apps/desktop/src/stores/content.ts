@@ -57,7 +57,7 @@ const getM3USource = (uuid: string) => `m3u/${uuid}/source.m3u`;
 const getM3UUpdate = (uuid: string) => `m3u/${uuid}/update.json`;
 const getM3UStats = (uuid: string) => `m3u/${uuid}/stats.json`;
 
-interface M3UUpdateData {
+export interface M3UUpdateData {
   items: Record<string, number>;
   createdAt: number;
   updatedAt: number;
@@ -116,6 +116,7 @@ type ContentState =
     getNextEpisode: (currentItem: WatchableObject) => WatchableObject | undefined;
     getPreviousEpisode: (currentItem: WatchableObject) => WatchableObject | undefined;
     calculateStats: () => M3UStats;
+    syncM3UData: (uuid: string, source: string, update: M3UUpdateData, stats: M3UStats) => Promise<void>;
   }
 
 export const useContentStore = create<ContentState>((set, get) => ({
@@ -839,5 +840,11 @@ export const useContentStore = create<ContentState>((set, get) => ({
       movieCount,
       totalWatchables,
     };
+  },
+
+  syncM3UData: async (uuid, source, update, stats) => {
+    await fileSystem.writeFile(getM3USource(uuid), source);
+    await fileSystem.writeJSON(getM3UUpdate(uuid), update);
+    await fileSystem.writeJSON(getM3UStats(uuid), stats);
   },
 }));
