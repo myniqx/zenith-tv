@@ -4,7 +4,6 @@ import { p2p } from '../libs/p2p';
 import { P2PConnection, P2PMessage, ProfileSyncPayload } from '../types/p2p';
 import { PairingRequestPayload } from '../types/p2p-payloads';
 import { httpDiscovery, DiscoveredController } from '../services/httpDiscovery';
-import WebSocket from 'ws';
 
 // Extend payload to include connectionId for internal tracking
 interface PendingPairingRequest extends PairingRequestPayload {
@@ -63,8 +62,7 @@ interface P2PStoreState {
   // Using if this device is web client and player!
   sendToRemote: <T = unknown>(message: P2PMessage<T>) => Promise<boolean>;
   // Using if this device is web server and remote!
-  sendToPlayer: <T = unknown>(message: P2PMessage<T>, toIds: string[] | null) => Promise<boolean>;
-  sendCommand: <T>(message: P2PMessage<T>) => Promise<boolean>;
+  sendToPlayer: <T = unknown>(message: P2PMessage<T>, toIds?: string[]) => Promise<boolean>;
   broadcastState: <T>(state: T) => void;
 
   // Discovery actions
@@ -267,7 +265,7 @@ export const useP2PStore = create<P2PStoreState>()(
         set({ pairingRequest: null });
       },
 
-      sendToPlayer: async (message) => {
+      sendToRemote: async (message) => {
         const { mode, clientSocket } = get();
 
         if (mode === 'client') {
@@ -279,7 +277,7 @@ export const useP2PStore = create<P2PStoreState>()(
         return false;
       },
 
-      sendToRemote: async (message, toIds = []) => {
+      sendToPlayer: async (message, toIds = []) => {
         const { mode, selectedDeviceId } = get();
 
         if (mode === 'server') {
@@ -294,28 +292,6 @@ export const useP2PStore = create<P2PStoreState>()(
           return result;
         }
         return false;
-      },
-
-      sendCommand: async (message) => {
-        const { mode, selectedDeviceId, clientSocket } = get();
-
-        if (mode === 'server') {
-          if (!selectedDeviceId) return false;
-          return await p2p.send(selectedDeviceId, message);
-        } else if (mode === 'client') {
-          if (clientSocket && clientSocket.readyState === WebSocket.OPEN) {
-            clientSocket.send(JSON.stringify(message));
-            return true;
-          }
-        }
-        return false;
-      },
-
-      sendProfileSync: async (payload) => {
-        return await get().sendCommand({
-          type: 'profile_sync',
-          payload
-        });
       },
 
       broadcastState: (state) => {
@@ -344,6 +320,8 @@ export const useP2PStore = create<P2PStoreState>()(
 
       _handleMessage: (connectionId, message) => {
         const { type, payload } = message;
+
+        console.log('[P2PManager] Received message:', message);
 
         // Update lastReceivedMessage for subscribers
         set({ lastReceivedMessage: { connectionId, message, timestamp: Date.now() } });

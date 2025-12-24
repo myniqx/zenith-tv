@@ -9,6 +9,7 @@ import { FileSyncedState, syncFile } from '@/tools/fileSync';
 import { fileSystem, http } from '@/libs';
 import { useProfilesStore } from './profiles';
 import { useSettingsStore } from './settings';
+import { ProfileSyncPayload } from '@/types/p2p';
 
 export type CategoryType = 'all' | 'movies' | 'series' | 'live' | 'favorites' | 'recent';
 export type SortBy = 'name' | 'date' | 'recent';
@@ -87,6 +88,7 @@ type ContentState =
     isLoading: boolean;
     currentUsername: string | null;
     currentUUID: string | null;
+    currentM3UUrl: string | null;
 
     movieGroup: GroupObject,
     tvShowGroup: GroupObject,
@@ -117,6 +119,8 @@ type ContentState =
     getPreviousEpisode: (currentItem: WatchableObject) => WatchableObject | undefined;
     calculateStats: () => M3UStats;
     syncM3UData: (uuid: string, source: string, update: M3UUpdateData, stats: M3UStats) => Promise<void>;
+
+    getWellComePayload: () => ProfileSyncPayload | null;
   }
 
 export const useContentStore = create<ContentState>((set, get) => ({
@@ -148,6 +152,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
   isLoading: false,
   currentUsername: null,
   currentUUID: null,
+  currentM3UUrl: null,
 
   movieGroup: null!,
   tvShowGroup: null!,
@@ -155,6 +160,19 @@ export const useContentStore = create<ContentState>((set, get) => ({
   recentGroup: null!,
   favoriteGroup: null!,
   watchedGroup: null!,
+
+  getWellComePayload(): ProfileSyncPayload | null {
+    const { currentUsername, currentUUID, currentM3UUrl } = get()
+    if (!currentM3UUrl) return null
+    return {
+      profile: {
+        username: currentUsername!,
+        uuid: currentUUID!,
+        url: currentM3UUrl
+      },
+      userData: get().userData
+    }
+  },
 
   reset: () => {
     const favoriteGroup = new GroupObject("Favorites", LucideHeart);
@@ -173,6 +191,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       isLoading: false,
       currentUsername: null,
       currentUUID: null,
+      currentM3UUrl: null,
       movieGroup: new GroupObject("Movies", LucideTheater),
       tvShowGroup: new GroupObject("TV Shows", LucideTv),
       streamGroup: new GroupObject("Live Streams", LucidePodcast),
@@ -191,6 +210,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     set({
       currentUsername: username,
       currentUUID: uuid,
+      currentM3UUrl: useProfilesStore.getState().getUrlFromUUID(uuid),
     });
     useSettingsStore.getState().setLastProfile(username, uuid);
     await get().setUserDataFile(getUserDataPath(username));

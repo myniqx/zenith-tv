@@ -1,18 +1,28 @@
 import { useEffect } from 'react';
 import { useP2PStore } from '../../stores/p2pStore';
 import { useVlcPlayerStore } from '../../stores/vlcPlayer';
-import { useContentStore } from '../../stores/content';
+import { useContentStore, UserData } from '../../stores/content';
 import { useProfilesStore } from '../../stores/profiles';
-import { PlaybackOptions, AudioOptions, VideoOptions, SubtitleOptions, WindowOptions, ShortcutOptions } from '../../types/types';
-import { ProfileSyncPayload, ProfileInfo } from '../../types/p2p';
+import { PlaybackOptions, AudioOptions, VideoOptions, SubtitleOptions, WindowOptions, ShortcutOptions, OpenOptions } from '../../types/types';
+import { ProfileSyncPayload } from '../../types/p2p';
 import { mergeUserData } from '../../utils/profileSync';
 import { fileSystem } from '../../libs/fileSystem';
 
 export function P2PManager() {
-  const { mode, connectionStatus, broadcastState, lastReceivedMessage, lastProfileSync, sendProfileSync } = useP2PStore();
+  const { mode, connectionStatus, broadcastState, lastReceivedMessage, lastProfileSync, sendToPlayer, sendToRemote, lastConnection } = useP2PStore();
   const vlcStore = useVlcPlayerStore();
   const contentStore = useContentStore();
   const profilesStore = useProfilesStore();
+
+  useEffect(() => {
+    if (connectionStatus === 'connected' && lastConnection?.id) {
+      console.log('[P2PManager] Sending welcome payload');
+      sendToPlayer({
+        type: 'profile_sync',
+        payload: contentStore.getWellComePayload()
+      }, [lastConnection.id]);
+    }
+  }, [lastConnection]);
 
 
   // Handle incoming commands (RemoteController -> PlayerDevice)
@@ -43,7 +53,7 @@ export function P2PManager() {
         vlcStore.shortcut(payload as ShortcutOptions);
         break;
       case 'open':
-        vlcStore.open(payload as any);
+        vlcStore.open(payload as OpenOptions);
         break;
       case 'profile_sync':
         handleProfileSync(payload as ProfileSyncPayload);
@@ -59,8 +69,10 @@ export function P2PManager() {
     if (payload.profile) {
       const { username, uuid, url } = payload.profile;
 
+      const existedUUID = profilesStore.getUUIDFromURL(url);
+
       // Check if M3U already exists (might be added to different profile)
-      const m3uExists = await fileSystem.exists(`m3u/${uuid}/source.m3u`);
+      const m3uExists = !!existedUUID
 
       // Check if profile exists
       const existingProfile = profilesStore.profiles.find((p) => p.username === username);
@@ -77,7 +89,12 @@ export function P2PManager() {
 
       // Request full sync only if M3U doesn't exist
       if (!m3uExists) {
-        await sendProfileSync({ request: 'full' });
+        await sendToRemote({
+          type: 'profile_sync',
+          payload: {
+            request: 'full'
+          }
+        });
         console.log('[P2PManager] Requested full sync from server');
       } else {
         console.log('[P2PManager] M3U already exists, skipping download');
@@ -114,7 +131,12 @@ export function P2PManager() {
       console.log('[P2PManager] Merged and saved userData');
 
       // Send merged data back to server
-      await sendProfileSync({ userData: mergedUserData });
+      await sendToRemote({
+        type: 'profile_sync',
+        payload: {
+          userData: mergedUserData
+        }
+      });
       console.log('[P2PManager] Sent merged userData back to server');
     }
   };
@@ -140,18 +162,10 @@ export function P2PManager() {
   const handleProfileSyncRequest = async () => {
     console.log('[P2PManager] Client requested full profile sync');
 
-    const currentUsername = profilesStore.getCurrentUsername();
     const currentUUID = profilesStore.getCurrentUUID();
 
-    if (!currentUsername || !currentUUID) {
+    if (!currentUUID) {
       console.warn('[P2PManager] No active profile to sync');
-      return;
-    }
-
-    // Get profile M3U URL
-    const profile = profilesStore.profiles.find((p) => p.username === currentUsername);
-    if (!profile) {
-      console.warn('[P2PManager] Profile not found');
       return;
     }
 
@@ -160,16 +174,12 @@ export function P2PManager() {
       const source = await fileSystem.readFile(`m3u/${currentUUID}/source.m3u`);
       const update = await fileSystem.readJSON(`m3u/${currentUUID}/update.json`);
       const stats = await fileSystem.readJSON(`m3u/${currentUUID}/stats.json`);
-      const userData = contentStore.userData;
 
-      await sendProfileSync({
-        profile: {
-          username: currentUsername,
-          uuid: currentUUID,
-          url: profile.m3uUrl
-        },
-        m3uData: { source, update, stats },
-        userData
+      await sendToPlayer({
+        type: 'profile_sync',
+        payload: {
+          m3uData: { source, update, stats },
+        }
       });
 
       console.log('[P2PManager] Sent full profile sync data');
@@ -179,7 +189,7 @@ export function P2PManager() {
   };
 
   // Handle user data merge from client (Server side)
-  const handleUserDataMerge = async (remoteUserData: any) => {
+  const handleUserDataMerge = async (remoteUserData: UserData) => {
     console.log('[P2PManager] Received userData from client, merging...');
 
     const localUserData = contentStore.userData;

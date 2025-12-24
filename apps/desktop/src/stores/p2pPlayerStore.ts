@@ -136,7 +136,7 @@ export const useP2PPlayerStore = create<P2PPlayerState>((set, get) => ({
   },
 
   open: async (options) => {
-    await useP2PStore.getState().sendCommand({
+    await useP2PStore.getState().sendToPlayer({
       type: 'open',
       payload: options
     });
@@ -148,35 +148,35 @@ export const useP2PPlayerStore = create<P2PPlayerState>((set, get) => ({
       set({ time: options.time });
     }
 
-    await useP2PStore.getState().sendCommand({
+    await useP2PStore.getState().sendToPlayer({
       type: 'playback',
       payload: options
     });
   },
 
   audio: async (options) => {
-    await useP2PStore.getState().sendCommand({
+    await useP2PStore.getState().sendToPlayer({
       type: 'audio',
       payload: options
     });
   },
 
   video: async (options) => {
-    await useP2PStore.getState().sendCommand({
+    await useP2PStore.getState().sendToPlayer({
       type: 'video',
       payload: options
     });
   },
 
   subtitle: async (options) => {
-    await useP2PStore.getState().sendCommand({
+    await useP2PStore.getState().sendToPlayer({
       type: 'subtitle',
       payload: options
     });
   },
 
   window: async (options) => {
-    await useP2PStore.getState().sendCommand({
+    await useP2PStore.getState().sendToPlayer({
       type: 'window',
       payload: options
     });
@@ -184,7 +184,7 @@ export const useP2PPlayerStore = create<P2PPlayerState>((set, get) => ({
   },
 
   shortcut: async (options) => {
-    await useP2PStore.getState().sendCommand({
+    await useP2PStore.getState().sendToPlayer({
       type: 'shortcut',
       payload: options
     });
