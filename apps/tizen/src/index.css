@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "@zenith-tv/ui/styles";
+
+/* Focus styles for D-pad navigation */
+[data-focusable="true"]:focus {
+  outline: 3px solid #ef4444;
+  outline-offset: 2px;
+}

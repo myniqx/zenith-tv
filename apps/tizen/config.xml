@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://zenith-tv.app/tizen"
+        version="1.0.0">
+    <name>Zenith TV</name>
+    <description>Modern IPTV player for Tizen</description>
+    <icon src="icon.png"/>
+
+    <tizen:application id="zeniTHTizen.ZenithTV" package="zeniTHTizen" required_version="5.0"/>
+
+    <!-- Permissions -->
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/filesystem.read"/>
+    <tizen:privilege name="http://tizen.org/privilege/filesystem.write"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:privilege name="http://tizen.org/privilege/volume.set"/>
+    <tizen:privilege name="http://tizen.org/privilege/notification"/>
+
+    <!-- Content Security Policy -->
+    <tizen:content-security-policy>default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' http: https: ws: wss:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'</tizen:content-security-policy>
+
+    <content src="index.html"/>
+    <access origin="*" subdomains="true"/>
+
+    <tizen:metadata key="http://samsung.com/tv/metadata/use.preview" value="endpoint_URL"/>
+    <tizen:profile name="tv-samsung"/>
+</widget>
