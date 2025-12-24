@@ -18,6 +18,7 @@ type ProfilesState = {
 
   // M3U Map helpers
   getUrlFromUUID: (uuid: string) => string | null;
+  getUUIDFromURL: (url: string) => string | null;
   getOrCreateUUID: (url: string) => string;
   removeURLMapping: (url: string) => void;
   isUUIDUsed: (uuid: string) => boolean;
@@ -42,266 +43,271 @@ export const useProfilesStore = create<ProfilesState>()(
       profiles: [],
       m3uMap: {},
 
-  // Current state getters (from content store)
-  getCurrentUsername: () => {
-    return useContentStore.getState().currentUsername;
-  },
-
-  getCurrentUUID: () => {
-    return useContentStore.getState().currentUUID;
-  },
-
-  // M3U Map helpers
-  getUrlFromUUID: (uuid) => {
-    const { m3uMap } = get();
-    return Object.entries(m3uMap).find(([_, id]) => id === uuid)?.[0] || null;
-  },
-
-  getOrCreateUUID: (url) => {
-    const { m3uMap } = get();
-
-    if (m3uMap[url]) {
-      return m3uMap[url];
-    }
-
-    // Generate UUID v4
-    const uuid = window.crypto.randomUUID();
-
-    set((state) => ({
-      m3uMap: {
-        ...state.m3uMap,
-        [url]: uuid,
+      // Current state getters (from content store)
+      getCurrentUsername: () => {
+        return useContentStore.getState().currentUsername;
       },
-    }));
 
-    return uuid;
-  },
+      getCurrentUUID: () => {
+        return useContentStore.getState().currentUUID;
+      },
 
-  removeURLMapping: (url) => {
-    set((state) => {
-      const newMap = { ...state.m3uMap };
-      delete newMap[url];
-      return { m3uMap: newMap };
-    });
-  },
+      // M3U Map helpers
+      getUrlFromUUID: (uuid) => {
+        const { m3uMap } = get();
+        return Object.entries(m3uMap).find(([_, id]) => id === uuid)?.[0] || null;
+      },
 
-  isUUIDUsed: (uuid) => {
-    const { profiles } = get();
-    return profiles.some((profile) => profile.m3uRefs.includes(uuid));
-  },
+      getUUIDFromURL: (url) => {
+        const { m3uMap } = get();
+        return m3uMap[url] || null;
+      },
 
-  cleanupUnusedUUID: async (uuid) => {
-    const { isUUIDUsed, m3uMap } = get();
+      getOrCreateUUID: (url) => {
+        const { m3uMap } = get();
 
-    // Check if UUID is still used by any profile
-    if (isUUIDUsed(uuid)) {
-      return; // Still in use, don't delete
-    }
+        if (m3uMap[url]) {
+          return m3uMap[url];
+        }
 
-    try {
-      // Delete /m3u/{uuid} directory and its contents
-      const m3uPath = `m3u/${uuid}`;
-      const exists = await fileSystem.exists(m3uPath);
+        // Generate UUID v4
+        const uuid = window.crypto.randomUUID();
 
-      if (exists) {
-        await fileSystem.delete(m3uPath);
-        console.log(`[Cleanup] Deleted unused M3U directory: ${m3uPath}`);
-      }
+        set((state) => ({
+          m3uMap: {
+            ...state.m3uMap,
+            [url]: uuid,
+          },
+        }));
 
-      // Remove URL mapping from m3uMap
-      const urlToRemove = Object.keys(m3uMap).find((url) => m3uMap[url] === uuid);
-      if (urlToRemove) {
+        return uuid;
+      },
+
+      removeURLMapping: (url) => {
         set((state) => {
           const newMap = { ...state.m3uMap };
-          delete newMap[urlToRemove];
+          delete newMap[url];
           return { m3uMap: newMap };
         });
-        console.log(`[Cleanup] Removed M3U URL mapping: ${urlToRemove}`);
-      }
-    } catch (error) {
-      console.error(`[Cleanup] Failed to cleanup UUID ${uuid}:`, error);
-    }
-  },
+      },
 
-  // Profile actions
-  createProfile: (username) => {
-    const { profiles } = get();
+      isUUIDUsed: (uuid) => {
+        const { profiles } = get();
+        return profiles.some((profile) => profile.m3uRefs.includes(uuid));
+      },
 
-    if (profiles.some((p) => p.username === username)) {
-      useToastStore.getState().error('Profile already exists');
-      throw new Error('Profile already exists');
-    }
+      cleanupUnusedUUID: async (uuid) => {
+        const { isUUIDUsed, m3uMap } = get();
 
-    const newProfile: Profile = {
-      username,
-      createdAt: Date.now(),
-      m3uRefs: [],
-      lastLogin: Date.now(),
-    };
+        // Check if UUID is still used by any profile
+        if (isUUIDUsed(uuid)) {
+          return; // Still in use, don't delete
+        }
 
-    set((state) => ({
-      profiles: [...state.profiles, newProfile],
-    }));
-    useToastStore.getState().success(`Profile "${username}" created`);
-  },
+        try {
+          // Delete /m3u/{uuid} directory and its contents
+          const m3uPath = `m3u/${uuid}`;
+          const exists = await fileSystem.exists(m3uPath);
 
-  createProfileFromFile: async (username) => {
-    try {
-      const filePath = await dialog.pickM3UFile();
-      if (!filePath) return null;
+          if (exists) {
+            await fileSystem.delete(m3uPath);
+            console.log(`[Cleanup] Deleted unused M3U directory: ${m3uPath}`);
+          }
 
-      const fileUrl = `file://${filePath}`;
-      const content = await http.fetchM3U(fileUrl);
-      const items = await parseM3U(content);
+          // Remove URL mapping from m3uMap
+          const urlToRemove = Object.keys(m3uMap).find((url) => m3uMap[url] === uuid);
+          if (urlToRemove) {
+            set((state) => {
+              const newMap = { ...state.m3uMap };
+              delete newMap[urlToRemove];
+              return { m3uMap: newMap };
+            });
+            console.log(`[Cleanup] Removed M3U URL mapping: ${urlToRemove}`);
+          }
+        } catch (error) {
+          console.error(`[Cleanup] Failed to cleanup UUID ${uuid}:`, error);
+        }
+      },
 
-      if (!items?.length) {
-        useToastStore.getState().warning('No valid items found in M3U file');
-        return null;
-      }
+      // Profile actions
+      createProfile: (username) => {
+        const { profiles } = get();
 
-      const { profiles, getOrCreateUUID } = get();
+        if (profiles.some((p) => p.username === username)) {
+          useToastStore.getState().error('Profile already exists');
+          throw new Error('Profile already exists');
+        }
 
-      if (profiles.some((p) => p.username === username)) {
-        useToastStore.getState().error('Profile already exists');
-        return null;
-      }
+        const newProfile: Profile = {
+          username,
+          createdAt: Date.now(),
+          m3uRefs: [],
+          lastLogin: Date.now(),
+        };
 
-      const uuid = getOrCreateUUID(fileUrl);
+        set((state) => ({
+          profiles: [...state.profiles, newProfile],
+        }));
+        useToastStore.getState().success(`Profile "${username}" created`);
+      },
 
-      const newProfile: Profile = {
-        username,
-        createdAt: Date.now(),
-        m3uRefs: [uuid],
-        lastLogin: Date.now(),
-      };
+      createProfileFromFile: async (username) => {
+        try {
+          const filePath = await dialog.pickM3UFile();
+          if (!filePath) return null;
 
-      set((state) => ({
-        profiles: [...state.profiles, newProfile],
-      }));
-      useToastStore.getState().success(`Profile "${username}" created from file`);
+          const fileUrl = `file://${filePath}`;
+          const content = await http.fetchM3U(fileUrl);
+          const items = await parseM3U(content);
 
-      return { username, uuid };
-    } catch (error) {
-      console.error('Failed to create profile from file:', error);
-      useToastStore.getState().error('Failed to import M3U file');
-      return null;
-    }
-  },
+          if (!items?.length) {
+            useToastStore.getState().warning('No valid items found in M3U file');
+            return null;
+          }
 
-  deleteProfile: async (username) => {
-    const { profiles, cleanupUnusedUUID } = get();
+          const { profiles, getOrCreateUUID } = get();
 
-    // Get current username before any state changes
-    const currentUsername = useContentStore.getState().currentUsername;
+          if (profiles.some((p) => p.username === username)) {
+            useToastStore.getState().error('Profile already exists');
+            return null;
+          }
 
-    // Get profile's UUIDs before deleting
-    const profile = profiles.find((p) => p.username === username);
-    const uuidsToCleanup = profile?.m3uRefs || [];
+          const uuid = getOrCreateUUID(fileUrl);
 
-    // Clear content if deleted profile was selected (before profile deletion)
-    if (currentUsername === username) {
-      useContentStore.getState().reset();
-    }
+          const newProfile: Profile = {
+            username,
+            createdAt: Date.now(),
+            m3uRefs: [uuid],
+            lastLogin: Date.now(),
+          };
 
-    // Remove profile
-    set((state) => ({
-      profiles: state.profiles.filter((p) => p.username !== username),
-    }));
+          set((state) => ({
+            profiles: [...state.profiles, newProfile],
+          }));
+          useToastStore.getState().success(`Profile "${username}" created from file`);
 
-    // Cleanup unused UUID files
-    for (const uuid of uuidsToCleanup) {
-      await cleanupUnusedUUID(uuid);
-    }
+          return { username, uuid };
+        } catch (error) {
+          console.error('Failed to create profile from file:', error);
+          useToastStore.getState().error('Failed to import M3U file');
+          return null;
+        }
+      },
 
-    useToastStore.getState().success(`Profile "${username}" deleted`);
-  },
+      deleteProfile: async (username) => {
+        const { profiles, cleanupUnusedUUID } = get();
 
-  selectProfile: async (username, uuid?) => {
-    const { profiles } = get();
-    const profile = profiles.find((p) => p.username === username);
+        // Get current username before any state changes
+        const currentUsername = useContentStore.getState().currentUsername;
 
-    if (!profile) {
-      useToastStore.getState().error('Profile not found');
-      return;
-    }
+        // Get profile's UUIDs before deleting
+        const profile = profiles.find((p) => p.username === username);
+        const uuidsToCleanup = profile?.m3uRefs || [];
 
-    // If UUID provided, use it; otherwise use first M3U in profile
-    const selectedUUID = uuid || profile.m3uRefs[0];
+        // Clear content if deleted profile was selected (before profile deletion)
+        if (currentUsername === username) {
+          useContentStore.getState().reset();
+        }
 
-    if (!selectedUUID) {
-      useToastStore.getState().warning('No M3U sources in this profile');
-      return;
-    }
+        // Remove profile
+        set((state) => ({
+          profiles: state.profiles.filter((p) => p.username !== username),
+        }));
 
-    // Update lastLogin timestamp
-    set((state) => ({
-      profiles: state.profiles.map((p) =>
-        p.username === username ? { ...p, lastLogin: Date.now() } : p
-      ),
-    }));
+        // Cleanup unused UUID files
+        for (const uuid of uuidsToCleanup) {
+          await cleanupUnusedUUID(uuid);
+        }
 
-    // Update content store with selected profile and UUID
-    await useContentStore.getState().setContent(username, selectedUUID);
-  },
+        useToastStore.getState().success(`Profile "${username}" deleted`);
+      },
 
-  addM3UToProfile: (username, m3uUrl) => {
-    const { profiles, getOrCreateUUID } = get();
+      selectProfile: async (username, uuid?) => {
+        const { profiles } = get();
+        const profile = profiles.find((p) => p.username === username);
 
-    const uuid = getOrCreateUUID(m3uUrl);
+        if (!profile) {
+          useToastStore.getState().error('Profile not found');
+          return;
+        }
 
-    const profile = profiles.find((p) => p.username === username);
-    if (!profile) {
-      throw new Error('Profile not found');
-    }
+        // If UUID provided, use it; otherwise use first M3U in profile
+        const selectedUUID = uuid || profile.m3uRefs[0];
 
-    if (profile.m3uRefs.includes(uuid)) {
-      useToastStore.getState().info('M3U already in profile');
-      return uuid;
-    }
+        if (!selectedUUID) {
+          useToastStore.getState().warning('No M3U sources in this profile');
+          return;
+        }
 
-    set((state) => ({
-      profiles: state.profiles.map((p) =>
-        p.username === username ? { ...p, m3uRefs: [...p.m3uRefs, uuid] } : p
-      ),
-    }));
+        // Update lastLogin timestamp
+        set((state) => ({
+          profiles: state.profiles.map((p) =>
+            p.username === username ? { ...p, lastLogin: Date.now() } : p
+          ),
+        }));
 
-    useToastStore.getState().success('M3U added to profile');
-    return uuid;
-  },
+        // Update content store with selected profile and UUID
+        await useContentStore.getState().setContent(username, selectedUUID);
+      },
 
-  removeM3UFromProfile: async (username, uuid) => {
-    const { profiles, getCurrentUUID, cleanupUnusedUUID } = get();
-    const currentUUID = getCurrentUUID();
+      addM3UToProfile: (username, m3uUrl) => {
+        const { profiles, getOrCreateUUID } = get();
 
-    const profile = profiles.find((p) => p.username === username);
-    if (!profile) {
-      throw new Error('Profile not found');
-    }
+        const uuid = getOrCreateUUID(m3uUrl);
 
-    if (!profile.m3uRefs.includes(uuid)) {
-      useToastStore.getState().warning('M3U not found in profile');
-      return;
-    }
+        const profile = profiles.find((p) => p.username === username);
+        if (!profile) {
+          throw new Error('Profile not found');
+        }
 
-    // Remove UUID from profile
-    set((state) => ({
-      profiles: state.profiles.map((p) =>
-        p.username === username
-          ? { ...p, m3uRefs: p.m3uRefs.filter((ref) => ref !== uuid) }
-          : p
-      ),
-    }));
+        if (profile.m3uRefs.includes(uuid)) {
+          useToastStore.getState().info('M3U already in profile');
+          return uuid;
+        }
 
-    // Clear content if removed M3U was selected
-    if (currentUUID === uuid) {
-      useContentStore.getState().reset();
-    }
+        set((state) => ({
+          profiles: state.profiles.map((p) =>
+            p.username === username ? { ...p, m3uRefs: [...p.m3uRefs, uuid] } : p
+          ),
+        }));
 
-    // Cleanup unused UUID files
-    await cleanupUnusedUUID(uuid);
+        useToastStore.getState().success('M3U added to profile');
+        return uuid;
+      },
 
-    useToastStore.getState().success('M3U removed from profile');
-  },
+      removeM3UFromProfile: async (username, uuid) => {
+        const { profiles, getCurrentUUID, cleanupUnusedUUID } = get();
+        const currentUUID = getCurrentUUID();
+
+        const profile = profiles.find((p) => p.username === username);
+        if (!profile) {
+          throw new Error('Profile not found');
+        }
+
+        if (!profile.m3uRefs.includes(uuid)) {
+          useToastStore.getState().warning('M3U not found in profile');
+          return;
+        }
+
+        // Remove UUID from profile
+        set((state) => ({
+          profiles: state.profiles.map((p) =>
+            p.username === username
+              ? { ...p, m3uRefs: p.m3uRefs.filter((ref) => ref !== uuid) }
+              : p
+          ),
+        }));
+
+        // Clear content if removed M3U was selected
+        if (currentUUID === uuid) {
+          useContentStore.getState().reset();
+        }
+
+        // Cleanup unused UUID files
+        await cleanupUnusedUUID(uuid);
+
+        useToastStore.getState().success('M3U removed from profile');
+      },
     }),
     {
       name: 'zenith-profiles',
