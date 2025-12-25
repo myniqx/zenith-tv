@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { p2p } from '../libs/p2p';
-import { P2PConnection, P2PMessage, ProfileSyncPayload } from '../types/p2p';
+import { P2PConnection, P2PMessage, ProfileSyncPayload } from '../../../../shared/content/src/types/p2p';
 import { PairingRequestPayload } from '../types/p2p-payloads';
 import { httpDiscovery, DiscoveredController } from '../services/httpDiscovery';
 

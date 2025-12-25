@@ -15,7 +15,7 @@ export class HttpError extends Error {
   }
 }
 
-export async function fetchM3U(
+async function fetchM3UInternal(
   url: string,
   options: FetchOptions = {}
 ): Promise<string> {
@@ -71,7 +71,7 @@ export async function fetchM3U(
       }
     }
 
-    const blob = new Blob(chunks)
+    const blob = new Blob(chunks as BlobPart[])
     return await blob.text()
   } catch (error) {
     clearTimeout(timeoutId)
@@ -87,7 +87,7 @@ export async function fetchM3U(
   }
 }
 
-export async function fetchWithRetry(
+async function fetchWithRetryInternal(
   url: string,
   options: FetchOptions & { maxRetries?: number } = {}
 ): Promise<string> {
@@ -97,7 +97,7 @@ export async function fetchWithRetry(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await fetchM3U(url, fetchOptions)
+      return await fetchM3UInternal(url, fetchOptions)
     } catch (error) {
       lastError = error as Error
       console.warn(`[HTTP] Attempt ${attempt}/${maxRetries} failed:`, error)
@@ -112,7 +112,7 @@ export async function fetchWithRetry(
   throw lastError || new HttpError('All retry attempts failed')
 }
 
-export function validateM3UURL(url: string): boolean {
+function validateM3UURLInternal(url: string): boolean {
   try {
     const parsed = new URL(url)
     return ['http:', 'https:'].includes(parsed.protocol)
@@ -120,3 +120,58 @@ export function validateM3UURL(url: string): boolean {
     return false
   }
 }
+
+/**
+ * Type-safe HTTP utilities for Tizen
+ * API compatible with Desktop version
+ */
+export const http = {
+  /**
+   * Fetch M3U file with progress tracking
+   */
+  async fetchM3U(url: string, onProgress?: (progress: number) => void): Promise<string> {
+    return fetchM3UInternal(url, {
+      onProgress: onProgress ? (loaded, total) => {
+        const progress = total > 0 ? (loaded / total) * 100 : 0
+        onProgress(progress)
+      } : undefined
+    })
+  },
+
+  /**
+   * Fetch with retry logic
+   */
+  async fetchWithRetry(
+    url: string,
+    maxRetries = 3,
+    options: FetchOptions = {}
+  ): Promise<string> {
+    return fetchWithRetryInternal(url, { ...options, maxRetries })
+  },
+
+  /**
+   * Validate M3U URL format
+   */
+  validateM3UURL(url: string): boolean {
+    return validateM3UURLInternal(url)
+  },
+
+  /**
+   * Download file as text
+   */
+  async downloadText(url: string, options?: FetchOptions): Promise<string> {
+    return fetchM3UInternal(url, options)
+  },
+
+  /**
+   * Check if URL is accessible
+   */
+  async isAccessible(url: string, timeout = 5000): Promise<boolean> {
+    try {
+      await fetchM3UInternal(url, { timeout })
+      return true
+    } catch {
+      return false
+    }
+  },
+} as const

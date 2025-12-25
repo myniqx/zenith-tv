@@ -1,19 +1,26 @@
 {
-  "name": "@zenith-tv/content",
-  "version": "0.1.0",
-  "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
-  "exports": {
-    ".": "./src/index.ts",
-    "./models": "./src/models/index.ts",
-    "./types": "./src/types/index.ts"
-  },
-  "dependencies": {
-    "@zenith-tv/types": "workspace:*",
-    "lucide-react": "^0.468.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.7.2"
-  }
+	"name": "@zenith-tv/content",
+	"version": "0.1.0",
+	"type": "module",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./models": "./src/models/index.ts",
+		"./types": "./src/types/index.ts",
+		"./stores/toast": "./src/stores/toast/index.ts",
+		"./stores/fileSync": "./src/stores/tools/fileSync/index.ts",
+		"./stores/content": "./src/stores/content/index.ts"
+	},
+	"scripts": {
+		"tsc": "tsc --noEmit"
+	},
+	"dependencies": {
+		"lucide-react": "^0.468.0",
+		"zustand": "^5.0.8"
+	},
+	"devDependencies": {
+		"@types/react": "^19.2.6",
+		"typescript": "^5.7.2"
+	}
 }

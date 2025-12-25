@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { parseM3U } from '../services/m3u-parser';
-import { useToastStore } from './toast';
+import { useToastStore } from '@zenith-tv/content';
 import { useContentStore } from './content';
 import { Profile } from '@/types/profiles';
 import { dialog, fileSystem, http } from '@/libs';

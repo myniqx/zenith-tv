@@ -44,12 +44,6 @@ importers:
       '@zenith-tv/parser':
         specifier: workspace:*
         version: link:../../core/parser
-      '@zenith-tv/protocol':
-        specifier: workspace:*
-        version: link:../../shared/protocol
-      '@zenith-tv/types':
-        specifier: workspace:*
-        version: link:../../shared/types
       '@zenith-tv/ui':
         specifier: workspace:*
         version: link:../../shared/ui
@@ -144,12 +138,6 @@ importers:
       '@zenith-tv/parser':
         specifier: workspace:*
         version: link:../../core/parser
-      '@zenith-tv/protocol':
-        specifier: workspace:*
-        version: link:../../shared/protocol
-      '@zenith-tv/types':
-        specifier: workspace:*
-        version: link:../../shared/types
       '@zenith-tv/ui':
         specifier: workspace:*
         version: link:../../shared/ui
@@ -217,31 +205,18 @@ importers:
 
   shared/content:
     dependencies:
-      '@zenith-tv/types':
-        specifier: workspace:*
-        version: link:../types
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.2.0)
+      zustand:
+        specifier: ^5.0.8
+        version: 5.0.8(@types/react@19.2.6)(react@19.2.0)
     devDependencies:
+      '@types/react':
+        specifier: ^19.2.6
+        version: 19.2.6
       typescript:
         specifier: ^5.7.2
-        version: 5.9.3
-
-  shared/protocol:
-    dependencies:
-      '@zenith-tv/types':
-        specifier: workspace:*
-        version: link:../types
-    devDependencies:
-      typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
-
-  shared/types:
-    devDependencies:
-      typescript:
-        specifier: ^5.3.3
         version: 5.9.3
 
   shared/ui:
@@ -276,9 +251,6 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.8
         version: 1.2.8(@types/react-dom@19.2.3(@types/react@19.2.6))(@types/react@19.2.6)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@zenith-tv/types':
-        specifier: workspace:*
-        version: link:../types
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

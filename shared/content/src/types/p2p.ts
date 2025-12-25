@@ -1,4 +1,5 @@
-import { UserData, M3UUpdateData, M3UStats } from '../stores/content';
+import { M3UStats, M3UUpdateData, UserData } from "../stores/content";
+
 
 export interface P2PConnection {
   id: string;

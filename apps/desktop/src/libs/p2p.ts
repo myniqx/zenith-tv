@@ -1,4 +1,4 @@
-import { P2PConnection, P2PMessage, P2PEventData } from '../types/p2p';
+import { P2PConnection, P2PMessage, P2PEventData } from '../../../../shared/content/src/types/p2p';
 
 export const p2p = {
   start: (port?: number, deviceName?: string) => window.electron.p2p.start(port, deviceName),

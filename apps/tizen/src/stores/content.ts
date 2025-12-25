@@ -1,13 +1,13 @@
-import { createContentStore } from '@zenith-tv/content'
-import { useToastStore } from '@zenith-tv/content'
-import { fileSystem, http } from '@/libs'
-import { parseM3U } from '../services/m3u-parser'
+import { createContentStore, useToastStore } from '@zenith-tv/content'
+import { fileSystem } from '@/lib/filesystem'
+import { http } from '@/lib/http'
+import { parseM3U } from '@/services/m3u-parser'
 import { useProfilesStore } from './profiles'
 import { useSettingsStore } from './settings'
 
 /**
- * Desktop implementation of content store
- * Uses shared content store factory with Desktop-specific dependencies
+ * Tizen implementation of content store
+ * Uses shared content store factory with Tizen-specific dependencies
  */
 export const useContentStore = createContentStore({
   fileSystem,
@@ -22,5 +22,5 @@ export const useContentStore = createContentStore({
   setLastProfile: (username, uuid) => useSettingsStore.getState().setLastProfile(username, uuid),
 })
 
-// Re-export types for backward compatibility
-export type { ContentState, CategoryType, SortBy, SortOrder, GroupBy, UserData, M3UStats, M3UUpdateData } from '@zenith-tv/content'
+// Re-export types for convenience
+export type { ContentState, CategoryType, SortBy, SortOrder, GroupBy } from '@zenith-tv/content'

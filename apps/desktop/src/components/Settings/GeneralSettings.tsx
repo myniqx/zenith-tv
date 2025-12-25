@@ -1,5 +1,5 @@
 import { useSettingsStore } from '../../stores/settings';
-import { useToastStore } from '../../stores/toast';
+import { useToastStore } from '@zenith-tv/content';
 import {
   Select,
   SelectContent,

@@ -1,4 +1,5 @@
 import { cn } from '@zenith-tv/ui/lib/cn'
+import { useFocusable } from '../hooks/useFocusable'
 
 export type MenuSection = 'favorites' | 'all' | 'p2p' | 'settings' | 'profile' | 'exit'
 
@@ -18,6 +19,30 @@ const MENU_LABELS: Record<MenuSection, string> = {
 
 export const HEADER_HEIGHT = 72
 
+function HeaderButton({ section, active, onClick }: { section: MenuSection; active: boolean; onClick: () => void }) {
+  const { ref, isFocused, focusProps } = useFocusable({
+    focusId: `menu-${section}`,
+    scopeId: 'header',
+    onEnter: onClick,
+  })
+
+  return (
+    <button
+      ref={ref}
+      {...focusProps}
+      onClick={onClick}
+      className={cn(
+        'px-6 py-2 rounded-lg transition-all font-semibold focus:outline-none',
+        active && 'bg-red-600 text-white scale-105',
+        !active && 'bg-gray-700 text-gray-300 hover:bg-gray-600',
+        isFocused && 'ring-2 ring-white ring-offset-2 ring-offset-gray-800'
+      )}
+    >
+      {MENU_LABELS[section]}
+    </button>
+  )
+}
+
 export function Header({ activeSection, onSectionChange }: HeaderProps) {
   const sections: MenuSection[] = ['favorites', 'all', 'p2p', 'settings', 'profile', 'exit']
 
@@ -32,20 +57,12 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
 
       <nav className="flex gap-3">
         {sections.map((section) => (
-          <button
+          <HeaderButton
             key={section}
-            id={`menu-${section}`}
-            data-focusable="true"
+            section={section}
+            active={activeSection === section}
             onClick={() => onSectionChange(section)}
-            className={cn(
-              'px-6 py-2 rounded-lg transition-all font-semibold focus:outline-none',
-              activeSection === section
-                ? 'bg-red-600 text-white scale-105'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            )}
-          >
-            {MENU_LABELS[section]}
-          </button>
+          />
         ))}
       </nav>
     </header>

@@ -29,7 +29,8 @@
   },
   "include": [
     "src/**/*",
-    "electron/**/*"
+    "electron/**/*",
+    "../../shared/content/src/types/p2p.ts"
   ],
   "exclude": [
     "node_modules",

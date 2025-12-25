@@ -15,5 +15,8 @@
   "files": [
     "index.ts",
     "pkg/"
-  ]
+  ],
+  "scripts": {
+    "tsc": "echo \"Skipping type-check for Rust/WASM package\""
+  }
 }

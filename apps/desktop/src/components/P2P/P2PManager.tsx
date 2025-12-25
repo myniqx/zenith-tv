@@ -4,7 +4,7 @@ import { useVlcPlayerStore } from '../../stores/vlcPlayer';
 import { useContentStore, UserData } from '../../stores/content';
 import { useProfilesStore } from '../../stores/profiles';
 import { PlaybackOptions, AudioOptions, VideoOptions, SubtitleOptions, WindowOptions, ShortcutOptions, OpenOptions } from '../../types/types';
-import { ProfileSyncPayload } from '../../types/p2p';
+import { ProfileSyncPayload } from '../../../../../shared/content/src/types/p2p';
 import { mergeUserData } from '../../utils/profileSync';
 import { fileSystem } from '../../libs/fileSystem';
 

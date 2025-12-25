@@ -26,7 +26,8 @@
 		"setup": "bash scripts/build.sh install",
 		"build": "bash scripts/build.sh build",
 		"rebuild": "bash scripts/build.sh rebuild",
-		"clean": "bash scripts/build.sh clean"
+		"clean": "bash scripts/build.sh clean",
+		"tsc": "echo \"Skipping type-check for C++ addon package\""
 	},
 	"dependencies": {
 		"node-addon-api": "^8.5.0"

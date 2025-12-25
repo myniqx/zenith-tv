@@ -1,4 +1,4 @@
-import { useToastStore } from '../stores/toast';
+import { useToastStore } from '@zenith-tv/content';
 import { Button } from '@zenith-tv/ui/button';
 import {
   CheckCircle,

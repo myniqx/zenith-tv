@@ -62,6 +62,15 @@ export class GroupObject extends ViewObject {
   }
 
   /**
+   * Removes the specified watchable from the Watchables array.
+   *
+   * @param {WatchableObject} watchable - The watchable to be removed.
+   */
+  public RemoveWatchable(watchable: WatchableObject) {
+    this.justRemove(watchable);
+  }
+
+  /**
    * Returns the total count of local items.
    *
    * @return {number} The total count of local items.
