@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useNavigation, FocusableElement } from '../contexts/NavigationContext'
+import { useNavigation } from '../contexts/NavigationContext'
 
 interface UseFocusableOptions {
   focusId: string
@@ -10,23 +10,27 @@ interface UseFocusableOptions {
 
 export function useFocusable({ focusId, scopeId, onEnter, disabled = false }: UseFocusableOptions) {
   const elementRef = useRef<HTMLElement>(null)
-  const { focusedId, registerFocusable, unregisterFocusable } = useNavigation()
+  const { focusedId } = useNavigation()
 
   const isFocused = focusedId === focusId
 
+  // Sadece data attributes set et
   useEffect(() => {
     const element = elementRef.current
     if (!element || disabled) return
 
-    const focusableElement = element as FocusableElement
-    focusableElement.dataset.focusId = focusId
-
-    registerFocusable(focusId, focusableElement, scopeId)
+    element.dataset.focusId = focusId
+    if (scopeId) {
+      element.dataset.focusScope = scopeId
+    }
 
     return () => {
-      unregisterFocusable(focusId)
+      delete element.dataset.focusId
+      if (scopeId) {
+        delete element.dataset.focusScope
+      }
     }
-  }, [focusId, scopeId, registerFocusable, unregisterFocusable, disabled])
+  }, [focusId, scopeId, disabled])
 
   useEffect(() => {
     if (isFocused && onEnter) {

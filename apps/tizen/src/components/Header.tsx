@@ -1,5 +1,4 @@
-import { cn } from '@zenith-tv/ui/lib/cn'
-import { useFocusable } from '../hooks/useFocusable'
+import { FocusButton } from './Navigation'
 
 export type MenuSection = 'favorites' | 'all' | 'p2p' | 'settings' | 'profile' | 'exit'
 
@@ -20,26 +19,15 @@ const MENU_LABELS: Record<MenuSection, string> = {
 export const HEADER_HEIGHT = 72
 
 function HeaderButton({ section, active, onClick }: { section: MenuSection; active: boolean; onClick: () => void }) {
-  const { ref, isFocused, focusProps } = useFocusable({
-    focusId: `menu-${section}`,
-    scopeId: 'header',
-    onEnter: onClick,
-  })
-
   return (
-    <button
-      ref={ref}
-      {...focusProps}
+    <FocusButton
+      focusId={`menu-${section}`}
       onClick={onClick}
-      className={cn(
-        'px-6 py-2 rounded-lg transition-all font-semibold focus:outline-none',
-        active && 'bg-red-600 text-white scale-105',
-        !active && 'bg-gray-700 text-gray-300 hover:bg-gray-600',
-        isFocused && 'ring-2 ring-white ring-offset-2 ring-offset-gray-800'
-      )}
+      variant={active ? 'default' : 'secondary'}
+      className={active ? 'bg-red-600 hover:bg-red-700' : ''}
     >
       {MENU_LABELS[section]}
-    </button>
+    </FocusButton>
   )
 }
 

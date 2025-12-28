@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigation } from '../contexts/NavigationContext'
 
 export function KeyboardHelper() {
   const [visible, setVisible] = useState(true)
   const [lastKey, setLastKey] = useState<string>('')
+  const { activeScopeId, focusedId } = useNavigation()
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -43,6 +45,17 @@ export function KeyboardHelper() {
         <p>↑ ↓ ← → : Navigasyon</p>
         <p>Enter : Seç</p>
         <p>Esc/Backspace : Geri</p>
+      </div>
+
+      <div className="mt-2 pt-2 border-t border-gray-600 space-y-1">
+        <div className="flex justify-between">
+          <span className="text-gray-400">Aktif Scope:</span>
+          <span className="text-blue-400 font-mono">{activeScopeId || 'null'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-400">Focused ID:</span>
+          <span className="text-purple-400 font-mono text-xs">{focusedId || 'null'}</span>
+        </div>
       </div>
 
       {lastKey && (

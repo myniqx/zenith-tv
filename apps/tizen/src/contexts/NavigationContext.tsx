@@ -1,19 +1,13 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
-export type FocusableElement = HTMLElement & { dataset: { focusId: string; focusScope?: string } }
-
-interface FocusableRegistry {
-  [focusId: string]: FocusableElement
-}
 
 interface NavigationContextValue {
   focusedId: string | null
   activeScopeId: string | null
   setFocusedId: (id: string | null) => void
-  registerFocusable: (id: string, element: FocusableElement, scopeId?: string) => void
-  unregisterFocusable: (id: string) => void
-  setActiveScope: (scopeId: string | null) => void
+  pushScope: (scopeId: string) => void
+  popScope: (scopeId: string) => void
   moveFocus: (direction: Direction) => void
 }
 
@@ -35,32 +29,55 @@ interface NavigationProviderProps {
 
 export function NavigationProvider({ children, initialFocusId, onBack }: NavigationProviderProps) {
   const [focusedId, setFocusedId] = useState<string | null>(initialFocusId || null)
-  const [activeScopeId, setActiveScope] = useState<string | null>(null)
-  const registryRef = useRef<FocusableRegistry>({})
+  const [scopeStack, setScopeStack] = useState<string[]>([])
 
-  const registerFocusable = useCallback((id: string, element: FocusableElement, scopeId?: string) => {
-    registryRef.current[id] = element
-    if (scopeId) {
-      element.dataset.focusScope = scopeId
-    }
-  }, [])
+  const activeScopeId = scopeStack.length > 0 ? scopeStack[scopeStack.length - 1] : null
 
-  const unregisterFocusable = useCallback((id: string) => {
-    delete registryRef.current[id]
-  }, [])
-
-  const getFocusablesInScope = useCallback((scopeId: string | null): FocusableElement[] => {
-    return Object.values(registryRef.current).filter(el => {
-      const elementScope = el.dataset.focusScope || null
-      return elementScope === scopeId
+  const pushScope = useCallback((scopeId: string) => {
+    setScopeStack(prev => {
+      if (prev[prev.length - 1] === scopeId) {
+        return prev
+      }
+      return [...prev, scopeId]
     })
   }, [])
 
+  const popScope = useCallback((scopeId: string) => {
+    setScopeStack(prev => {
+      if (prev[prev.length - 1] === scopeId) {
+        return prev.slice(0, -1)
+      }
+      return prev
+    })
+  }, [])
+
+  const getFocusablesInScope = useCallback((scopeId: string | null): HTMLElement[] => {
+    if (!scopeId) return []
+
+    const selector = `[data-focus-scope="${scopeId}"][data-focus-id]`
+    return Array.from(document.querySelectorAll<HTMLElement>(selector))
+  }, [])
+
+  const focusedIdRef = useRef(focusedId)
+  useEffect(() => {
+    focusedIdRef.current = focusedId
+  }, [focusedId])
+
+  const activeScopeIdRef = useRef(activeScopeId)
+  useEffect(() => {
+    activeScopeIdRef.current = activeScopeId
+  }, [activeScopeId])
+
   const moveFocus = useCallback((direction: Direction) => {
-    const focusables = getFocusablesInScope(activeScopeId)
+    const currentActiveScopeId = activeScopeIdRef.current
+    const currentFocusedId = focusedIdRef.current
+
+    const focusables = getFocusablesInScope(currentActiveScopeId)
     if (focusables.length === 0) return
 
-    const currentElement = focusedId ? registryRef.current[focusedId] : null
+    const currentElement = currentFocusedId
+      ? document.querySelector<HTMLElement>(`[data-focus-id="${currentFocusedId}"]`)
+      : null
     const currentIndex = currentElement ? focusables.indexOf(currentElement) : -1
 
     let nextIndex = currentIndex
@@ -76,38 +93,47 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
           const rect = el.getBoundingClientRect()
 
           const isInDirection =
-            (direction === 'right' && rect.left > currentRect.left) ||
-            (direction === 'left' && rect.right < currentRect.right) ||
-            (direction === 'down' && rect.top > currentRect.top) ||
-            (direction === 'up' && rect.bottom < currentRect.bottom)
+            (direction === 'right' && rect.left > currentRect.right) ||
+            (direction === 'left' && rect.right < currentRect.left) ||
+            (direction === 'down' && rect.top > currentRect.bottom) ||
+            (direction === 'up' && rect.bottom < currentRect.top)
 
           if (!isInDirection) return null
 
-          const distance = Math.sqrt(
-            Math.pow(rect.left - currentRect.left, 2) +
-            Math.pow(rect.top - currentRect.top, 2)
-          )
+          let primary: number
+          let secondary: number
 
-          return { element: el, index: idx, distance }
+          if (direction === 'right' || direction === 'left') {
+            primary = Math.abs(rect.left - currentRect.left)
+            secondary = Math.abs(rect.top - currentRect.top)
+          } else {
+            primary = Math.abs(rect.top - currentRect.top)
+            secondary = Math.abs(rect.left - currentRect.left)
+          }
+
+          const score = primary * 1000 + secondary
+
+          return { element: el, index: idx, score }
         })
         .filter((c): c is NonNullable<typeof c> => c !== null)
 
-      if (candidates.length > 0) {
-        candidates.sort((a, b) => a.distance - b.distance)
-        nextIndex = candidates[0].index
-      } else {
-        if (direction === 'right' || direction === 'down') {
-          nextIndex = (currentIndex + 1) % focusables.length
-        } else {
-          nextIndex = currentIndex - 1 < 0 ? focusables.length - 1 : currentIndex - 1
-        }
-      }
+      if (candidates.length === 0) return
+
+      candidates.sort((a, b) => a.score - b.score)
+      nextIndex = candidates[0].index
     }
 
     const nextElement = focusables[nextIndex]
-    setFocusedId(nextElement.dataset.focusId)
+    const nextFocusId = nextElement.dataset.focusId
+    if (!nextFocusId) return
+
+    // Ref'i hemen güncelle (state'ten önce!)
+    focusedIdRef.current = nextFocusId
+
+    setFocusedId(nextFocusId)
     nextElement.focus()
-  }, [focusedId, activeScopeId, getFocusablesInScope])
+    nextElement.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+  }, [getFocusablesInScope])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -125,10 +151,20 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
       const action = keyMap[e.keyCode]
       if (!action) return
 
+      const currentFocusedId = focusedIdRef.current
+      const focusedElement = currentFocusedId
+        ? document.querySelector<HTMLElement>(`[data-focus-id="${currentFocusedId}"]`)
+        : null
+
+      if (focusedElement && (focusedElement instanceof HTMLInputElement || focusedElement instanceof HTMLTextAreaElement)) {
+        if (action === 'left' || action === 'right') {
+          return
+        }
+      }
+
       e.preventDefault()
 
       if (action === 'enter') {
-        const focusedElement = focusedId ? registryRef.current[focusedId] : null
         if (focusedElement) {
           focusedElement.click()
         }
@@ -141,15 +177,19 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [focusedId, moveFocus, onBack])
+  }, [moveFocus, onBack])
 
+  // Auto-focus: scope değiştiğinde ilk focusable'a focus et
   useEffect(() => {
     if (!focusedId && activeScopeId) {
       const focusables = getFocusablesInScope(activeScopeId)
       if (focusables.length > 0) {
         const firstId = focusables[0].dataset.focusId
-        setFocusedId(firstId)
-        focusables[0].focus()
+        if (firstId) {
+          focusedIdRef.current = firstId
+          setFocusedId(firstId)
+          focusables[0].focus()
+        }
       }
     }
   }, [focusedId, activeScopeId, getFocusablesInScope])
@@ -160,9 +200,8 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
         focusedId,
         activeScopeId,
         setFocusedId,
-        registerFocusable,
-        unregisterFocusable,
-        setActiveScope,
+        pushScope,
+        popScope,
         moveFocus,
       }}
     >
