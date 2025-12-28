@@ -1,14 +1,22 @@
+import { useState } from 'react'
 import { Check } from 'lucide-react'
-import type { AddProfileFormProps } from './types'
+import { FocusButton, FocusInput } from '@/components/Navigation'
+import { Label } from '@zenith-tv/ui/label'
 
-export function AddProfileForm({
-  username,
-  url,
-  onUsernameChange,
-  onUrlChange,
-  onSubmit,
-  onCancel,
-}: AddProfileFormProps) {
+interface AddProfileFormProps {
+  onSubmit: (username: string, url: string) => void
+  onCancel: () => void
+}
+
+export function AddProfileForm({ onSubmit, onCancel }: AddProfileFormProps) {
+  const [username, setUsername] = useState('')
+  const [url, setUrl] = useState('')
+
+  const handleSubmit = () => {
+    if (!username.trim() || !url.trim()) return
+    onSubmit(username.trim(), url.trim())
+  }
+
   return (
     <div className="h-full bg-gray-900 text-white flex items-center justify-center">
       <div className="bg-gray-800 p-12 rounded-2xl max-w-2xl w-full">
@@ -16,43 +24,48 @@ export function AddProfileForm({
 
         <div className="space-y-6">
           <div>
-            <label className="block text-lg mb-3 text-gray-400">Kullanıcı Adı</label>
-            <input
+            <Label className="block text-lg mb-3 text-gray-400">Kullanıcı Adı</Label>
+            <FocusInput
+              focusId="username-input"
               type="text"
               value={username}
-              onChange={(e) => onUsernameChange(e.target.value)}
+              onChange={(e) => setUsername(e.target.value)}
               placeholder="örn: ahmet"
-              className="w-full px-6 py-4 bg-gray-900 border-2 border-gray-700 rounded-lg text-xl focus:border-red-600 focus:outline-none"
-              autoFocus
+              className="w-full px-6 py-4 bg-gray-900 border-2 border-gray-700 rounded-lg text-xl"
             />
           </div>
 
           <div>
-            <label className="block text-lg mb-3 text-gray-400">M3U URL</label>
-            <input
+            <Label className="block text-lg mb-3 text-gray-400">M3U URL</Label>
+            <FocusInput
+              focusId="url-input"
               type="url"
               value={url}
-              onChange={(e) => onUrlChange(e.target.value)}
+              onChange={(e) => setUrl(e.target.value)}
+              onEnter={handleSubmit}
               placeholder="https://example.com/playlist.m3u"
-              className="w-full px-6 py-4 bg-gray-900 border-2 border-gray-700 rounded-lg text-lg font-mono focus:border-red-600 focus:outline-none"
+              className="w-full px-6 py-4 bg-gray-900 border-2 border-gray-700 rounded-lg text-lg font-mono"
             />
           </div>
 
           <div className="flex gap-4 pt-4">
-            <button
-              onClick={onSubmit}
+            <FocusButton
+              focusId="submit-profile"
+              onClick={handleSubmit}
               disabled={!username.trim() || !url.trim()}
-              className="flex-1 px-8 py-5 bg-red-600 hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg text-xl font-semibold transition-colors flex items-center justify-center gap-3"
+              className="flex-1 px-8 py-5 text-xl font-semibold flex items-center justify-center gap-3"
             >
               <Check className="w-6 h-6" />
               Oluştur
-            </button>
-            <button
+            </FocusButton>
+            <FocusButton
+              focusId="cancel-profile"
               onClick={onCancel}
-              className="px-8 py-5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xl transition-colors"
+              variant="secondary"
+              className="px-8 py-5 text-xl"
             >
               İptal
-            </button>
+            </FocusButton>
           </div>
         </div>
       </div>

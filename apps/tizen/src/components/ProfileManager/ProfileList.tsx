@@ -1,21 +1,57 @@
+import { useState, useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib/cn'
+import { FocusButton } from '@/components/Navigation'
 import { useProfilesStore } from '@/stores/profiles'
 
 interface ProfileListProps {
-  selectedIndex: number
-  isFocused: boolean
+  onSelectProfile: (username: string | null) => void
   onDeleteProfile: (username: string) => void
   onAddProfile: () => void
 }
 
 export function ProfileList({
-  selectedIndex,
-  isFocused,
+  onSelectProfile,
   onDeleteProfile,
   onAddProfile,
 }: ProfileListProps) {
   const { profiles } = useProfilesStore()
+  const [selectedIndex, setSelectedIndex] = useState(0)
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.keyCode === 38) {
+        e.preventDefault()
+        e.stopPropagation()
+        setSelectedIndex(Math.max(0, selectedIndex - 1))
+      }
+      if (e.keyCode === 40) {
+        e.preventDefault()
+        e.stopPropagation()
+        setSelectedIndex(Math.min(profiles.length, selectedIndex + 1))
+      }
+      if (e.keyCode === 13) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (selectedIndex < profiles.length) {
+          onSelectProfile(profiles[selectedIndex].username)
+        } else {
+          onAddProfile()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedIndex, profiles, onSelectProfile, onAddProfile])
+
+  useEffect(() => {
+    if (selectedIndex < profiles.length) {
+      onSelectProfile(profiles[selectedIndex].username)
+    } else {
+      onSelectProfile(null)
+    }
+  }, [selectedIndex, profiles, onSelectProfile])
 
   return (
     <div className="w-1/3 border-r border-gray-800 p-6 flex flex-col">
@@ -25,24 +61,26 @@ export function ProfileList({
         {profiles.map((profile, index) => (
           <div
             key={profile.username}
-            data-focusable="true"
             className={cn(
-              'p-6 rounded-lg transition-all cursor-pointer',
-              isFocused && selectedIndex === index
+              'p-6 rounded-lg transition-all',
+              selectedIndex === index
                 ? 'bg-red-600 scale-105'
-                : 'bg-gray-800 hover:bg-gray-700'
+                : 'bg-gray-800'
             )}
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xl font-semibold">{profile.username}</span>
-              {isFocused && selectedIndex === index && (
-                <button
+              {selectedIndex === index && (
+                <FocusButton
+                  focusId={`delete-profile-${profile.username}`}
                   onClick={() => onDeleteProfile(profile.username)}
+                  variant="ghost"
+                  size="icon"
                   className="p-2 hover:bg-red-700 rounded"
                   title="Profili sil"
                 >
                   <Trash2 className="w-5 h-5" />
-                </button>
+                </FocusButton>
               )}
             </div>
             <p className="text-gray-400">
@@ -52,12 +90,11 @@ export function ProfileList({
         ))}
 
         <div
-          data-focusable="true"
           onClick={onAddProfile}
           className={cn(
             'p-6 rounded-lg border-2 border-dashed transition-all cursor-pointer',
             'flex items-center justify-center gap-3',
-            isFocused && selectedIndex === profiles.length
+            selectedIndex === profiles.length
               ? 'border-red-600 bg-red-600/20 scale-105'
               : 'border-gray-700 hover:border-gray-600'
           )}

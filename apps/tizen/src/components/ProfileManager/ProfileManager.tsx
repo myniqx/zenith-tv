@@ -10,21 +10,16 @@ import type { View, DeleteItem } from './types'
 
 export function ProfileManager() {
   const {
-    profiles,
     createProfile,
     deleteProfile,
     addM3UToProfile,
     removeM3UFromProfile,
+    getUrlFromUUID,
   } = useProfilesStore()
 
   const [view, setView] = useState<View>('main')
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null)
-
-  const [newUsername, setNewUsername] = useState('')
-  const [newM3UUrl, setNewM3UUrl] = useState('')
-
   const [deleteItem, setDeleteItem] = useState<DeleteItem | null>(null)
-
   const [syncingUUID, setSyncingUUID] = useState<string | null>(null)
 
   const handleSyncM3U = async (uuid: string) => {
@@ -48,7 +43,6 @@ export function ProfileManager() {
   }
 
   const handleDeleteM3U = (username: string, uuid: string) => {
-    const { getUrlFromUUID } = useProfilesStore.getState()
     const url = getUrlFromUUID(uuid)
     let displayName = uuid.slice(0, 8)
 
@@ -89,27 +83,22 @@ export function ProfileManager() {
     }
   }
 
-  const handleAddProfile = async () => {
-    if (!newUsername.trim() || !newM3UUrl.trim()) return
-
+  const handleAddProfile = async (username: string, url: string) => {
     try {
-      await createProfile(newUsername.trim())
-      await addM3UToProfile(newUsername.trim(), newM3UUrl.trim())
-      setNewUsername('')
-      setNewM3UUrl('')
+      await createProfile(username)
+      await addM3UToProfile(username, url)
       setView('main')
-      setSelectedProfile(newUsername.trim())
+      setSelectedProfile(username)
     } catch (error) {
       console.error('Failed to add profile:', error)
     }
   }
 
-  const handleAddM3U = async () => {
-    if (!selectedProfile || !newM3UUrl.trim()) return
+  const handleAddM3U = async (url: string) => {
+    if (!selectedProfile) return
 
     try {
-      await addM3UToProfile(selectedProfile, newM3UUrl.trim())
-      setNewM3UUrl('')
+      await addM3UToProfile(selectedProfile, url)
       setView('main')
     } catch (error) {
       console.error('Failed to add M3U:', error)
@@ -121,7 +110,6 @@ export function ProfileManager() {
       <div className="h-full bg-gray-900 text-white flex flex-col">
         <div className="flex-1 flex overflow-hidden">
           <ProfileList
-            selectedProfile={selectedProfile}
             onSelectProfile={setSelectedProfile}
             onDeleteProfile={handleDeleteProfile}
             onAddProfile={() => setView('add-profile')}
@@ -147,18 +135,10 @@ export function ProfileManager() {
 
   if (view === 'add-profile') {
     return (
-      <FocusScope id="add-profile-form" active={true}>
+      <FocusScope id="add-profile-form">
         <AddProfileForm
-          username={newUsername}
-          url={newM3UUrl}
-          onUsernameChange={setNewUsername}
-          onUrlChange={setNewM3UUrl}
           onSubmit={handleAddProfile}
-          onCancel={() => {
-            setView('main')
-            setNewUsername('')
-            setNewM3UUrl('')
-          }}
+          onCancel={() => setView('main')}
         />
       </FocusScope>
     )
@@ -166,15 +146,10 @@ export function ProfileManager() {
 
   if (view === 'add-m3u') {
     return (
-      <FocusScope id="add-m3u-form" active={true}>
+      <FocusScope id="add-m3u-form">
         <AddM3UForm
-          url={newM3UUrl}
-          onUrlChange={setNewM3UUrl}
           onSubmit={handleAddM3U}
-          onCancel={() => {
-            setView('main')
-            setNewM3UUrl('')
-          }}
+          onCancel={() => setView('main')}
         />
       </FocusScope>
     )
@@ -182,7 +157,7 @@ export function ProfileManager() {
 
   if (view === 'confirm-delete' && deleteItem) {
     return (
-      <FocusScope id="confirm-dialog" active={true}>
+      <FocusScope id="confirm-dialog">
         <ConfirmDialog
           title="Silme Onayı"
           message={

@@ -1,3 +1,4 @@
+import { FocusButton } from '@/components/Navigation'
 import type { ConfirmDialogProps } from './types'
 
 export function ConfirmDialog({
@@ -13,18 +14,22 @@ export function ConfirmDialog({
         <p className="text-xl text-gray-300 mb-8 leading-relaxed">{message}</p>
 
         <div className="flex gap-4">
-          <button
+          <FocusButton
+            focusId="confirm-delete"
             onClick={onConfirm}
-            className="flex-1 px-8 py-5 bg-red-600 hover:bg-red-700 rounded-lg text-xl font-semibold transition-colors"
+            variant="destructive"
+            className="flex-1 px-8 py-5 text-xl font-semibold"
           >
             Sil
-          </button>
-          <button
+          </FocusButton>
+          <FocusButton
+            focusId="confirm-cancel"
             onClick={onCancel}
-            className="px-8 py-5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xl transition-colors"
+            variant="secondary"
+            className="px-8 py-5 text-xl"
           >
             İptal
-          </button>
+          </FocusButton>
         </div>
       </div>
     </div>

@@ -1,12 +1,12 @@
+import { useState, useEffect } from 'react'
 import { Plus, RefreshCw, X, User } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib/cn'
+import { FocusButton } from '@/components/Navigation'
 import { useProfilesStore } from '@/stores/profiles'
 import { M3UStatsPlaceholder } from './M3UStatsPlaceholder'
 
 interface M3USourceListProps {
-  selectedProfileIndex: number
-  selectedIndex: number
-  isFocused: boolean
+  selectedProfile: string | null
   syncingUUID: string | null
   onSyncM3U: (uuid: string) => void
   onDeleteM3U: (username: string, uuid: string) => void
@@ -14,16 +14,46 @@ interface M3USourceListProps {
 }
 
 export function M3USourceList({
-  selectedProfileIndex,
-  selectedIndex,
-  isFocused,
+  selectedProfile,
   syncingUUID,
   onSyncM3U,
   onDeleteM3U,
   onAddM3U,
 }: M3USourceListProps) {
   const { profiles, getUrlFromUUID } = useProfilesStore()
-  const profile = profiles[selectedProfileIndex]
+  const profile = profiles.find(p => p.username === selectedProfile)
+  const [selectedIndex, setSelectedIndex] = useState(0)
+
+  useEffect(() => {
+    setSelectedIndex(0)
+  }, [selectedProfile])
+
+  useEffect(() => {
+    if (!profile) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.keyCode === 38) {
+        e.preventDefault()
+        e.stopPropagation()
+        setSelectedIndex(Math.max(0, selectedIndex - 1))
+      }
+      if (e.keyCode === 40) {
+        e.preventDefault()
+        e.stopPropagation()
+        setSelectedIndex(Math.min(profile.m3uRefs.length, selectedIndex + 1))
+      }
+      if (e.keyCode === 13) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (selectedIndex === profile.m3uRefs.length) {
+          onAddM3U()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedIndex, profile, onAddM3U])
 
   const getM3UDisplayName = (uuid: string): string => {
     const url = getUrlFromUUID(uuid)
@@ -65,12 +95,11 @@ export function M3USourceList({
         {profile.m3uRefs.map((uuid, index) => (
           <div
             key={uuid}
-            data-focusable="true"
             className={cn(
-              'p-6 rounded-lg transition-all cursor-pointer',
-              isFocused && selectedIndex === index
+              'p-6 rounded-lg transition-all',
+              selectedIndex === index
                 ? 'bg-red-600 scale-105'
-                : 'bg-gray-800 hover:bg-gray-700'
+                : 'bg-gray-800'
             )}
           >
             <div className="flex items-start justify-between mb-3">
@@ -78,26 +107,32 @@ export function M3USourceList({
                 {getM3UDisplayName(uuid)}
               </h3>
 
-              {isFocused && selectedIndex === index && (
+              {selectedIndex === index && (
                 <div className="flex gap-2">
-                  <button
+                  <FocusButton
+                    focusId={`sync-m3u-${uuid}`}
                     onClick={() => onSyncM3U(uuid)}
-                    className="p-2 hover:bg-red-700 rounded"
+                    variant="ghost"
+                    size="icon"
                     disabled={syncingUUID === uuid}
+                    className="p-2 hover:bg-red-700 rounded"
                     title="Senkronize et"
                   >
                     <RefreshCw className={cn(
                       'w-5 h-5',
                       syncingUUID === uuid && 'animate-spin'
                     )} />
-                  </button>
-                  <button
+                  </FocusButton>
+                  <FocusButton
+                    focusId={`delete-m3u-${uuid}`}
                     onClick={() => onDeleteM3U(profile.username, uuid)}
+                    variant="ghost"
+                    size="icon"
                     className="p-2 hover:bg-red-700 rounded"
                     title="Kaynağı kaldır"
                   >
                     <X className="w-5 h-5" />
-                  </button>
+                  </FocusButton>
                 </div>
               )}
             </div>
@@ -107,12 +142,11 @@ export function M3USourceList({
         ))}
 
         <div
-          data-focusable="true"
           onClick={onAddM3U}
           className={cn(
             'p-6 rounded-lg border-2 border-dashed transition-all cursor-pointer',
             'flex items-center justify-center gap-3',
-            isFocused && selectedIndex === profile.m3uRefs.length
+            selectedIndex === profile.m3uRefs.length
               ? 'border-red-600 bg-red-600/20 scale-105'
               : 'border-gray-700 hover:border-gray-600'
           )}
