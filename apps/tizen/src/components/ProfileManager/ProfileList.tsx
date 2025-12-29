@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib/cn'
-import { FocusButton, FocusCard } from '@/components/Navigation'
-import { CardContent } from '@zenith-tv/ui/card'
+import { FocusButton } from '@/components/Navigation'
+import { Card, CardContent } from '@zenith-tv/ui/card'
 import { useProfilesStore } from '@/stores/profiles'
 
 interface ProfileListProps {
@@ -60,13 +60,11 @@ export function ProfileList({
 
       <div className="flex-1 overflow-y-auto space-y-3">
         {profiles.map((profile, index) => (
-          <FocusCard
+          <Card
             key={profile.username}
-            focusId={`profile-${profile.username}`}
-            onClick={() => onSelectProfile(profile.username)}
             className={cn(
-              'bg-gray-800',
-              selectedIndex === index && 'bg-red-600'
+              'bg-gray-800 transition-all',
+              selectedIndex === index && 'bg-red-600 scale-105'
             )}
           >
             <CardContent className="p-6">
@@ -75,10 +73,7 @@ export function ProfileList({
                 {selectedIndex === index && (
                   <FocusButton
                     focusId={`delete-profile-${profile.username}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onDeleteProfile(profile.username)
-                    }}
+                    onClick={() => onDeleteProfile(profile.username)}
                     variant="ghost"
                     size="icon"
                     className="p-2 hover:bg-red-700 rounded"
@@ -92,7 +87,7 @@ export function ProfileList({
                 {profile.m3uRefs.length} kaynak
               </p>
             </CardContent>
-          </FocusCard>
+          </Card>
         ))}
 
         <div

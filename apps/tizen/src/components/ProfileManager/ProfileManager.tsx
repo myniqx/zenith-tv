@@ -135,7 +135,7 @@ export function ProfileManager() {
 
   if (view === 'add-profile') {
     return (
-      <FocusScope id="add-profile-form">
+      <FocusScope id="add-profile-form" onBack={() => setView('main')}>
         <AddProfileForm
           onSubmit={handleAddProfile}
           onCancel={() => setView('main')}
@@ -146,7 +146,7 @@ export function ProfileManager() {
 
   if (view === 'add-m3u') {
     return (
-      <FocusScope id="add-m3u-form">
+      <FocusScope id="add-m3u-form" onBack={() => setView('main')}>
         <AddM3UForm
           onSubmit={handleAddM3U}
           onCancel={() => setView('main')}
@@ -157,7 +157,13 @@ export function ProfileManager() {
 
   if (view === 'confirm-delete' && deleteItem) {
     return (
-      <FocusScope id="confirm-dialog">
+      <FocusScope
+        id="confirm-dialog"
+        onBack={() => {
+          setView('main')
+          setDeleteItem(null)
+        }}
+      >
         <ConfirmDialog
           title="Silme Onayı"
           message={

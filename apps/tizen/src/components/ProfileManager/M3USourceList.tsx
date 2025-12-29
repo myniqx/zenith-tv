@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Plus, RefreshCw, X, User } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib/cn'
-import { FocusButton, FocusCard } from '@/components/Navigation'
-import { CardContent } from '@zenith-tv/ui/card'
+import { FocusButton } from '@/components/Navigation'
+import { Card, CardContent } from '@zenith-tv/ui/card'
 import { useProfilesStore } from '@/stores/profiles'
 import { M3UStatsPlaceholder } from './M3UStatsPlaceholder'
 
@@ -94,12 +94,11 @@ export function M3USourceList({
 
       <div className="flex-1 overflow-y-auto space-y-3">
         {profile.m3uRefs.map((uuid, index) => (
-          <FocusCard
+          <Card
             key={uuid}
-            focusId={`m3u-${uuid}`}
             className={cn(
-              'bg-gray-800',
-              selectedIndex === index && 'bg-red-600'
+              'bg-gray-800 transition-all',
+              selectedIndex === index && 'bg-red-600 scale-105'
             )}
           >
             <CardContent className="p-6">
@@ -112,10 +111,7 @@ export function M3USourceList({
                   <div className="flex gap-2">
                     <FocusButton
                       focusId={`sync-m3u-${uuid}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onSyncM3U(uuid)
-                      }}
+                      onClick={() => onSyncM3U(uuid)}
                       variant="ghost"
                       size="icon"
                       disabled={syncingUUID === uuid}
@@ -129,10 +125,7 @@ export function M3USourceList({
                     </FocusButton>
                     <FocusButton
                       focusId={`delete-m3u-${uuid}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDeleteM3U(profile.username, uuid)
-                      }}
+                      onClick={() => onDeleteM3U(profile.username, uuid)}
                       variant="ghost"
                       size="icon"
                       className="p-2 hover:bg-red-700 rounded"
@@ -146,7 +139,7 @@ export function M3USourceList({
 
               <M3UStatsPlaceholder uuid={uuid} />
             </CardContent>
-          </FocusCard>
+          </Card>
         ))}
 
         <div
