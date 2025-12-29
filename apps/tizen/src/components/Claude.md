@@ -12,21 +12,48 @@ Navigation scope'larını tanımlar. Context üzerinden child componentlere `sco
 
 ```tsx
 <FocusScope id="app">
-  {/* Bu scope içindeki tüm FocusButton'lar otomatik "app" scopeId'yi alır */}
+  {/* Bu scope içindeki tüm Focus* componentler otomatik "app" scopeId'yi alır */}
   <Header />
 </FocusScope>
 ```
 
+## Focus Components (shadcn extensions)
+
+Tüm Focus* componentler shadcn/ui componentlerini extend eder ve TV navigation desteği ekler.
+
 ### FocusButton
-Focus management built-in button component (shadcn Button extend eder).
+Button component with focus management (shadcn Button extend eder).
 
 ```tsx
 import { FocusButton } from '@/components/Navigation'
 
-<FocusButton focusId="my-button" onClick={handleClick}>
+<FocusButton focusId="my-button" onClick={handleClick} variant="default">
   Click Me
 </FocusButton>
 ```
+
+### FocusInput
+Input component with focus management (shadcn Input extend eder).
+
+```tsx
+import { FocusInput } from '@/components/Navigation'
+
+<FocusInput
+  focusId="username"
+  value={username}
+  onChange={(e) => setUsername(e.target.value)}
+  onEnter={handleSubmit}
+  placeholder="Username"
+/>
+```
+
+### FocusCard
+Card component with focus management (shadcn Card extend eder). İki farklı pattern ile kullanılabilir:
+
+**Pattern 1: Simple Clickable Card** - Tek aksiyonlu kartlar (content grid)
+**Pattern 2: Card with Hidden Action Scope** - Kompleks aksiyonlar (edit/delete)
+
+Detaylı kullanım için aşağıdaki "FocusCard Usage Patterns" bölümüne bakın.
 
 ## Quick Start
 
@@ -64,7 +91,65 @@ function App() {
 </FocusButton>
 ```
 
-### 3. Modals/Dialogs
+### 3. Form Inputs
+
+```tsx
+function LoginForm() {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+
+  return (
+    <FocusScope id="login-form">
+      <Label>Username</Label>
+      <FocusInput
+        focusId="username"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+      />
+
+      <Label>Password</Label>
+      <FocusInput
+        focusId="password"
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        onEnter={handleSubmit}
+      />
+
+      <FocusButton focusId="submit" onClick={handleSubmit}>
+        Login
+      </FocusButton>
+    </FocusScope>
+  )
+}
+```
+
+### 4. Cards (Lists)
+
+```tsx
+function ProfileList() {
+  const { profiles } = useProfilesStore()
+
+  return (
+    <div className="space-y-3">
+      {profiles.map(profile => (
+        <FocusCard
+          key={profile.id}
+          focusId={`profile-${profile.id}`}
+          onClick={() => selectProfile(profile)}
+        >
+          <CardContent className="p-6">
+            <h3 className="text-xl font-semibold">{profile.username}</h3>
+            <p className="text-gray-400">{profile.m3uRefs.length} kaynak</p>
+          </CardContent>
+        </FocusCard>
+      ))}
+    </div>
+  )
+}
+```
+
+### 5. Modals/Dialogs
 
 ```tsx
 function MyDialog() {
@@ -107,6 +192,111 @@ Scope'lar **stack** olarak yönetilir. Son açılan scope aktiftir.
 3. Confirm opens: `["app", "dialog", "confirm"]` → navigation in confirm only
 4. Confirm closes: `["app", "dialog"]` → back to dialog automatically
 5. Dialog closes: `["app"]` → back to app automatically
+
+## FocusCard Usage Patterns
+
+FocusCard iki farklı şekilde kullanılabilir:
+
+### Pattern 1: Simple Clickable Card
+
+Tek aksiyonlu, içinde başka focusable element olmayan kartlar için.
+
+**Kullanım Alanları:**
+- İçerik grid'leri (filmler, diziler, müzikler)
+- Menu item'ları
+- Navigation kartları
+
+**Örnek:**
+```tsx
+<FocusCard focusId="movie-123" onClick={() => playMovie(123)}>
+  <img src={posterUrl} alt={title} />
+  <CardContent>
+    <h3>{title}</h3>
+    <p>{year} • {genre}</p>
+    <Badge>{rating}</Badge>
+  </CardContent>
+</FocusCard>
+```
+
+**Özellikler:**
+- ✅ Tek aksiyon (onClick)
+- ✅ İçinde nested focusable YOK
+- ✅ Spatial navigation ile hareket
+- ✅ Kompleks görsel içerik gösterebilir
+
+---
+
+### Pattern 2: Card with Hidden Action Scope
+
+Kart tıklandığında/seçildiğinde içinde gizli action scope'u açan kartlar.
+
+**Kullanım Alanları:**
+- Liste item'ları (profile, playlist, folder)
+- Kompleks aksiyonlar gerektiren kartlar (edit, delete, share)
+- Context menu benzeri davranış
+
+**Örnek:**
+```tsx
+function ProfileCard({ profile, isSelected, onSelect }) {
+  const [showActions, setShowActions] = useState(false)
+
+  return (
+    <FocusCard
+      focusId={`profile-${profile.id}`}
+      onClick={() => {
+        onSelect(profile.id)
+        setShowActions(true)
+      }}
+      className={isSelected && 'bg-red-600'}
+    >
+      <CardContent>
+        <h3>{profile.username}</h3>
+        <p>{profile.m3uRefs.length} kaynak</p>
+
+        {showActions && (
+          <FocusScope
+            id={`actions-${profile.id}`}
+            onBack={() => setShowActions(false)}
+          >
+            <div className="flex gap-2 mt-4">
+              <FocusButton
+                focusId="edit"
+                onClick={handleEdit}
+                variant="ghost"
+                size="icon"
+              >
+                <Edit className="w-4 h-4" />
+              </FocusButton>
+              <FocusButton
+                focusId="delete"
+                onClick={handleDelete}
+                variant="ghost"
+                size="icon"
+              >
+                <Trash2 className="w-4 h-4" />
+              </FocusButton>
+            </div>
+          </FocusScope>
+        )}
+      </CardContent>
+    </FocusCard>
+  )
+}
+```
+
+**Özellikler:**
+- ✅ Card click/select → hidden scope açılır
+- ✅ Scope stack otomatik yönetim
+- ✅ Back tuşu → scope kapanır (`onBack` handler)
+- ✅ Nested focusable çakışması YOK (scope izolasyonu)
+
+**Nasıl Çalışır:**
+1. Card'a tıkla/Enter → `showActions = true` → FocusScope render
+2. FocusScope mount → `pushScope(id, onBack)` → sadece action button'lar navigate edilebilir
+3. Back tuşu → FocusScope'un `onBack()` çağrılır → `setShowActions(false)`
+4. FocusScope unmount → `popScope()` → card'lara geri dön
+
+**Kritik:** `onBack` prop'u olmadan back tuşu çalışmaz! Scope'u conditional render yapan state'i false yapmalısın.
 
 ## Custom Focusable Components
 
@@ -261,6 +451,57 @@ const focusables = document.querySelectorAll('[data-focus-scope="app"][data-focu
 
 Spatial navigation otomatik grid layout handle eder.
 
+### Card List with Actions
+```tsx
+<div className="space-y-3">
+  {items.map((item, index) => (
+    <FocusCard
+      key={item.id}
+      focusId={`item-${item.id}`}
+      onClick={() => selectItem(item)}
+      className={selectedIndex === index && 'bg-red-600'}
+    >
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-semibold">{item.name}</h3>
+            <p className="text-gray-400">{item.description}</p>
+          </div>
+
+          {selectedIndex === index && (
+            <div className="flex gap-2">
+              <FocusButton
+                focusId={`edit-${item.id}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleEdit(item)
+                }}
+                variant="ghost"
+                size="icon"
+              >
+                <Edit className="w-5 h-5" />
+              </FocusButton>
+
+              <FocusButton
+                focusId={`delete-${item.id}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDelete(item)
+                }}
+                variant="ghost"
+                size="icon"
+              >
+                <Trash2 className="w-5 h-5" />
+              </FocusButton>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </FocusCard>
+  ))}
+</div>
+```
+
 ## Debug
 
 KeyboardHelper component aktif scope ve focused element'i gösterir:
@@ -275,11 +516,54 @@ Sağ alt köşede:
 - Focused ID: `menu-all`
 - Son Tuş: `→ (Right)`
 
+## Component Selection Guide
+
+Ne zaman hangi Focus component kullanmalı?
+
+### FocusButton
+✅ **Kullan:**
+- Tıklanabilir aksiyonlar (Save, Delete, Cancel)
+- Toolbar butonları
+- Modal confirm/cancel butonları
+
+❌ **Kullanma:**
+- Liste itemleri için (FocusCard kullan)
+- Form input'ları için (FocusInput kullan)
+
+### FocusInput
+✅ **Kullan:**
+- Text input
+- Password input
+- URL/Email input
+- Textarea
+
+❌ **Kullanma:**
+- Butonlar için (FocusButton kullan)
+
+### FocusCard
+✅ **Kullan:**
+- **Pattern 1:** İçerik grid'leri (filmler, albümler, menü itemları)
+- **Pattern 1:** Tek aksiyonlu navigation kartları
+- **Pattern 2:** Liste itemları + kompleks aksiyonlar (edit, delete, share)
+- **Pattern 2:** Context menu benzeri davranış
+
+❌ **Kullanma:**
+- Manuel navigation kullanıyorsan (düz Card kullan)
+- Sadece bir buton varsa (FocusButton kullan)
+- Form içindeyse (FocusInput kullan)
+
+**Pattern Seçimi:**
+- Tek aksiyon → **Pattern 1** (Simple Clickable Card)
+- Çoklu aksiyon (edit, delete) → **Pattern 2** (Hidden Action Scope)
+
 ## Checklist
 
 Yeni component eklerken:
-- [ ] `FocusButton` kullanıyorum (veya gerekçeli custom)
-- [ ] FocusScope doğru yerde (sadece modal/dialog için)
+- [ ] Doğru Focus* component seçtim (Button/Input/Card)
+- [ ] FocusCard kullanıyorsam doğru pattern seçtim (Pattern 1/2)
+- [ ] FocusScope kullanıyorsam `onBack` prop ekledim (state cleanup için)
+- [ ] FocusScope doğru yerde (sadece modal/dialog/hidden actions için)
 - [ ] `focusId` unique
 - [ ] Prop drilling yok (store kullanıyorum)
-- [ ] Liste ise `stopPropagation()` ekledim
+- [ ] shadcn variants kullanıyorum (variant, size)
+- [ ] Internal state tercih ettim (prop yerine)

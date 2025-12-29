@@ -5,6 +5,7 @@ interface FocusScopeProps {
   id: string
   children: ReactNode
   active?: boolean
+  onBack?: () => void
 }
 
 interface FocusScopeContextValue {
@@ -17,17 +18,17 @@ export function useFocusScopeContext() {
   return useContext(FocusScopeContext)
 }
 
-export function FocusScope({ id, children, active = true }: FocusScopeProps) {
+export function FocusScope({ id, children, active = true, onBack }: FocusScopeProps) {
   const { pushScope, popScope } = useNavigation()
 
   useEffect(() => {
     if (active) {
-      pushScope(id)
+      pushScope(id, onBack)
       return () => {
         popScope(id)
       }
     }
-  }, [id, active, pushScope, popScope])
+  }, [id, active, onBack, pushScope, popScope])
 
   return (
     <FocusScopeContext.Provider value={{ scopeId: id }}>

@@ -2,11 +2,16 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef, Re
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 
+interface ScopeItem {
+  id: string
+  onBack?: () => void
+}
+
 interface NavigationContextValue {
   focusedId: string | null
   activeScopeId: string | null
   setFocusedId: (id: string | null) => void
-  pushScope: (scopeId: string) => void
+  pushScope: (scopeId: string, onBack?: () => void) => void
   popScope: (scopeId: string) => void
   moveFocus: (direction: Direction) => void
 }
@@ -29,22 +34,22 @@ interface NavigationProviderProps {
 
 export function NavigationProvider({ children, initialFocusId, onBack }: NavigationProviderProps) {
   const [focusedId, setFocusedId] = useState<string | null>(initialFocusId || null)
-  const [scopeStack, setScopeStack] = useState<string[]>([])
+  const [scopeStack, setScopeStack] = useState<ScopeItem[]>([])
 
-  const activeScopeId = scopeStack.length > 0 ? scopeStack[scopeStack.length - 1] : null
+  const activeScopeId = scopeStack.length > 0 ? scopeStack[scopeStack.length - 1].id : null
 
-  const pushScope = useCallback((scopeId: string) => {
+  const pushScope = useCallback((scopeId: string, onBackHandler?: () => void) => {
     setScopeStack(prev => {
-      if (prev[prev.length - 1] === scopeId) {
+      if (prev[prev.length - 1]?.id === scopeId) {
         return prev
       }
-      return [...prev, scopeId]
+      return [...prev, { id: scopeId, onBack: onBackHandler }]
     })
   }, [])
 
   const popScope = useCallback((scopeId: string) => {
     setScopeStack(prev => {
-      if (prev[prev.length - 1] === scopeId) {
+      if (prev[prev.length - 1]?.id === scopeId) {
         return prev.slice(0, -1)
       }
       return prev
@@ -169,7 +174,13 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
           focusedElement.click()
         }
       } else if (action === 'back') {
-        onBack?.()
+        const topScope = scopeStack[scopeStack.length - 1]
+
+        if (topScope?.onBack) {
+          topScope.onBack()
+        } else if (scopeStack.length === 0) {
+          onBack?.()
+        }
       } else {
         moveFocus(action)
       }
@@ -177,7 +188,7 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [moveFocus, onBack])
+  }, [moveFocus, onBack, scopeStack])
 
   // Auto-focus: scope değiştiğinde ilk focusable'a focus et
   useEffect(() => {

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib/cn'
-import { FocusButton } from '@/components/Navigation'
+import { FocusButton, FocusCard } from '@/components/Navigation'
+import { CardContent } from '@zenith-tv/ui/card'
 import { useProfilesStore } from '@/stores/profiles'
 
 interface ProfileListProps {
@@ -59,34 +60,39 @@ export function ProfileList({
 
       <div className="flex-1 overflow-y-auto space-y-3">
         {profiles.map((profile, index) => (
-          <div
+          <FocusCard
             key={profile.username}
+            focusId={`profile-${profile.username}`}
+            onClick={() => onSelectProfile(profile.username)}
             className={cn(
-              'p-6 rounded-lg transition-all',
-              selectedIndex === index
-                ? 'bg-red-600 scale-105'
-                : 'bg-gray-800'
+              'bg-gray-800',
+              selectedIndex === index && 'bg-red-600'
             )}
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xl font-semibold">{profile.username}</span>
-              {selectedIndex === index && (
-                <FocusButton
-                  focusId={`delete-profile-${profile.username}`}
-                  onClick={() => onDeleteProfile(profile.username)}
-                  variant="ghost"
-                  size="icon"
-                  className="p-2 hover:bg-red-700 rounded"
-                  title="Profili sil"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </FocusButton>
-              )}
-            </div>
-            <p className="text-gray-400">
-              {profile.m3uRefs.length} kaynak
-            </p>
-          </div>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xl font-semibold">{profile.username}</span>
+                {selectedIndex === index && (
+                  <FocusButton
+                    focusId={`delete-profile-${profile.username}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDeleteProfile(profile.username)
+                    }}
+                    variant="ghost"
+                    size="icon"
+                    className="p-2 hover:bg-red-700 rounded"
+                    title="Profili sil"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </FocusButton>
+                )}
+              </div>
+              <p className="text-gray-400">
+                {profile.m3uRefs.length} kaynak
+              </p>
+            </CardContent>
+          </FocusCard>
         ))}
 
         <div

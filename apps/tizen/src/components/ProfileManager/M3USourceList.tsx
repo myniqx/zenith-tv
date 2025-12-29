@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Plus, RefreshCw, X, User } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib/cn'
-import { FocusButton } from '@/components/Navigation'
+import { FocusButton, FocusCard } from '@/components/Navigation'
+import { CardContent } from '@zenith-tv/ui/card'
 import { useProfilesStore } from '@/stores/profiles'
 import { M3UStatsPlaceholder } from './M3UStatsPlaceholder'
 
@@ -93,52 +94,59 @@ export function M3USourceList({
 
       <div className="flex-1 overflow-y-auto space-y-3">
         {profile.m3uRefs.map((uuid, index) => (
-          <div
+          <FocusCard
             key={uuid}
+            focusId={`m3u-${uuid}`}
             className={cn(
-              'p-6 rounded-lg transition-all',
-              selectedIndex === index
-                ? 'bg-red-600 scale-105'
-                : 'bg-gray-800'
+              'bg-gray-800',
+              selectedIndex === index && 'bg-red-600'
             )}
           >
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="text-lg font-semibold flex-1">
-                {getM3UDisplayName(uuid)}
-              </h3>
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between mb-3">
+                <h3 className="text-lg font-semibold flex-1">
+                  {getM3UDisplayName(uuid)}
+                </h3>
 
-              {selectedIndex === index && (
-                <div className="flex gap-2">
-                  <FocusButton
-                    focusId={`sync-m3u-${uuid}`}
-                    onClick={() => onSyncM3U(uuid)}
-                    variant="ghost"
-                    size="icon"
-                    disabled={syncingUUID === uuid}
-                    className="p-2 hover:bg-red-700 rounded"
-                    title="Senkronize et"
-                  >
-                    <RefreshCw className={cn(
-                      'w-5 h-5',
-                      syncingUUID === uuid && 'animate-spin'
-                    )} />
-                  </FocusButton>
-                  <FocusButton
-                    focusId={`delete-m3u-${uuid}`}
-                    onClick={() => onDeleteM3U(profile.username, uuid)}
-                    variant="ghost"
-                    size="icon"
-                    className="p-2 hover:bg-red-700 rounded"
-                    title="Kaynağı kaldır"
-                  >
-                    <X className="w-5 h-5" />
-                  </FocusButton>
-                </div>
-              )}
-            </div>
+                {selectedIndex === index && (
+                  <div className="flex gap-2">
+                    <FocusButton
+                      focusId={`sync-m3u-${uuid}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onSyncM3U(uuid)
+                      }}
+                      variant="ghost"
+                      size="icon"
+                      disabled={syncingUUID === uuid}
+                      className="p-2 hover:bg-red-700 rounded"
+                      title="Senkronize et"
+                    >
+                      <RefreshCw className={cn(
+                        'w-5 h-5',
+                        syncingUUID === uuid && 'animate-spin'
+                      )} />
+                    </FocusButton>
+                    <FocusButton
+                      focusId={`delete-m3u-${uuid}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDeleteM3U(profile.username, uuid)
+                      }}
+                      variant="ghost"
+                      size="icon"
+                      className="p-2 hover:bg-red-700 rounded"
+                      title="Kaynağı kaldır"
+                    >
+                      <X className="w-5 h-5" />
+                    </FocusButton>
+                  </div>
+                )}
+              </div>
 
-            <M3UStatsPlaceholder uuid={uuid} />
-          </div>
+              <M3UStatsPlaceholder uuid={uuid} />
+            </CardContent>
+          </FocusCard>
         ))}
 
         <div
