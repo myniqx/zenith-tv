@@ -3,11 +3,19 @@ import { Header, MenuSection } from './components/Header'
 import { Layout } from './components/Layout'
 import { KeyboardHelper } from './components/KeyboardHelper'
 import { ProfileManager } from './components/ProfileManager'
+import { ContentBrowser } from './components/ContentBrowser'
 import { NavigationProvider } from './contexts/NavigationContext'
 import { FocusScope } from './contexts/FocusScope'
+import { useContentStore } from './stores/content'
+import { initDevEnvironment } from './utils/dev-helper'
 
 function App() {
   const [activeSection, setActiveSection] = useState<MenuSection>('all')
+  const { movieGroup, favoriteGroup } = useContentStore()
+
+  useEffect(() => {
+    initDevEnvironment()
+  }, [])
 
   useEffect(() => {
     if (activeSection === 'exit') {
@@ -33,6 +41,14 @@ function App() {
           {activeSection === 'profile' ? (
             <div className="flex-1 overflow-hidden">
               <ProfileManager />
+            </div>
+          ) : activeSection === 'all' && movieGroup ? (
+            <div className="flex-1 overflow-hidden">
+              <ContentBrowser initialGroup={movieGroup} />
+            </div>
+          ) : activeSection === 'favorites' && favoriteGroup ? (
+            <div className="flex-1 overflow-hidden">
+              <ContentBrowser initialGroup={favoriteGroup} />
             </div>
           ) : (
             <Layout>

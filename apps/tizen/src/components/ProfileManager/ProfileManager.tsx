@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useProfilesStore } from '@/stores/profiles'
 import { FocusScope } from '@/contexts/FocusScope'
 import { ProfileList } from './ProfileList'
@@ -7,25 +7,50 @@ import { AddProfileForm } from './AddProfileForm'
 import { AddM3UForm } from './AddM3UForm'
 import { ConfirmDialog } from './ConfirmDialog'
 import type { View, DeleteItem } from './types'
+import { useContentStore } from '@/stores/content'
 
 export function ProfileManager() {
   const {
+    profiles,
     createProfile,
     deleteProfile,
     addM3UToProfile,
     removeM3UFromProfile,
     getUrlFromUUID,
+    selectProfile,
+    getCurrentUsername,
   } = useProfilesStore()
+
+  const { currentUUID, update } = useContentStore()
 
   const [view, setView] = useState<View>('main')
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null)
   const [deleteItem, setDeleteItem] = useState<DeleteItem | null>(null)
   const [syncingUUID, setSyncingUUID] = useState<string | null>(null)
 
+  const currentUsername = getCurrentUsername()
+
+  const sortedProfiles = useMemo(() => {
+    return [...profiles].sort((a, b) => (b.lastLogin || 0) - (a.lastLogin || 0))
+  }, [profiles])
+
+  useEffect(() => {
+    if (!selectedProfile && sortedProfiles.length > 0) {
+      setSelectedProfile(currentUsername || sortedProfiles[0].username)
+    }
+  }, [sortedProfiles, currentUsername, selectedProfile])
+
   const handleSyncM3U = async (uuid: string) => {
     setSyncingUUID(uuid)
     try {
-      await syncM3U(uuid)
+      if (currentUUID === uuid) {
+        update()
+      } else {
+        if (selectedProfile) {
+          await selectProfile(selectedProfile, uuid)
+          await update()
+        }
+      }
     } catch (error) {
       console.error('Failed to sync M3U:', error)
     } finally {
@@ -110,6 +135,9 @@ export function ProfileManager() {
       <div className="h-full bg-gray-900 text-white flex flex-col">
         <div className="flex-1 flex overflow-hidden">
           <ProfileList
+            profiles={sortedProfiles}
+            selectedProfile={selectedProfile}
+            currentUsername={currentUsername}
             onSelectProfile={setSelectedProfile}
             onDeleteProfile={handleDeleteProfile}
             onAddProfile={() => setView('add-profile')}
@@ -185,6 +213,5 @@ export function ProfileManager() {
 }
 
 async function syncM3U(uuid: string): Promise<void> {
-  console.log('TODO: Sync M3U', uuid)
-  await new Promise(resolve => setTimeout(resolve, 1000))
+
 }

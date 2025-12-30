@@ -3,20 +3,26 @@ import { Plus, Trash2 } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib/cn'
 import { FocusButton } from '@/components/Navigation'
 import { Card, CardContent } from '@zenith-tv/ui/card'
-import { useProfilesStore } from '@/stores/profiles'
+import { Badge } from '@zenith-tv/ui/badge'
+import type { Profile } from '@/stores/profiles'
 
 interface ProfileListProps {
+  profiles: Profile[]
+  selectedProfile: string | null
+  currentUsername: string | null
   onSelectProfile: (username: string | null) => void
   onDeleteProfile: (username: string) => void
   onAddProfile: () => void
 }
 
 export function ProfileList({
+  profiles,
+  selectedProfile,
+  currentUsername,
   onSelectProfile,
   onDeleteProfile,
   onAddProfile,
 }: ProfileListProps) {
-  const { profiles } = useProfilesStore()
   const [selectedIndex, setSelectedIndex] = useState(0)
 
   useEffect(() => {
@@ -69,7 +75,14 @@ export function ProfileList({
           >
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xl font-semibold">{profile.username}</span>
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="text-xl font-semibold">{profile.username}</span>
+                  {currentUsername === profile.username && (
+                    <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                      Active
+                    </Badge>
+                  )}
+                </div>
                 {selectedIndex === index && (
                   <FocusButton
                     focusId={`delete-profile-${profile.username}`}

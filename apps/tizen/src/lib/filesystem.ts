@@ -4,6 +4,13 @@
  * Root: documents/zenith-tv/
  */
 
+import { initMockTizen } from './filesystem-mock'
+
+// Initialize mock Tizen API in browser (dev mode)
+if (import.meta.env.DEV && typeof window !== 'undefined' && !window.tizen) {
+  initMockTizen()
+}
+
 const ROOT_DIR = 'zenith-tv'
 const TIZEN_ROOT = 'documents'
 
