@@ -3,6 +3,7 @@ import { FocusCard } from '@/components/Navigation'
 import { CardContent } from '@zenith-tv/ui/card'
 import { Folder } from 'lucide-react'
 import { useContentBrowser } from './ContentBrowserProvider'
+import { useMemo } from 'react'
 
 interface GroupCardProps {
   group: GroupObject
@@ -11,7 +12,7 @@ interface GroupCardProps {
 export function GroupCard({ group }: GroupCardProps) {
   const { pushGroup } = useContentBrowser()
   const Icon = group.GetListIcon
-  const coverImages = group.getImageList(9)
+  const coverImages = useMemo(() => group.getImageList(9), [group])
 
   const handleClick = () => {
     pushGroup(group)

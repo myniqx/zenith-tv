@@ -58,7 +58,7 @@ export function ContentBrowserProvider({
   gridConfig: customGridConfig,
 }: ContentBrowserProviderProps) {
   const gridConfig: GridConfig = {
-    cols: customGridConfig?.cols ?? 5,
+    cols: customGridConfig?.cols ?? 6,
     rows: customGridConfig?.rows ?? 4,
   }
 
@@ -74,48 +74,88 @@ export function ContentBrowserProvider({
     return [...currentGroup.Groups, ...currentGroup.Watchables]
   }, [currentGroup])
 
-  const TOTAL_SLOTS = gridConfig.cols * gridConfig.rows
+  const TOTAL_SLOTS = useMemo(
+    () => gridConfig.cols * gridConfig.rows,
+    [gridConfig.cols, gridConfig.rows]
+  )
 
-  const calculatePagination = (page: number, totalItems: number): PaginationInfo => {
-    const hasPrev = page > 0
+  const calculatePageBoundaries = useMemo(
+    () => (targetPage: number, totalItems: number) => {
+      let startIdx = 0
+      let currentPageNum = 0
 
-    let itemsPerPage = TOTAL_SLOTS - (hasPrev ? 1 : 0)
+      while (currentPageNum < targetPage) {
+        const hasPrev = currentPageNum > 0
+        const remainingAfterThis = totalItems - startIdx
+        const hasNext = remainingAfterThis > TOTAL_SLOTS - (hasPrev ? 1 : 0)
 
-    const startIdx = page * itemsPerPage
-    const tempEndIdx = startIdx + itemsPerPage
+        let itemsOnPage = TOTAL_SLOTS
+        if (hasPrev) itemsOnPage--
+        if (hasNext) itemsOnPage--
 
-    const hasNext = tempEndIdx < totalItems
-    if (hasNext) {
-      itemsPerPage -= 1
+        startIdx += itemsOnPage
+        currentPageNum++
+      }
+
+      return startIdx
+    },
+    [TOTAL_SLOTS]
+  )
+
+  const paginationInfo = useMemo(() => {
+    const totalItems = currentItems.length
+    if (totalItems === 0) {
+      return {
+        hasPrev: false,
+        hasNext: false,
+        startIdx: 0,
+        endIdx: 0,
+        itemsPerPage: 0,
+      }
     }
+
+    const startIdx = calculatePageBoundaries(currentPage, totalItems)
+    const hasPrev = currentPage > 0
+    const remainingItems = totalItems - startIdx
+
+    let itemsPerPage = TOTAL_SLOTS
+    if (hasPrev) itemsPerPage--
+
+    const hasNext = remainingItems > itemsPerPage
+    if (hasNext) itemsPerPage--
 
     const endIdx = Math.min(startIdx + itemsPerPage, totalItems)
 
     return { hasPrev, hasNext, startIdx, endIdx, itemsPerPage }
-  }
-
-  const paginationInfo = useMemo(
-    () => calculatePagination(currentPage, currentItems.length),
-    [currentPage, currentItems.length]
-  )
+  }, [currentPage, currentItems.length, TOTAL_SLOTS, calculatePageBoundaries])
 
   const totalPages = useMemo(() => {
     if (currentItems.length === 0) return 1
 
     let calculatedPages = 0
-    let remainingItems = currentItems.length
-    let page = 0
+    let processedItems = 0
 
-    while (remainingItems > 0) {
-      const info = calculatePagination(page, currentItems.length)
-      const itemsOnPage = info.endIdx - info.startIdx
-      remainingItems -= itemsOnPage
+    while (processedItems < currentItems.length) {
+      const hasPrev = calculatedPages > 0
+      const remainingItems = currentItems.length - processedItems
+
+      let itemsOnThisPage = TOTAL_SLOTS
+      if (hasPrev) itemsOnThisPage--
+
+      const hasNext = remainingItems > itemsOnThisPage
+      if (hasNext) itemsOnThisPage--
+
+      processedItems += itemsOnThisPage
       calculatedPages++
-      page++
+
+      if (calculatedPages > 10000) {
+        console.error('Infinite loop detected in totalPages calculation')
+        return 1
+      }
     }
 
     return calculatedPages
-  }, [currentItems.length])
+  }, [currentItems.length, TOTAL_SLOTS])
 
   const pushGroup = (group: GroupObject) => {
     setGroupStack(prev => [...prev, group])

@@ -57,7 +57,7 @@ export function ContentGrid() {
 
   return (
     <div
-      className="grid gap-4 p-8"
+      className="grid gap-3 p-4 h-full"
       style={{
         gridTemplateColumns: `repeat(${gridConfig.cols}, minmax(0, 1fr))`,
         gridTemplateRows: `repeat(${gridConfig.rows}, minmax(0, 1fr))`,
