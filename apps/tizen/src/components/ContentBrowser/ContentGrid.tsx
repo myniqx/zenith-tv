@@ -77,27 +77,14 @@ export function ContentGrid() {
     }
   }, [currentItems, startIdx, endIdx, setFocusedId])
 
-  // Debug state for last leave event
-  const [lastLeave, setLastLeave] = useState<{ direction: string, time: string } | null>(null)
-
   // Stable handleLeave callback that doesn't change on re-renders
   const handleLeave = useCallback((direction: Direction) => {
-    console.log('ContentGrid handleLeave triggered:', direction)
-
-    // Update debug info
-    setLastLeave({
-      direction,
-      time: new Date().toLocaleTimeString()
-    })
-
     // Access fresh state via ref
     const {
       hasNext, hasPrev, focusedId, gridConfig, nextPage, prevPage
     } = stateRef.current
 
     if (direction === 'right' && hasNext) {
-      console.log('Seamless Pagination: Moving Next Page')
-
       // Calculate current row to preserve context
       const currentSlotId = focusedId
       let rowIndex = 0
@@ -111,7 +98,6 @@ export function ContentGrid() {
 
       // Target: Start of the same row on next page
       const targetIdx = rowIndex * gridConfig.cols
-      console.log('Pagination Target Index (Next):', targetIdx)
       pendingFocusIndex.current = targetIdx
 
       // Removed setFocusedId(null) to prevent focus loss artifacts and race conditions
@@ -120,8 +106,6 @@ export function ContentGrid() {
       nextPage()
 
     } else if (direction === 'left' && hasPrev) {
-      console.log('Seamless Pagination: Moving Prev Page')
-
       // Prev page logic
       const currentSlotId = focusedId
       let rowIndex = 0
@@ -135,7 +119,6 @@ export function ContentGrid() {
 
       // Target: End of the same row on prev page
       const targetIdx = rowIndex * gridConfig.cols + (gridConfig.cols - 1)
-      console.log('Pagination Target Index (Prev):', targetIdx)
       pendingFocusIndex.current = targetIdx
 
       // Removed setFocusedId(null) to prevent focus loss artifacts and race conditions
@@ -174,18 +157,6 @@ export function ContentGrid() {
     transformClass = 'animate-slide-in-left'
   }
 
-  // Calculate generic focus coordinates for debug
-  let focusCoords = { x: -1, y: -1 }
-  if (focusedId && focusedId.startsWith('browser-slot-')) {
-    const slotIdx = parseInt(focusedId.split('-')[2], 10)
-    if (!isNaN(slotIdx)) {
-      focusCoords = {
-        x: slotIdx % gridConfig.cols,
-        y: Math.floor(slotIdx / gridConfig.cols)
-      }
-    }
-  }
-
   return (
     <FocusScope id="content-grid" onLeave={handleLeave}>
       <div className="overflow-hidden h-full relative p-4">
@@ -198,22 +169,6 @@ export function ContentGrid() {
           }}
         >
           {slots}
-        </div>
-
-        {/* Debug Panel */}
-        <div className="absolute top-2 right-2 bg-black/80 text-white p-2 rounded text-xs font-mono pointer-events-none z-50 border border-gray-700">
-          <div className="font-bold text-yellow-500 border-b border-gray-600 mb-1">Grid Debugger</div>
-          <div>Items: {currentItems.length}</div>
-          <div>Page: {currentPage + 1} / {Math.ceil(currentItems.length / (gridConfig.cols * gridConfig.rows))}</div>
-          <div>Range: {startIdx} - {endIdx}</div>
-          <div>Focused: <span className="text-blue-300">{focusedId}</span></div>
-          <div>Coords: X:{focusCoords.x} Y:{focusCoords.y}</div>
-          <div>Pagination: {hasPrev ? '←PREV' : 'NO_PREV'} | {hasNext ? 'NEXT→' : 'NO_NEXT'}</div>
-          {lastLeave && (
-            <div className="mt-1 pt-1 border-t border-gray-600 text-red-300">
-              Last Leave: {lastLeave.direction} <span className="text-gray-500">@{lastLeave.time}</span>
-            </div>
-          )}
         </div>
       </div>
     </FocusScope>

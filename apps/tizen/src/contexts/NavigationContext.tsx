@@ -53,13 +53,11 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
   }, [scopeStack])
 
   const pushScope = useCallback((scopeId: string, onBackHandler?: () => void, onLeaveHandler?: (direction: Direction) => void) => {
-    console.log(`[NavigationContext] pushScope: ${scopeId}`, { hasOnLeave: !!onLeaveHandler })
     setScopeStack(prev => {
       // If it exists, UPDATE it instead of ignoring it
       // This ensures that if handlers change (or hot reload happens), we get the fresh version
       const existingIndex = prev.findIndex(s => s.id === scopeId)
       if (existingIndex !== -1) {
-        console.log(`[NavigationContext] Updating existing scope: ${scopeId}`)
         const newStack = [...prev]
         newStack[existingIndex] = { id: scopeId, onBack: onBackHandler, onLeave: onLeaveHandler }
         return newStack
