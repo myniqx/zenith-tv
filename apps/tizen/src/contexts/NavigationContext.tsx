@@ -10,7 +10,7 @@ interface ScopeItem {
 interface NavigationContextValue {
   focusedId: string | null
   activeScopeId: string | null
-  setFocusedId: (id: string | null) => void
+  setFocusedId: (id: string | null, preventScroll?: boolean) => void
   pushScope: (scopeId: string, onBack?: () => void) => void
   popScope: (scopeId: string) => void
   moveFocus: (direction: Direction) => void
@@ -33,69 +33,103 @@ interface NavigationProviderProps {
 }
 
 export function NavigationProvider({ children, initialFocusId, onBack }: NavigationProviderProps) {
-  const [focusedId, setFocusedId] = useState<string | null>(initialFocusId || null)
+  const [focusedId, setFocusedIdState] = useState<string | null>(initialFocusId || null)
   const [scopeStack, setScopeStack] = useState<ScopeItem[]>([])
 
-  const activeScopeId = scopeStack.length > 0 ? scopeStack[scopeStack.length - 1].id : null
-
-  const pushScope = useCallback((scopeId: string, onBackHandler?: () => void) => {
-    setScopeStack(prev => {
-      if (prev[prev.length - 1]?.id === scopeId) {
-        return prev
-      }
-      return [...prev, { id: scopeId, onBack: onBackHandler }]
-    })
-  }, [])
-
-  const popScope = useCallback((scopeId: string) => {
-    setScopeStack(prev => {
-      if (prev[prev.length - 1]?.id === scopeId) {
-        return prev.slice(0, -1)
-      }
-      return prev
-    })
-  }, [])
-
-  const getFocusablesInScope = useCallback((scopeId: string | null): HTMLElement[] => {
-    if (!scopeId) return []
-
-    const selector = `[data-focus-scope="${scopeId}"][data-focus-id]`
-    return Array.from(document.querySelectorAll<HTMLElement>(selector))
-  }, [])
+  // With default useEffect order, children mount first (push first).
+  // So stack is [Child, Parent].
+  // Active scope should ideally be the Child (index 0).
+  const activeScopeId = scopeStack.length > 0 ? scopeStack[0].id : null
 
   const focusedIdRef = useRef(focusedId)
   useEffect(() => {
     focusedIdRef.current = focusedId
   }, [focusedId])
 
-  const activeScopeIdRef = useRef(activeScopeId)
+  const scopeStackRef = useRef(scopeStack)
   useEffect(() => {
-    activeScopeIdRef.current = activeScopeId
-  }, [activeScopeId])
+    scopeStackRef.current = scopeStack
+  }, [scopeStack])
+
+  const pushScope = useCallback((scopeId: string, onBackHandler?: () => void) => {
+    setScopeStack(prev => {
+      // Prevent duplicates at the detailed level?
+      // Actually we just check if it's already in the stack to avoid loops/dups if strict mode double invokes
+      if (prev.some(s => s.id === scopeId)) return prev
+      return [...prev, { id: scopeId, onBack: onBackHandler }]
+    })
+  }, [])
+
+  const popScope = useCallback((scopeId: string) => {
+    setScopeStack(prev => prev.filter(s => s.id !== scopeId))
+  }, [])
+
+  const getFocusables = useCallback((scopes: ScopeItem[]): { element: HTMLElement, scopeId: string }[] => {
+    // Universal Search: Get focusables from ALL active scopes.
+    // This allows moving from Child -> Parent (Header) -> Sibling (Sidebar) cleanly.
+    if (scopes.length === 0) return []
+
+    // Optimization: Query all focusables once if performance is an issue, but scopes selector is fine.
+    // Flatten result
+    const results: { element: HTMLElement, scopeId: string }[] = []
+
+    scopes.forEach(scope => {
+      const selector = `[data-focus-scope="${scope.id}"][data-focus-id]`
+      const elements = document.querySelectorAll<HTMLElement>(selector)
+      elements.forEach(el => results.push({ element: el, scopeId: scope.id }))
+    })
+
+    return results
+  }, [])
+
+  const setFocusedId = useCallback((id: string | null, preventScroll = false) => {
+    setFocusedIdState(id)
+    focusedIdRef.current = id
+
+    if (id) {
+      const element = document.querySelector<HTMLElement>(`[data-focus-id="${id}"]`)
+      if (element) {
+        // Only force focus if we are not preventing scroll (implies keyboard nav)
+        // Or if we specifically want to sync DOM focus.
+        // For mouse hover, we usually DON'T want to steal keyboard focus instantly to avoid virtual keyboard flickering?
+        // Actually for hybrid, we want the element to be document.activeElement so Enter key works.
+        // `focus({ preventScroll: true })` is the standard way.
+        element.focus({ preventScroll: true })
+
+        if (!preventScroll) {
+          element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+        }
+      }
+    }
+  }, [])
 
   const moveFocus = useCallback((direction: Direction) => {
-    const currentActiveScopeId = activeScopeIdRef.current
     const currentFocusedId = focusedIdRef.current
+    const currentStack = scopeStackRef.current
 
-    const focusables = getFocusablesInScope(currentActiveScopeId)
-    if (focusables.length === 0) return
+    const allFocusables = getFocusables(currentStack)
+    if (allFocusables.length === 0) return
 
     const currentElement = currentFocusedId
       ? document.querySelector<HTMLElement>(`[data-focus-id="${currentFocusedId}"]`)
       : null
-    const currentIndex = currentElement ? focusables.indexOf(currentElement) : -1
 
-    let nextIndex = currentIndex
+    const currentIndex = currentElement
+      ? allFocusables.findIndex(f => f.element === currentElement)
+      : -1
+
+    let nextElement: HTMLElement | null = null
 
     if (currentIndex === -1) {
-      nextIndex = 0
+      // Default to first available in the Child-most scope (index 0)
+      nextElement = allFocusables[0]?.element
     } else {
       const currentRect = currentElement!.getBoundingClientRect()
 
-      const candidates = focusables
-        .map((el, idx) => {
-          if (idx === currentIndex) return null
-          const rect = el.getBoundingClientRect()
+      const candidates = allFocusables
+        .map((item, idx) => {
+          if (item.element === currentElement) return null
+          const rect = item.element.getBoundingClientRect()
 
           const isInDirection =
             (direction === 'right' && rect.left > currentRect.right) ||
@@ -117,42 +151,30 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
           }
 
           const score = primary * 1000 + secondary
-
-          return { element: el, index: idx, score }
+          return { element: item.element, score }
         })
         .filter((c): c is NonNullable<typeof c> => c !== null)
 
-      if (candidates.length === 0) return
-
-      candidates.sort((a, b) => a.score - b.score)
-      nextIndex = candidates[0].index
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => a.score - b.score)
+        nextElement = candidates[0].element
+      }
     }
 
-    const nextElement = focusables[nextIndex]
-    const nextFocusId = nextElement.dataset.focusId
-    if (!nextFocusId) return
-
-    // Ref'i hemen güncelle (state'ten önce!)
-    focusedIdRef.current = nextFocusId
-
-    setFocusedId(nextFocusId)
-    nextElement.focus()
-    nextElement.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
-  }, [getFocusablesInScope])
+    if (nextElement) {
+      const nextFocusId = nextElement.dataset.focusId
+      if (nextFocusId) {
+        setFocusedId(nextFocusId) // preventScroll = false (default)
+      }
+    }
+  }, [getFocusables, setFocusedId])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const keyMap: Record<number, Direction | 'enter' | 'back'> = {
-        38: 'up',
-        40: 'down',
-        37: 'left',
-        39: 'right',
-        13: 'enter',
-        10009: 'back',
-        8: 'back',
-        27: 'back',
+        38: 'up', 40: 'down', 37: 'left', 39: 'right',
+        13: 'enter', 10009: 'back', 8: 'back', 27: 'back',
       }
-
       const action = keyMap[e.keyCode]
       if (!action) return
 
@@ -162,24 +184,29 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
         : null
 
       if (focusedElement && (focusedElement instanceof HTMLInputElement || focusedElement instanceof HTMLTextAreaElement)) {
-        if (action === 'left' || action === 'right') {
-          return
-        }
+        if (action === 'left' || action === 'right') return
       }
 
       e.preventDefault()
 
       if (action === 'enter') {
-        if (focusedElement) {
-          focusedElement.click()
-        }
+        focusedElement?.click()
       } else if (action === 'back') {
-        const topScope = scopeStack[scopeStack.length - 1]
+        const currentStack = scopeStackRef.current
 
-        if (topScope?.onBack) {
-          topScope.onBack()
-        } else if (scopeStack.length === 0) {
-          onBack?.()
+        // Traverse stack based on logic: Child (0) -> Parent (N)
+        // Find first one that handles back
+        let handled = false
+        for (const scope of currentStack) {
+          if (scope.onBack) {
+            scope.onBack()
+            handled = true
+            break
+          }
+        }
+
+        if (!handled && onBack) {
+          onBack()
         }
       } else {
         moveFocus(action)
@@ -188,22 +215,21 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [moveFocus, onBack, scopeStack])
+  }, [moveFocus, onBack])
 
-  // Auto-focus: scope değiştiğinde ilk focusable'a focus et
+  // Initial auto-focus logic
   useEffect(() => {
+    // Only run if we have no focus yet and we have a scope
     if (!focusedId && activeScopeId) {
-      const focusables = getFocusablesInScope(activeScopeId)
-      if (focusables.length > 0) {
-        const firstId = focusables[0].dataset.focusId
-        if (firstId) {
-          focusedIdRef.current = firstId
-          setFocusedId(firstId)
-          focusables[0].focus()
-        }
+      // Try to find something in the top (child) scope first
+      const selector = `[data-focus-scope="${activeScopeId}"][data-focus-id]`
+      const firstEl = document.querySelector<HTMLElement>(selector)
+
+      if (firstEl && firstEl.dataset.focusId) {
+        setFocusedId(firstEl.dataset.focusId)
       }
     }
-  }, [focusedId, activeScopeId, getFocusablesInScope])
+  }, [focusedId, activeScopeId, setFocusedId])
 
   return (
     <NavigationContext.Provider

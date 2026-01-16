@@ -10,7 +10,7 @@ interface UseFocusableOptions {
 
 export function useFocusable({ focusId, scopeId, onEnter, disabled = false }: UseFocusableOptions) {
   const elementRef = useRef<HTMLElement>(null)
-  const { focusedId } = useNavigation()
+  const { focusedId, setFocusedId } = useNavigation()
 
   const isFocused = focusedId === focusId
 
@@ -32,19 +32,32 @@ export function useFocusable({ focusId, scopeId, onEnter, disabled = false }: Us
     }
   }, [focusId, scopeId, disabled])
 
+  // Mouse/Input olaylarını dinle ve focus state ile senkronize et
   useEffect(() => {
-    if (isFocused && onEnter) {
-      const handleClick = () => {
+    const element = elementRef.current
+    if (!element || disabled) return
+
+    const handleMouseEnter = () => {
+      // Mouse üzerine geldiğinde focus'u güncelle ama scroll yapma (zaten oradayız)
+      setFocusedId(focusId, true)
+    }
+
+    const handleClick = () => {
+      // Tıklayınca önce focusla, sonra işlemi yap
+      setFocusedId(focusId, true)
+      if (onEnter) {
         onEnter()
       }
-
-      const element = elementRef.current
-      if (element) {
-        element.addEventListener('click', handleClick)
-        return () => element.removeEventListener('click', handleClick)
-      }
     }
-  }, [isFocused, onEnter])
+
+    element.addEventListener('mouseenter', handleMouseEnter)
+    element.addEventListener('click', handleClick)
+
+    return () => {
+      element.removeEventListener('mouseenter', handleMouseEnter)
+      element.removeEventListener('click', handleClick)
+    }
+  }, [disabled, focusId, setFocusedId, onEnter])
 
   return {
     ref: elementRef,
