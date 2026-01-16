@@ -7,9 +7,10 @@ import { useContentBrowser } from './ContentBrowserProvider'
 
 interface WatchableCardProps {
   watchable: WatchableObject
+  focusId?: string
 }
 
-export function WatchableCard({ watchable }: WatchableCardProps) {
+export function WatchableCard({ watchable, focusId }: WatchableCardProps) {
   const { openWatchable } = useContentBrowser()
 
   const getCategoryBadge = () => {
@@ -34,7 +35,7 @@ export function WatchableCard({ watchable }: WatchableCardProps) {
 
   return (
     <FocusCard
-      focusId={`watchable-${watchable.Url}`}
+      focusId={focusId || `watchable-${watchable.Url}`}
       onClick={handleClick}
       className="h-full"
     >

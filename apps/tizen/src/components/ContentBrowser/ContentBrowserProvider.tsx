@@ -80,19 +80,13 @@ export function ContentBrowserProvider({
   )
 
   const calculatePageBoundaries = useMemo(
-    () => (targetPage: number, totalItems: number) => {
+    () => (targetPage: number) => {
       let startIdx = 0
       let currentPageNum = 0
 
       while (currentPageNum < targetPage) {
-        const hasPrev = currentPageNum > 0
-        const remainingAfterThis = totalItems - startIdx
-        const hasNext = remainingAfterThis > TOTAL_SLOTS - (hasPrev ? 1 : 0)
-
-        let itemsOnPage = TOTAL_SLOTS
-        if (hasPrev) itemsOnPage--
-        if (hasNext) itemsOnPage--
-
+        // In seamless mode, every page uses TOTAL_SLOTS
+        const itemsOnPage = TOTAL_SLOTS
         startIdx += itemsOnPage
         currentPageNum++
       }
@@ -114,15 +108,15 @@ export function ContentBrowserProvider({
       }
     }
 
-    const startIdx = calculatePageBoundaries(currentPage, totalItems)
+    const startIdx = calculatePageBoundaries(currentPage)
     const hasPrev = currentPage > 0
     const remainingItems = totalItems - startIdx
 
-    let itemsPerPage = TOTAL_SLOTS
-    if (hasPrev) itemsPerPage--
+    const itemsPerPage = TOTAL_SLOTS
+    // if (hasPrev) itemsPerPage-- // Removed for seamless mode
+    // if (hasNext) itemsPerPage-- // Removed for seamless mode
 
     const hasNext = remainingItems > itemsPerPage
-    if (hasNext) itemsPerPage--
 
     const endIdx = Math.min(startIdx + itemsPerPage, totalItems)
 
@@ -131,30 +125,7 @@ export function ContentBrowserProvider({
 
   const totalPages = useMemo(() => {
     if (currentItems.length === 0) return 1
-
-    let calculatedPages = 0
-    let processedItems = 0
-
-    while (processedItems < currentItems.length) {
-      const hasPrev = calculatedPages > 0
-      const remainingItems = currentItems.length - processedItems
-
-      let itemsOnThisPage = TOTAL_SLOTS
-      if (hasPrev) itemsOnThisPage--
-
-      const hasNext = remainingItems > itemsOnThisPage
-      if (hasNext) itemsOnThisPage--
-
-      processedItems += itemsOnThisPage
-      calculatedPages++
-
-      if (calculatedPages > 10000) {
-        console.error('Infinite loop detected in totalPages calculation')
-        return 1
-      }
-    }
-
-    return calculatedPages
+    return Math.ceil(currentItems.length / TOTAL_SLOTS)
   }, [currentItems.length, TOTAL_SLOTS])
 
   const pushGroup = (group: GroupObject) => {

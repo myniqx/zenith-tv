@@ -5,13 +5,14 @@ export type Direction = 'up' | 'down' | 'left' | 'right'
 interface ScopeItem {
   id: string
   onBack?: () => void
+  onLeave?: (direction: Direction) => void
 }
 
 interface NavigationContextValue {
   focusedId: string | null
   activeScopeId: string | null
   setFocusedId: (id: string | null, preventScroll?: boolean) => void
-  pushScope: (scopeId: string, onBack?: () => void) => void
+  pushScope: (scopeId: string, onBack?: () => void, onLeave?: (direction: Direction) => void) => void
   popScope: (scopeId: string) => void
   moveFocus: (direction: Direction) => void
 }
@@ -51,12 +52,19 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
     scopeStackRef.current = scopeStack
   }, [scopeStack])
 
-  const pushScope = useCallback((scopeId: string, onBackHandler?: () => void) => {
+  const pushScope = useCallback((scopeId: string, onBackHandler?: () => void, onLeaveHandler?: (direction: Direction) => void) => {
+    console.log(`[NavigationContext] pushScope: ${scopeId}`, { hasOnLeave: !!onLeaveHandler })
     setScopeStack(prev => {
-      // Prevent duplicates at the detailed level?
-      // Actually we just check if it's already in the stack to avoid loops/dups if strict mode double invokes
-      if (prev.some(s => s.id === scopeId)) return prev
-      return [...prev, { id: scopeId, onBack: onBackHandler }]
+      // If it exists, UPDATE it instead of ignoring it
+      // This ensures that if handlers change (or hot reload happens), we get the fresh version
+      const existingIndex = prev.findIndex(s => s.id === scopeId)
+      if (existingIndex !== -1) {
+        console.log(`[NavigationContext] Updating existing scope: ${scopeId}`)
+        const newStack = [...prev]
+        newStack[existingIndex] = { id: scopeId, onBack: onBackHandler, onLeave: onLeaveHandler }
+        return newStack
+      }
+      return [...prev, { id: scopeId, onBack: onBackHandler, onLeave: onLeaveHandler }]
     })
   }, [])
 
@@ -166,6 +174,13 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
       if (nextFocusId) {
         setFocusedId(nextFocusId) // preventScroll = false (default)
       }
+    } else {
+      // If NO candidate found, Trigger onLeave on the ACTIVE scope (Child-most)
+      const activeScope = currentStack.length > 0 ? currentStack[0] : null
+      if (activeScope && activeScope.onLeave) {
+        window.dispatchEvent(new CustomEvent('navigation:leave', { detail: { direction } }))
+        activeScope.onLeave(direction)
+      }
     }
   }, [getFocusables, setFocusedId])
 
@@ -199,6 +214,7 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
         let handled = false
         for (const scope of currentStack) {
           if (scope.onBack) {
+            window.dispatchEvent(new CustomEvent('navigation:back', { detail: { scope: scope.id } }))
             scope.onBack()
             handled = true
             break
@@ -206,6 +222,7 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
         }
 
         if (!handled && onBack) {
+          window.dispatchEvent(new CustomEvent('navigation:back', { detail: { scope: 'root' } }))
           onBack()
         }
       } else {

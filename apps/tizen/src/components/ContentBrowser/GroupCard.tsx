@@ -7,9 +7,10 @@ import { useMemo } from 'react'
 
 interface GroupCardProps {
   group: GroupObject
+  focusId?: string
 }
 
-export function GroupCard({ group }: GroupCardProps) {
+export function GroupCard({ group, focusId }: GroupCardProps) {
   const { pushGroup } = useContentBrowser()
   const Icon = group.GetListIcon
   const coverImages = useMemo(() => group.getImageList(9), [group])
@@ -20,7 +21,7 @@ export function GroupCard({ group }: GroupCardProps) {
 
   return (
     <FocusCard
-      focusId={`group-${group.Name}`}
+      focusId={focusId || `group-${group.Name}`}
       onClick={handleClick}
       className="h-full"
     >
