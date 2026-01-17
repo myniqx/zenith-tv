@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react'
 import { Header, MenuSection } from './components/Header'
 import { Layout } from './components/Layout'
@@ -9,6 +10,8 @@ import { FocusScope } from './contexts/FocusScope'
 import { useContentStore } from './stores/content'
 import { initDevEnvironment } from './utils/dev-helper'
 import { Toaster } from '@zenith-tv/ui/sonner'
+import { P2PManager } from './components/P2P/P2PManager'
+import { P2PView } from './components/P2P/P2PView'
 
 function App() {
   const [activeSection, setActiveSection] = useState<MenuSection>('all')
@@ -26,7 +29,7 @@ function App() {
   }, [activeSection])
 
   const handleBack = () => {
-    if (activeSection === 'profile') {
+    if (activeSection === 'profile' || activeSection === 'p2p') { // Added 'p2p' to back logic
       setActiveSection('all')
     } else {
       console.log('Back button pressed at top level')
@@ -36,6 +39,7 @@ function App() {
   return (
     <>
       <NavigationProvider initialFocusId="menu-all" onBack={handleBack}>
+        <P2PManager /> {/* Always run P2P Manager in background */}
         <FocusScope id="app" active={true}>
           <div className="w-full h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
             <Header activeSection={activeSection} onSectionChange={setActiveSection} />
@@ -43,6 +47,10 @@ function App() {
             {activeSection === 'profile' ? (
               <div className="flex-1 overflow-hidden">
                 <ProfileManager />
+              </div>
+            ) : activeSection === 'p2p' ? (
+              <div className="flex-1 overflow-hidden">
+                <P2PView />
               </div>
             ) : activeSection === 'all' && movieGroup ? (
               <div className="flex-1 overflow-hidden">
