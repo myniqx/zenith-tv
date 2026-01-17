@@ -12,6 +12,7 @@ export function ContentGrid() {
     paginationInfo,
     gridConfig,
     currentPage,
+    totalPages,
     nextPage,
     prevPage,
   } = useContentBrowser()
@@ -159,16 +160,38 @@ export function ContentGrid() {
 
   return (
     <FocusScope id="content-grid" onLeave={handleLeave}>
-      <div className="overflow-hidden h-full relative p-4">
-        <div
-          className={`grid gap-6 h-full transition-all duration-300 ease-out ${transformClass}`}
-          key={currentPage} // Restart animation on page change
-          style={{
-            gridTemplateColumns: `repeat(${gridConfig.cols}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${gridConfig.rows}, minmax(0, 1fr))`,
-          }}
-        >
-          {slots}
+      <div className="flex flex-col h-full w-full relative">
+        <div className="flex-1 overflow-hidden p-4">
+          <div
+            className={`grid gap-6 h-full transition-all duration-300 ease-out ${transformClass}`}
+            key={currentPage} // Restart animation on page change
+            style={{
+              gridTemplateColumns: `repeat(${gridConfig.cols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${gridConfig.rows}, minmax(0, 1fr))`,
+            }}
+          >
+            {slots}
+          </div>
+        </div>
+
+        {/* Status Footer */}
+        <div className="h-10 px-8 flex items-center justify-between text-white/70 bg-gradient-to-t from-black/50 to-transparent">
+          <div className="text-sm font-medium w-32">
+            Sayfa {currentPage + 1} / {totalPages}
+          </div>
+
+          <div className="flex-1 max-w-xl mx-8">
+            <div className="h-1.5 w-full bg-white/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-white transition-all duration-300 ease-out"
+                style={{ width: `${Math.min(((currentPage + 1) / totalPages) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="text-sm font-medium w-32 text-right">
+            Toplam: {currentItems.length}
+          </div>
         </div>
       </div>
     </FocusScope>
