@@ -175,6 +175,7 @@ export function NavigationProvider({ children, initialFocusId, onBack }: Navigat
     } else {
       // If NO candidate found, Trigger onLeave on the ACTIVE scope (Child-most)
       const activeScope = currentStack.length > 0 ? currentStack[0] : null
+      console.log({ activeScopeId: activeScope?.id, onLeave: activeScope?.onLeave, direction })
       if (activeScope && activeScope.onLeave) {
         window.dispatchEvent(new CustomEvent('navigation:leave', { detail: { direction } }))
         activeScope.onLeave(direction)

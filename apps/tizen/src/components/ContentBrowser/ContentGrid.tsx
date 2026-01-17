@@ -15,6 +15,8 @@ export function ContentGrid() {
     totalPages,
     nextPage,
     prevPage,
+    popGroup,
+    groupStack,
   } = useContentBrowser()
 
   const { hasPrev, hasNext, startIdx, endIdx } = paginationInfo
@@ -36,7 +38,9 @@ export function ContentGrid() {
     startIdx,
     nextPage,
     prevPage,
-    setFocusedId
+    setFocusedId,
+    popGroup,
+    groupStack
   })
 
   // Update ref on every render
@@ -50,7 +54,9 @@ export function ContentGrid() {
       startIdx,
       nextPage,
       prevPage,
-      setFocusedId
+      setFocusedId,
+      popGroup,
+      groupStack
     }
   })
 
@@ -129,6 +135,13 @@ export function ContentGrid() {
     }
   }, []) // Empty dependency array = stable reference
 
+  const handleBack = useCallback(() => {
+    const { groupStack, popGroup } = stateRef.current
+    if (groupStack.length > 1) {
+      popGroup()
+    }
+  }, [])
+
   const pageItems = currentItems.slice(startIdx, endIdx)
   const slots: JSX.Element[] = []
   const totalSlots = gridConfig.cols * gridConfig.rows
@@ -159,7 +172,7 @@ export function ContentGrid() {
   }
 
   return (
-    <FocusScope id="content-grid" onLeave={handleLeave}>
+    <FocusScope id="content-grid" onLeave={handleLeave} onBack={handleBack}>
       <div className="flex flex-col h-full w-full relative">
         <div className="flex-1 overflow-hidden p-4">
           <div
