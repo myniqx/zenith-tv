@@ -90,6 +90,9 @@ const getActiveStore = () => {
 
 export const useUniversalPlayerStore = create<UniversalPlayerState>((set) => {
 
+  // Ensure P2P player listeners are active from the start
+  useP2PPlayerStore.getState()._setupListeners();
+
   // Subscribe to P2P Store to handle device switching
   useP2PStore.subscribe((state, prevState) => {
     if (state.selectedDeviceId !== prevState.selectedDeviceId) {

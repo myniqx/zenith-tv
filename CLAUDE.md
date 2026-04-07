@@ -9,7 +9,7 @@ Zenith TV is a modern cross-platform IPTV player with peer-to-peer remote contro
 **Current Status:**
 
 - Desktop app (Electron): 100% complete
-- Tizen TV app: Planned (0%)
+- Tizen TV app: ~85% complete (AVPlay integration pending real device test)
 - Android app: Planned (0%)
 
 ## Essential Commands
@@ -34,8 +34,8 @@ cd ../..
 # Run desktop app in development mode
 pnpm dev:desktop
 
-# Run from desktop app directory
-cd apps/desktop
+# Run Tizen app in development mode (browser)
+cd apps/tizen
 pnpm dev
 ```
 
@@ -48,6 +48,11 @@ pnpm build
 
 # Package desktop app for distribution
 pnpm build:electron
+
+# Build Tizen app (.wgt package)
+cd apps/tizen
+pnpm build
+node scripts/create-wgt.js
 ```
 
 ### Code Quality
@@ -68,25 +73,33 @@ pnpm type-check
 
 ### Monorepo Structure
 
-The project uses pnpm workspaces with the following packages:
-
 **Core Packages:**
 
-- `core/parser/` - Rust M3U parser compiled to WASM for web (and FFI for native platforms)
+- `core/parser/` - Rust M3U parser compiled to WASM (web target for Desktop/Tizen)
 - `core/vlc-player/` - Native VLC player addon for Electron (C++ N-API)
-- Parser is critical: must rebuild with `wasm-pack build --target web --release` after changes
 
 **Shared Packages:**
 
-- `shared/types/` - TypeScript type definitions shared across all platforms
-- `shared/protocol/` - WebSocket protocol for P2P communication
-- `shared/ui/` - Shared React components and Zustand stores
+- `shared/content/` - TypeScript types, models, stores (content, toast, fileSync), utils (httpDiscovery, mergeUserData)
+- `shared/ui/` - Shared React/shadcn components
 
 **Apps:**
 
 - `apps/desktop/` - Electron app (main platform, fully functional)
-- `apps/tizen/` - Tizen TV web app (planned)
+- `apps/tizen/` - Tizen TV web app (~85% complete)
 - `apps/mobile/` - Flutter Android app (planned)
+
+### Shared Content Package (`shared/content`)
+
+Common code used by all platforms:
+
+- `src/models/` - `GroupObject`, `WatchableObject`, `TvShowGroupObject`, etc.
+- `src/types/` - `UserData`, `M3UUpdateData`, `P2PMessage`, `ProfileSyncPayload`, etc.
+- `src/stores/content/` - `createContentStore()` factory (platform-agnostic)
+- `src/stores/toast/` - Toast notification store
+- `src/stores/tools/fileSync/` - JSON file sync middleware for Zustand
+- `src/utils/httpDiscovery.ts` - HTTP subnet scan for P2P server discovery
+- `src/utils/mergeUserData.ts` - Timestamp-based UserData merge (used by both platforms)
 
 ### Desktop App Architecture
 
@@ -94,104 +107,82 @@ The project uses pnpm workspaces with the following packages:
 
 1. **Main Process** (`apps/desktop/electron/`):
    - `main.cjs` - Window management, IPC setup, app lifecycle
-   - `storage/` - JSON-based storage system (profiles, M3U cache, user data)
-   - `p2p-server.cjs` - WebSocket server for remote control
+   - `ipc/p2pServer.ts` - Combined HTTP + WebSocket server (port 8080)
+   - `ipc/p2pHandlers.ts` - IPC bridge for P2P events
    - `preload.cjs` - Secure IPC bridge to renderer
 
 2. **Renderer Process** (`apps/desktop/src/`):
    - React 19 app with TypeScript
    - Vite for bundling and hot reload
-   - Communicates with main process via IPC
 
-**State Management:**
+**State Management (Desktop):**
 
-- Uses Zustand for all client state
-- Four main stores in `src/stores/`:
-  - `content.ts` - Content items, filtering, sorting, series navigation
-  - `profiles.ts` - User profiles and M3U playlist management
-  - `settings.ts` - App settings (persisted to localStorage)
-  - `toast.ts` - Toast notifications
+- `stores/content.ts` - Content store created via `createContentStore()` factory
+- `stores/profiles.ts` - Profile and M3U management
+- `stores/settings.ts` - App settings (persisted)
+- `stores/vlcPlayer.ts` - VLC native player wrapper
+- `stores/p2pStore.ts` - P2P server/client management (mode: off/server/client)
+- `stores/p2pPlayerStore.ts` - Remote player control over P2P
+- `stores/universalPlayerStore.ts` - Automatically delegates to VLC or P2P player store
 
-**Storage Layer:**
+**P2P — Desktop:**
 
-- JSON-based file storage (lightweight, no native dependencies)
-- Three main storage managers in `electron/storage/`:
-  - `profile-manager.cjs` - User profiles with M3U references
-  - `m3u-manager.cjs` - M3U content caching and metadata
-  - `user-data-manager.cjs` - Per-user, per-M3U preferences (favorites, watch progress, hidden items)
-- All storage operations go through IPC handlers in `main.cjs`
-- Storage path: `app.getPath('userData')/zenith-storage/`
+- `mode: 'server'` → receives commands from Tizen/client devices, forwards to VLC
+- `mode: 'client'` → connects to another desktop, broadcasts VLC state
+- First connecting device is automatically set as `selectedDeviceId`
+- Welcome payload: sends `profile_sync` with profile info on new connection
 
-**M3U Processing Pipeline:**
+### Tizen App Architecture
 
-1. Fetch M3U from URL with progress tracking
-2. Check cache (JSON files with 24-hour TTL)
-3. Parse using Rust WASM parser (`@zenith-tv/parser`)
-4. Build CategoryTree in Rust (group-based hierarchical structure)
-5. Cache M3U content and metadata as JSON
-6. Auto-detect categories (movie, series, live_stream)
-7. Extract episode info (S01E01, 1x01 patterns)
+`apps/tizen/src/`
 
-**Category Tree System (NEW):**
+**Stores:**
 
-- Category tree built entirely in Rust (`core/parser/src/category_tree.rs`)
-- Hierarchical structure: Type (Movies/Series/Live) → Group → Items
-- WASM bindings expose methods: `tree.getMovies()`, `tree.getSeries()`, `tree.getLiveStreams()`
-- Sticky/Hidden group filtering happens in Rust (zero serialization overhead)
-- Cross-platform: Same Rust code works via WASM (Desktop/Tizen) and FFI (Android)
-- User preferences (sticky/hidden groups) stored in profile JSON
+- `stores/content.ts` - Created via `createContentStore()` with Tizen-specific filesystem/http dependencies
+- `stores/profiles.ts` - Profile and M3U UUID mapping (localStorage persist)
+- `stores/settings.ts` - `autoResume`, `autoPlayNext`, language preferences
+- `stores/tizenPlayer.ts` - Full AVPlay API wrapper (play, pause, seek, track selection, progress saving)
+- `stores/p2pClientStore.ts` - WebSocket client, server discovery, trusted server list
 
-**P2P Remote Control:**
+**Navigation System:**
 
-- WebSocket server on port 8080
-- PIN-based device pairing (4-digit)
-- Commands: play, pause, seek, set_volume
-- State broadcast every 2 seconds to paired devices
-- Protocol defined in `shared/protocol/`
+`src/components/Navigation/` — TV-ready components extending shadcn:
+- `FocusButton`, `FocusInput`, `FocusCard` - D-pad navigation support
+- `FocusScope` - Navigation isolation via scope stack (modal/dialog/panel)
+- `NavigationContext` - Global keyboard listener
+- `useFocusable` hook - For building custom focusable components
 
-### Key Components
+**P2P — Tizen (client only):**
 
-**Video Player** (`src/components/VideoPlayer.tsx`):
+- Discovers desktop server via HTTP subnet scan
+- WebSocket connection: `ws://server-ip:8080`
+- Incoming commands: `open`, `playback`, `audio`, `video`, `subtitle`, `window`, `shortcut`
+- Player state broadcast every 2 seconds via `state_update`
+- `profile_sync` flow: create profile → if M3U missing send `request: 'full'` → timestamp-based userData merge → send merged result back
 
-- Dual backend: VLC (native) or HTML5 (browser), configurable in settings
-- VLC backend: Better codec support (MKV, HEVC, live streams)
-- HTML5 backend: Fallback for when VLC is not available
-- Auto-selects VLC when available (auto mode)
-- Auto-resume from last position
-- Multi-track audio/subtitle support with persistence
-- Auto-retry on stream failure (3 attempts, exponential backoff)
-- Keyboard shortcuts (Space, F, M, K, arrows)
-- Next/Previous episode navigation for series
-- Auto-play next episode (configurable)
+**Video Player:**
 
-**Content Grid** (`src/components/ContentGrid.tsx`):
+`src/components/ContentBrowser/VideoPlayer.tsx`
+- AVPlay init + auto-play on mount
+- Controls auto-hide after 4 seconds
+- Audio/subtitle track selector panel (isolated via FocusScope)
+- `<object type="application/avplayer">` for native Tizen video rendering
 
-- Virtual scrolling with react-window (handles 1000+ items)
-- Keyboard navigation (arrow keys, Tab, Enter, Home, End)
-- Visual indicator for keyboard-selected items
-- Lazy image loading
-- Category badges (LIVE, S01E01, MOVIE)
+### P2P Protocol (Shared)
 
-**Category Browser** (`src/components/CategoryBrowser.tsx`):
+`shared/content/src/types/p2p.ts`
 
-- 6 categories: All, Movies, Series, Live TV, Favorites, Recent
-- Real-time search with debouncing (300ms)
-- Sort by: Name, Date, Recently Watched
-- Keyboard shortcut: Ctrl+F for search
-
-**Profile Manager** (`src/components/ProfileManager.tsx`):
-
-- Add/delete profiles
-- M3U URL management
-- Sync with progress indicator
-- Cache status and force sync option
-
-**Settings Panel** (`src/components/Settings.tsx`):
-
-- Four sections: Appearance, Content, Player, Network
-- Persisted to localStorage
-- High contrast mode toggle
-- Auto-resume, auto-play settings
+| Message type | Direction | Description |
+|---|---|---|
+| `open` | server→player | Open URL and play |
+| `playback` | server→player | play/pause/stop/seek |
+| `audio` | server→player | audio track, mute |
+| `video` | server→player | video settings |
+| `subtitle` | server→player | subtitle track, delay |
+| `window` | server→player | screen mode |
+| `shortcut` | server→player | keyboard shortcut action |
+| `state_update` | player→server | player state broadcast (every 2s) |
+| `profile_sync` | bidirectional | profile/M3U/userData synchronization |
 
 ## Troubleshooting
 
@@ -202,105 +193,64 @@ The project uses pnpm workspaces with the following packages:
 - Check `core/vlc-player/lib/{platform}/` directory exists
 - Windows: Verify libvlc.dll and plugins/ folder present
 - Linux: Install system VLC: `apt install vlc libvlc-dev`
-- Check Settings → Player Backend is set to "VLC" or "Auto"
 
 ### Parser Not Found
 
 - Ensure WASM is built: `cd core/parser && wasm-pack build --target web --release`
 - Check `core/parser/pkg/` directory exists
-- Verify import in `core/parser/index.ts`
 
-### Storage Issues
+### Tizen AVPlay Not Working
 
-- Check storage path: `app.getPath('userData')/zenith-storage/`
-- Verify write permissions
-- Look for JSON parsing errors in console
+- AVPlay API only works on a real Tizen device or Tizen emulator
+- In browser, `isAvailable` will be `false` and the store runs in stub mode
+- Availability is checked via `window.webapis?.avplay`
+
+### Storage Issues (Desktop)
+
+- Storage path: `app.getPath('userData')/zenith-storage/`
 - Check file system adapter initialization
 
-### IPC Not Working
+### IPC Not Working (Desktop)
 
-- Check preload script is loaded (main.cjs line 23)
+- Check preload script is loaded
 - Verify contextBridge is exposing API correctly
-- Check ipcMain.handle is registered before window creation
-- Look for errors in both main and renderer console
-- Verify API names: `window.electron.profile.*`, not `window.electronAPI.db.*`
-
-### Hot Reload Not Working
-
-- Restart Vite dev server
-- Check Vite config in `apps/desktop/vite.config.ts`
-- Electron needs manual restart for main process changes
+- Verify API names: `window.electron.profile.*`
 
 ## Code Style
 
 - **TypeScript**: Strict mode enabled
 - **Imports**: Use aliases from workspace packages (`@zenith-tv/*`)
 - **Async/Await**: Preferred over promises
-- **Error Handling**: Try-catch with user-friendly messages
-- **Comments**: JSDoc for exported functions
 - **Naming**: camelCase for variables/functions, PascalCase for components/types
 - **File Organization**: Group by feature, not by type
+- **Shared code**: `mergeUserData`, `httpDiscovery`, content store factory live in the shared package and are imported by both platforms
 
 ## Platform-Specific Notes
 
 ### Desktop (Electron)
 
 - Node.js >= 18.0.0 required
-- Native VLC player addon for video playback (C++ N-API)
-- Main process code is CommonJS (require/module.exports)
-- Renderer process code is ESM (import/export)
+- Main process: CommonJS (`require/module.exports`)
+- Renderer process: ESM (`import/export`)
 - Rust parser via WASM (web target)
-
-**VLC Player Setup (required for native playback):**
-
-```bash
-# Navigate to VLC player package
-cd core/vlc-player
-
-# Download VLC SDK (auto-detects platform)
-node scripts/download-vlc-sdk.js
-
-# Build native addon
-npm run build
-# OR
-node-gyp rebuild
-```
 
 **VLC SDK Structure:**
 
 - Windows: `core/vlc-player/lib/win32/` - libvlc.dll, libvlccore.dll, plugins/
-- Linux: Uses system libvlc (apt install vlc libvlc-dev)
+- Linux: Uses system libvlc (`apt install vlc libvlc-dev`)
 - macOS: `core/vlc-player/lib/darwin/` - VLC.app framework
 
-**electron-builder bundles VLC automatically:**
+### Tizen
 
-- extraResources config copies `lib/{platform}/` to `resources/vlc/`
-- Runtime path: `process.resourcesPath + '/vlc'`
-
-### Tizen (Planned)
-
-- JSON-based storage (same as Desktop)
-- Rust parser via WASM (web target)
+- React + Vite web app, packaged as `.wgt`
+- Rust parser via WASM (web target) — same as desktop
 - AVPlay API for video playback
 - D-pad navigation required
-- Must package as .wgt file
+- Volume control is system-level only (no app-level API)
+- Always fullscreen (no windowed mode)
 
 ### Android (Planned)
 
 - Flutter with Rust FFI for parser (native target, not WASM)
-- JSON-based storage via Flutter file I/O
 - ExoPlayer for video
-- CategoryTree via Rust FFI (same code, different bindings)
 - Adaptive layouts (phone/tablet/TV)
-
-## Performance Considerations
-
-- Virtual scrolling is essential for 1000+ items
-- Debounce search input (currently 300ms)
-- Use React.memo for ContentCard components
-- Lazy load images with native loading="lazy"
-- Cache M3U content (24-hour expiration)
-- **CategoryTree filtering in Rust** - Zero serialization overhead
-- **WASM direct method calls** - No JSON parsing for category operations
-- JSON file caching reduces re-parsing
-- Auto-cleanup expired cache on startup

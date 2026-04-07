@@ -3,4 +3,4 @@ export { ContentBrowserProvider, useContentBrowser } from './ContentBrowserProvi
 export { ContentGrid } from './ContentGrid'
 export { GroupCard } from './GroupCard'
 export { WatchableCard } from './WatchableCard'
-export { VideoPlayerStub } from './VideoPlayerStub'
+export { VideoPlayer } from './VideoPlayer'

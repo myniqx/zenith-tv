@@ -12,6 +12,7 @@ import { initDevEnvironment } from './utils/dev-helper'
 import { Toaster } from '@zenith-tv/ui/sonner'
 import { P2PManager } from './components/P2P/P2PManager'
 import { P2PView } from './components/P2P/P2PView'
+import { Settings } from './components/Settings'
 
 function App() {
   const [activeSection, setActiveSection] = useState<MenuSection>('all')
@@ -23,16 +24,17 @@ function App() {
 
   useEffect(() => {
     if (activeSection === 'exit') {
-      // TODO: Exit app (tizen.application.getCurrentApplication().exit())
-      console.log('Exit requested')
+      if (typeof window !== 'undefined' && (window as any).tizen?.application) {
+        (window as any).tizen.application.getCurrentApplication().exit()
+      } else {
+        window.close()
+      }
     }
   }, [activeSection])
 
   const handleBack = () => {
-    if (activeSection === 'profile' || activeSection === 'p2p') { // Added 'p2p' to back logic
+    if (activeSection !== 'all') {
       setActiveSection('all')
-    } else {
-      console.log('Back button pressed at top level')
     }
   }
 
@@ -52,6 +54,10 @@ function App() {
               <div className="flex-1 overflow-hidden">
                 <P2PView />
               </div>
+            ) : activeSection === 'settings' ? (
+              <div className="flex-1 overflow-hidden">
+                <Settings />
+              </div>
             ) : activeSection === 'all' && movieGroup ? (
               <div className="flex-1 overflow-hidden">
                 <ContentBrowser initialGroup={movieGroup} />
@@ -62,18 +68,13 @@ function App() {
               </div>
             ) : (
               <Layout>
-                <div className="p-8">
+                <div className="flex-1 flex items-center justify-center">
                   <div className="text-center">
-                    <h2 className="text-4xl font-bold mb-4">
-                      Hoş Geldiniz
-                    </h2>
-                    <p className="text-gray-400 text-xl mb-2">
-                      Aktif Bölüm: <span className="text-red-500 font-semibold">{activeSection}</span>
-                    </p>
-                    <p className="text-gray-500 mt-8">
+                    <h2 className="text-4xl font-bold mb-4">Hoş Geldiniz</h2>
+                    <p className="text-gray-500 mt-4">
                       Tizen TV platformu için modern IPTV oynatıcı
                     </p>
-                    <p className="text-gray-600 mt-4 text-sm">
+                    <p className="text-gray-600 mt-2 text-sm">
                       Navigasyon için yön tuşlarını (↑ ↓ ← →) kullanın
                     </p>
                   </div>

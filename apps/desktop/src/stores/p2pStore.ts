@@ -307,7 +307,9 @@ export const useP2PStore = create<P2PStoreState>()(
       handlePlayerConnection: async (connection) => {
         set((state) => ({
           connections: [...state.connections, connection],
-          lastConnection: connection
+          lastConnection: connection,
+          // Auto-select the first connecting device
+          selectedDeviceId: state.selectedDeviceId ?? connection.id,
         }));
       },
 

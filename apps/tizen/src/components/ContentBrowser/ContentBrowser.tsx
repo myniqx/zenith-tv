@@ -1,7 +1,7 @@
 import { GroupObject } from '@zenith-tv/content'
 import { ContentBrowserProvider, useContentBrowser } from './ContentBrowserProvider'
 import { ContentGrid } from './ContentGrid'
-import { VideoPlayerStub } from './VideoPlayerStub'
+import { VideoPlayer } from './VideoPlayer'
 
 interface ContentBrowserProps {
   initialGroup: GroupObject
@@ -31,7 +31,7 @@ function ContentBrowserInner() {
       </div>
 
       {isPlayingVideo && currentWatchable && (
-        <VideoPlayerStub watchable={currentWatchable} onClose={closeVideo} />
+        <VideoPlayer watchable={currentWatchable} onClose={closeVideo} />
       )}
     </div>
   )

@@ -81,6 +81,9 @@ interface P2PPlayerState {
   _setupListeners: () => void;
 }
 
+// Setup listeners immediately on store creation — no need to wait for init()
+let listenersSetup = false;
+
 export const useP2PPlayerStore = create<P2PPlayerState>((set, get) => ({
   // Initial state
   isAvailable: true, // Always true for P2P controller
@@ -118,13 +121,14 @@ export const useP2PPlayerStore = create<P2PPlayerState>((set, get) => ({
   },
 
   _setupListeners: () => {
-    // Listen for state updates from the remote device
+    if (listenersSetup) return;
+    listenersSetup = true;
+
+    // Listen for state updates from the remote Tizen player
     p2p.onMessage(({ message }) => {
       if (message.type === 'state_update') {
-        const state = message.payload as Partial<P2PPlayerState>;
-        // Map remote state to local state
-        // We might need to map specific fields if they differ
-        set(state);
+        const remoteState = message.payload as Partial<P2PPlayerState>;
+        set(remoteState);
       }
     });
   },

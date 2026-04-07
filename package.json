@@ -10,8 +10,8 @@
 	"author": "myniqx",
 	"license": "MIT",
 	"scripts": {
-		"desktop": "pnpm --filter @zenith-tv/desktop dev",
 		"dev:desktop": "pnpm --filter @zenith-tv/desktop dev",
+		"dev:tizen": "pnpm --filter @zenith-tv/tizen dev",
 		"build:parser": "cd core/parser && wasm-pack build --target web --release",
 		"build:vlc": "pnpm --filter @zenith-tv/vlc-player build",
 		"rebuild:vlc": "pnpm --filter @zenith-tv/vlc-player rebuild",
@@ -19,6 +19,8 @@
 		"download:vlc-sdk:all": "pnpm --filter @zenith-tv/vlc-player download-sdk:all",
 		"build:desktop": "pnpm --filter @zenith-tv/desktop build",
 		"build:electron": "pnpm --filter @zenith-tv/desktop build:electron",
+		"build:tizen": "pnpm --filter @zenith-tv/tizen build",
+		"package:tizen": "pnpm --filter @zenith-tv/tizen package",
 		"build:all": "pnpm build:parser && pnpm build:vlc && pnpm build:desktop",
 		"clean": "pnpm -r exec rm -rf node_modules dist build .turbo",
 		"format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",

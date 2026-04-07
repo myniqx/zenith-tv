@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useP2PClientStore } from '../../stores/p2pClientStore';
-import { FocusButton } from '../Navigation';
+import { FocusButton, FocusInput } from '../Navigation';
+import { FocusScope } from '../../contexts/FocusScope';
 
 export function P2PView() {
   const {
@@ -61,26 +62,29 @@ export function P2PView() {
         {/* Manual Connect Panel */}
         <div className="w-1/3 bg-slate-800 p-6 rounded-lg h-fit">
           <h2 className="text-xl font-bold mb-4">Manuel Bağlantı</h2>
-          <div className="flex flex-col gap-4">
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">IP Adresi</label>
-              {/* Note: Physical keyboard on TV is rare, usually rely on on-screen keyboard invoked by input focus */}
-              <input
-                type="text"
-                value={manualIp}
-                onChange={(e) => setManualIp(e.target.value)}
-                placeholder="192.168.1.X"
-                className="w-full bg-slate-700 text-white p-3 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
-              />
+          <FocusScope id="p2p-manual-connect">
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">IP Adresi</label>
+                <FocusInput
+                  focusId="manual-ip-input"
+                  type="text"
+                  value={manualIp}
+                  onChange={(e) => setManualIp(e.target.value)}
+                  onEnter={() => connect({ ip: manualIp, port: 8080, deviceId: 'manual', deviceName: 'Manual Server', version: '1.0' })}
+                  placeholder="192.168.1.X"
+                  className="w-full bg-slate-700 text-white p-3 rounded"
+                />
+              </div>
+              <FocusButton
+                focusId="manual-connect-btn"
+                onClick={() => connect({ ip: manualIp, port: 8080, deviceId: 'manual', deviceName: 'Manual Server', version: '1.0' })}
+                className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded w-full justify-center"
+              >
+                Bağlan
+              </FocusButton>
             </div>
-            <FocusButton
-              focusId="manual-connect-btn"
-              onClick={() => connect({ ip: manualIp, port: 8080, deviceId: 'manual', deviceName: 'Manual Server', version: '1.0' })}
-              className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded w-full justify-center"
-            >
-              Bağlan
-            </FocusButton>
-          </div>
+          </FocusScope>
         </div>
 
         {/* Server List Panel */}
