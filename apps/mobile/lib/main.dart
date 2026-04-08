@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +5,8 @@ import 'core/device_type.dart';
 import 'p2p/client/p2p_client_store.dart';
 import 'p2p/server/p2p_server_store.dart';
 import 'p2p/p2p_manager.dart';
+import 'stores/profile_store.dart';
+import 'stores/content_store.dart';
 import 'ui/shell/app_shell.dart';
 
 void main() async {
@@ -28,6 +29,14 @@ class ZenithApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ProfileStore()),
+        ChangeNotifierProxyProvider<ProfileStore, ContentStore>(
+          create: (ctx) => ContentStore(
+            profileStore: ctx.read<ProfileStore>(),
+          ),
+          update: (_, profileStore, prev) =>
+              prev ?? ContentStore(profileStore: profileStore),
+        ),
         ChangeNotifierProvider(create: (_) => P2PClientStore()),
         ChangeNotifierProvider(create: (_) => P2PServerStore()),
       ],
@@ -73,9 +82,11 @@ class _AppInitializerState extends State<_AppInitializer> {
   }
 
   Future<void> _init() async {
+    final profileStore = context.read<ProfileStore>();
     final clientStore = context.read<P2PClientStore>();
     final serverStore = context.read<P2PServerStore>();
 
+    await profileStore.init();
     await clientStore.init();
 
     _p2pManager = P2PManager(

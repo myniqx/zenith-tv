@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/device_type.dart';
 import '../../p2p/client/p2p_client_store.dart';
+import '../../p2p/server/p2p_server_store.dart';
+import '../../stores/content_store.dart';
 import '../p2p/p2p_screen.dart';
 
-enum _Section { p2p, settings }
+enum AppSection { content, favorites, p2p, profile, settings }
 
-/// Root app shell — selects TV or touch layout based on DeviceType.
-/// Mirrors: apps/tizen/src/App.tsx + apps/desktop/src/App.tsx
+/// Root app shell — picks Phone / Tablet / TV layout based on DeviceType.
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -16,62 +17,157 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  _Section _activeSection = _Section.p2p;
+  AppSection _section = AppSection.profile; // profile is always the first screen
 
-  void _navigate(_Section section) {
-    setState(() => _activeSection = section);
-  }
+  bool get _isReady => context.watch<ContentStore>().isReady;
+
+  void _navigate(AppSection section) => setState(() => _section = section);
 
   Widget _buildContent() {
-    switch (_activeSection) {
-      case _Section.p2p:
+    switch (_section) {
+      case AppSection.content:
+        return const _Placeholder(label: 'Content Browser');
+      case AppSection.favorites:
+        return const _Placeholder(label: 'Favorites');
+      case AppSection.p2p:
         return const P2PScreen();
-      case _Section.settings:
-        return const _SettingsPlaceholder();
+      case AppSection.profile:
+        return const _Placeholder(label: 'Profile');
+      case AppSection.settings:
+        return const _Placeholder(label: 'Settings');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (DeviceTypeDetector.isTV) {
-      return _TVShell(
-        activeSection: _activeSection,
-        onNavigate: _navigate,
-        content: _buildContent(),
+    switch (DeviceTypeDetector.current) {
+      case DeviceType.phone:
+        return _PhoneShell(
+          section: _section,
+          onNavigate: _navigate,
+          isReady: _isReady,
+          content: _buildContent(),
+        );
+      case DeviceType.tablet:
+        return _TabletShell(
+          section: _section,
+          onNavigate: _navigate,
+          isReady: _isReady,
+          content: _buildContent(),
+        );
+      case DeviceType.tv:
+        return _TVShell(
+          section: _section,
+          onNavigate: _navigate,
+          isReady: _isReady,
+          content: _buildContent(),
+        );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phone shell — bottom nav, 5 tabs, no client P2P
+// ---------------------------------------------------------------------------
+
+class _PhoneShell extends StatelessWidget {
+  final AppSection section;
+  final void Function(AppSection) onNavigate;
+  final bool isReady;
+  final Widget content;
+
+  const _PhoneShell({
+    required this.section,
+    required this.onNavigate,
+    required this.isReady,
+    required this.content,
+  });
+
+  // Phone has no client — show only server-side P2P screen
+  static const _tabs = [
+    AppSection.content,
+    AppSection.favorites,
+    AppSection.p2p,
+    AppSection.profile,
+    AppSection.settings,
+  ];
+
+  int get _index => _tabs.indexOf(section).clamp(0, _tabs.length - 1);
+
+  @override
+  Widget build(BuildContext context) {
+    // Not ready: show profile setup full screen, no nav bar
+    if (!isReady) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        body: content,
       );
     }
 
-    return _TouchShell(
-      activeSection: _activeSection,
-      onNavigate: _navigate,
-      content: _buildContent(),
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      body: content,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _index,
+        onTap: (i) => onNavigate(_tabs[i]),
+        backgroundColor: const Color(0xFF1E293B),
+        selectedItemColor: const Color(0xFFEF4444),
+        unselectedItemColor: const Color(0xFF64748B),
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.tv), label: 'Content'),
+          BottomNavigationBarItem(icon: Icon(Icons.star), label: 'Favorites'),
+          BottomNavigationBarItem(icon: Icon(Icons.wifi), label: 'P2P'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+        ],
+      ),
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// TV shell — horizontal top menu, full-screen content area
-// Mirrors: Tizen header layout
+// Tablet shell — top header (desktop style), client + server P2P
 // ---------------------------------------------------------------------------
 
-class _TVShell extends StatelessWidget {
-  final _Section activeSection;
-  final void Function(_Section) onNavigate;
+class _TabletShell extends StatelessWidget {
+  final AppSection section;
+  final void Function(AppSection) onNavigate;
+  final bool isReady;
   final Widget content;
 
-  const _TVShell({
-    required this.activeSection,
+  const _TabletShell({
+    required this.section,
     required this.onNavigate,
+    required this.isReady,
     required this.content,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Not ready: split screen — profile left, P2P right
+    if (!isReady) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        body: Row(
+          children: [
+            Expanded(child: content), // profile section
+            const VerticalDivider(color: Color(0xFF334155), width: 1),
+            const Expanded(child: P2PScreen()),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       body: Column(
         children: [
-          _TVHeader(activeSection: activeSection, onNavigate: onNavigate),
+          _TopHeader(
+            section: section,
+            onNavigate: onNavigate,
+            showP2PBadge: true,
+          ),
           Expanded(child: content),
         ],
       ),
@@ -79,63 +175,135 @@ class _TVShell extends StatelessWidget {
   }
 }
 
-class _TVHeader extends StatelessWidget {
-  final _Section activeSection;
-  final void Function(_Section) onNavigate;
+// ---------------------------------------------------------------------------
+// TV shell — top header (Tizen style), client + server P2P, D-pad focus
+// ---------------------------------------------------------------------------
 
-  const _TVHeader(
-      {required this.activeSection, required this.onNavigate});
+class _TVShell extends StatelessWidget {
+  final AppSection section;
+  final void Function(AppSection) onNavigate;
+  final bool isReady;
+  final Widget content;
+
+  const _TVShell({
+    required this.section,
+    required this.onNavigate,
+    required this.isReady,
+    required this.content,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 60,
-      color: const Color(0xFF1E293B),
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Row(
+    // Not ready: split screen — profile left, P2P right
+    if (!isReady) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        body: Row(
+          children: [
+            Expanded(child: content), // profile section
+            const VerticalDivider(color: Color(0xFF334155), width: 1),
+            const Expanded(child: P2PScreen()),
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      body: Column(
         children: [
-          const Text(
-            'Zenith TV',
-            style: TextStyle(
-              color: Color(0xFFEF4444),
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
+          _TopHeader(
+            section: section,
+            onNavigate: onNavigate,
+            showP2PBadge: true,
+            isTV: true,
           ),
-          const SizedBox(width: 48),
-          _HeaderTab(
-            label: 'P2P',
-            isActive: activeSection == _Section.p2p,
-            onTap: () => onNavigate(_Section.p2p),
-          ),
-          _HeaderTab(
-            label: 'Settings',
-            isActive: activeSection == _Section.settings,
-            onTap: () => onNavigate(_Section.settings),
-          ),
-          const Spacer(),
-          _ConnectionBadge(),
+          Expanded(child: content),
         ],
       ),
     );
   }
 }
 
-class _HeaderTab extends StatelessWidget {
+// ---------------------------------------------------------------------------
+// Top header — shared by tablet and TV
+// ---------------------------------------------------------------------------
+
+class _TopHeader extends StatelessWidget {
+  final AppSection section;
+  final void Function(AppSection) onNavigate;
+  final bool showP2PBadge;
+  final bool isTV;
+
+  const _TopHeader({
+    required this.section,
+    required this.onNavigate,
+    this.showP2PBadge = false,
+    this.isTV = false,
+  });
+
+  static const _sections = [
+    (AppSection.content, 'Content'),
+    (AppSection.favorites, 'Favorites'),
+    (AppSection.p2p, 'P2P'),
+    (AppSection.profile, 'Profile'),
+    (AppSection.settings, 'Settings'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: isTV ? 64 : 56,
+      color: const Color(0xFF1E293B),
+      padding: EdgeInsets.symmetric(horizontal: isTV ? 32 : 16),
+      child: Row(
+        children: [
+          Text(
+            'Zenith TV',
+            style: TextStyle(
+              color: const Color(0xFFEF4444),
+              fontSize: isTV ? 22 : 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(width: isTV ? 40 : 24),
+          ..._sections.map((s) => _Tab(
+                label: s.$2,
+                isActive: section == s.$1,
+                isTV: isTV,
+                onTap: () => onNavigate(s.$1),
+              )),
+          const Spacer(),
+          if (showP2PBadge) const _P2PBadge(),
+        ],
+      ),
+    );
+  }
+}
+
+class _Tab extends StatelessWidget {
   final String label;
   final bool isActive;
+  final bool isTV;
   final VoidCallback onTap;
 
-  const _HeaderTab(
-      {required this.label, required this.isActive, required this.onTap});
+  const _Tab({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+    this.isTV = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        margin: const EdgeInsets.only(right: 4),
+        padding: EdgeInsets.symmetric(
+          horizontal: isTV ? 20 : 14,
+          vertical: isTV ? 8 : 6,
+        ),
         decoration: BoxDecoration(
           color: isActive ? const Color(0xFFEF4444) : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
@@ -144,7 +312,7 @@ class _HeaderTab extends StatelessWidget {
           label,
           style: TextStyle(
             color: isActive ? Colors.white : const Color(0xFF94A3B8),
-            fontSize: 16,
+            fontSize: isTV ? 16 : 14,
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -154,94 +322,74 @@ class _HeaderTab extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Touch shell — bottom navigation bar
+// P2P connection badge — shown in header for tablet/TV
 // ---------------------------------------------------------------------------
 
-class _TouchShell extends StatelessWidget {
-  final _Section activeSection;
-  final void Function(_Section) onNavigate;
-  final Widget content;
+class _P2PBadge extends StatelessWidget {
+  const _P2PBadge();
 
-  const _TouchShell({
-    required this.activeSection,
-    required this.onNavigate,
-    required this.content,
-  });
-
-  int get _currentIndex =>
-      _Section.values.indexOf(activeSection);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: content,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => onNavigate(_Section.values[i]),
-        backgroundColor: const Color(0xFF1E293B),
-        selectedItemColor: const Color(0xFFEF4444),
-        unselectedItemColor: const Color(0xFF64748B),
-        items: const [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.wifi), label: 'P2P'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.settings), label: 'Settings'),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Connection badge (header indicator)
-// ---------------------------------------------------------------------------
-
-class _ConnectionBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<P2PClientStore>(
-      builder: (context, store, _) {
-        final connected = store.isConnected;
-        return Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: connected ? Colors.green : Colors.red,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              connected
-                  ? store.currentServer?.deviceName ?? 'Connected'
-                  : 'Not connected',
-              style: TextStyle(
-                color: connected ? Colors.green.shade300 : Colors.grey,
-                fontSize: 14,
-              ),
-            ),
-          ],
+      builder: (context, clientStore, _) {
+        return Consumer<P2PServerStore>(
+          builder: (context, serverStore, _) {
+            final clientConnected = clientStore.isConnected;
+            final serverConnections = serverStore.connectionCount;
+
+            if (clientConnected) {
+              return _badge(
+                Colors.green,
+                clientStore.currentServer?.deviceName ?? 'Connected',
+              );
+            }
+
+            if (serverConnections > 0) {
+              return _badge(
+                Colors.blue,
+                '$serverConnections device${serverConnections > 1 ? 's' : ''} connected',
+              );
+            }
+
+            return _badge(Colors.grey.shade700, 'P2P off');
+          },
         );
       },
     );
   }
+
+  Widget _badge(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Text(label,
+            style: TextStyle(color: color, fontSize: 13)),
+      ],
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Placeholder screens (filled in later steps)
+// Placeholder
 // ---------------------------------------------------------------------------
 
-class _SettingsPlaceholder extends StatelessWidget {
-  const _SettingsPlaceholder();
+class _Placeholder extends StatelessWidget {
+  final String label;
+  const _Placeholder({required this.label});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Text('Settings — coming soon',
-          style: TextStyle(color: Colors.white54, fontSize: 18)),
+    return Center(
+      child: Text(
+        '$label — coming soon',
+        style: const TextStyle(color: Colors.white54, fontSize: 18),
+      ),
     );
   }
 }
