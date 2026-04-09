@@ -12,7 +12,9 @@
 	"scripts": {
 		"dev:desktop": "pnpm --filter @zenith-tv/desktop dev",
 		"dev:tizen": "pnpm --filter @zenith-tv/tizen dev",
-		"build:parser": "cd core/parser && wasm-pack build --target web --release",
+		"build:parser": "cd core/parser && wasm-pack build --target web --release --features wasm",
+		"build:parser:android": "node core/parser/scripts/build-android.cjs",
+		"build:parser:android:all": "node core/parser/scripts/build-android.cjs --targets=arm64-v8a,armeabi-v7a,x86_64",
 		"build:vlc": "pnpm --filter @zenith-tv/vlc-player build",
 		"rebuild:vlc": "pnpm --filter @zenith-tv/vlc-player rebuild",
 		"download:vlc-sdk": "pnpm --filter @zenith-tv/vlc-player download-sdk",

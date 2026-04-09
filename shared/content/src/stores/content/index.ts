@@ -158,6 +158,16 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
           }
         )
 
+        // Remove items older than 30 days from recent tracking
+        const thirtyDaysAgo = dateNow - 30 * 24 * 60 * 60 * 1000
+        let removedCount = 0
+        for (const url of Object.keys(update.items)) {
+          if (update.items[url] < thirtyDaysAgo) {
+            delete update.items[url]
+            removedCount++
+          }
+        }
+
         const { userData } = get()
 
         if (!source) {
@@ -217,7 +227,7 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
         }
         await fileSystem.writeJSON(getM3UStats(currentUUID), stats)
 
-        if (update.createdAt === dateNow) {
+        if (update.createdAt === dateNow || removedCount > 0) {
           await fileSystem.writeJSON(getM3UUpdate(currentUUID), update)
         }
       } catch (error) {
@@ -231,7 +241,7 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
     update: async () => {
       const { currentUsername, currentUUID } = get()
 
-      get().load(true)
+      await get().load(true)
 
       if (!currentUsername || !currentUUID) {
         console.error('Cannot update: username or UUID not set. Call setContent first.')
@@ -269,12 +279,14 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
           await fileSystem.writeFile(getM3USource(currentUUID), source)
         }
 
+        const isFirstFetch = Object.keys(update.items).length === 0
         const AddIf = (group: GroupObject, item: any) => {
           if (group.has(item)) return
           const watchable = group.addGroup(item.group).Add(item)
           watchable.AddedDate = new Date(dateNow)
           update.items[item.url] = dateNow
-          get().recentGroup.AddWatchable(watchable)
+          // On first fetch, don't add to recent — only new items on subsequent updates
+          if (!isFirstFetch) get().recentGroup.AddWatchable(watchable)
         }
 
         const { movieGroup, tvShowGroup, streamGroup } = get()

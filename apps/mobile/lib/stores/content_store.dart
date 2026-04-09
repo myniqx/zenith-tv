@@ -1,304 +1,726 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'm3u_parser.dart';
+
+import '../models/index.dart';
+import '../p2p/models/profile_sync_payload.dart';
+import '../parser/m3u_parser_ffi.dart';
+import 'content_helpers.dart';
 import 'profile_store.dart';
-import '../p2p/utils/merge_user_data.dart';
 
-// ---------------------------------------------------------------------------
-// Models
-// ---------------------------------------------------------------------------
-
-class M3UItem {
-  final String title;
-  final String url;
-  final String group;
-  final String? logo;
-  final String category; // 'Movie' | 'Series' | 'LiveStream'
-
-  const M3UItem({
-    required this.title,
-    required this.url,
-    required this.group,
-    required this.category,
-    this.logo,
-  });
-
-  factory M3UItem.fromJson(Map<String, dynamic> json) => M3UItem(
-        title: json['title'] as String,
-        url: json['url'] as String,
-        group: json['group'] as String,
-        category: json['category'] as String,
-        logo: json['logo'] as String?,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'title': title,
-        'url': url,
-        'group': group,
-        'category': category,
-        if (logo != null) 'logo': logo,
-      };
-}
-
-class M3UGroup {
-  final String name;
-  final String category;
-  final List<M3UItem> items;
-
-  const M3UGroup({
-    required this.name,
-    required this.category,
-    required this.items,
-  });
-}
+export 'content_helpers.dart';
 
 // ---------------------------------------------------------------------------
 // ContentStore
+// Mirrors: shared/content/src/stores/content/index.ts → createContentStore
 // ---------------------------------------------------------------------------
 
-/// Manages loaded M3U content and user data (favorites, watch progress, tracks).
-/// Mirrors: shared/content/src/stores/content/index.ts → createContentStore
 class ContentStore extends ChangeNotifier {
-  static const String _userDataPrefsKey = 'zenith_user_data';
-
   final ProfileStore profileStore;
 
-  // --- State ---
-  String? _currentUsername;
-  String? _currentUUID;
-  List<M3UItem> _items = [];
-  List<M3UGroup> _groups = [];
-  Map<String, dynamic> _userData = _emptyUserData();
-  bool _isLoading = false;
-  String? _error;
+  // --- Content groups (mirrors desktop) ---
+  GroupObject movieGroup   = GroupObject('Movies');
+  GroupObject tvShowGroup  = GroupObject('TV Shows');
+  GroupObject streamGroup  = GroupObject('Live Streams');
+  GroupObject recentGroup  = GroupObject('Recent');
+  GroupObject favoriteGroup = GroupObject('Favorites');
+  GroupObject watchedGroup = GroupObject('Watched');
 
-  // --- Getters ---
-  String? get currentUsername => _currentUsername;
-  String? get currentUUID => _currentUUID;
-  List<M3UItem> get items => List.unmodifiable(_items);
-  List<M3UGroup> get groups => List.unmodifiable(_groups);
-  Map<String, dynamic> get userData => Map.unmodifiable(_userData);
-  bool get isLoading => _isLoading;
-  String? get error => _error;
+  // --- Navigation state ---
+  GroupObject? currentGroup;
+  String searchQuery = '';
+  SortBy sortBy = SortBy.name;
+  SortOrder sortOrder = SortOrder.asc;
+  GroupBy groupBy = GroupBy.none;
+  List<ContentGroupData> groupedContent = [];
 
-  /// True when a profile is selected and M3U is loaded.
+  // --- Profile state ---
+  String? currentUsername;
+  String? currentUUID;
+  String? currentM3UUrl;
+
+  // --- UserData ---
+  UserData _userData = UserData.empty;
+  UserData get userData => _userData;
+
+  // --- Status ---
+  bool isLoading = false;
+  String? error;
+  /// True only after a user-triggered setContent() completes loading.
+  /// Shell uses this to auto-navigate to content browser once, then clears it.
+  bool justLoaded = false;
+
+  // --- Load progress (0.0 → 1.0) ---
+  double loadProgress = 0.0;
+  Timer? _downloadProgressTimer;
+
+  // --- Derived lists ---
+  List<WatchableObject> get recentItems => recentGroup.watchables;
+  List<WatchableObject> get favoriteItems => favoriteGroup.watchables;
+
+  /// True when a profile is selected and content is loaded.
   bool get isReady =>
-      _currentUsername != null && _currentUUID != null && _items.isNotEmpty;
-
-  List<M3UGroup> get movieGroups =>
-      _groups.where((g) => g.category == 'Movie').toList();
-
-  List<M3UGroup> get seriesGroups =>
-      _groups.where((g) => g.category == 'Series').toList();
-
-  List<M3UGroup> get liveGroups =>
-      _groups.where((g) => g.category == 'LiveStream').toList();
-
-  List<M3UItem> get favoriteItems {
-    final watchables = _userData['watchables'] as Map<String, dynamic>? ?? {};
-    return _items.where((item) {
-      final d = watchables[item.url] as Map<String, dynamic>?;
-      return (d?['favorite'] as Map<String, dynamic>?)?['value'] == true;
-    }).toList();
-  }
+      currentUsername != null &&
+      currentUUID != null &&
+      (movieGroup.totalCount > 0 ||
+          tvShowGroup.totalCount > 0 ||
+          streamGroup.totalCount > 0);
 
   ContentStore({required this.profileStore});
 
   // ---------------------------------------------------------------------------
-  // Profile selection
+  // setContent — mirrors desktop setContent()
   // ---------------------------------------------------------------------------
 
-  /// Sets active profile and loads its M3U content.
-  /// Mirrors: desktop content store setContent()
   Future<void> setContent(String username, String uuid) async {
-    _currentUsername = username;
-    _currentUUID = uuid;
+    if (username == currentUsername && uuid == currentUUID) return;
+
+    _reset();
+    currentUsername = username;
+    currentUUID = uuid;
+    currentM3UUrl = profileStore.getUrlFromUUID(uuid);
     profileStore.touchProfile(username);
+
+    await _loadUserData();
     await load();
-  }
-
-  /// Reloads M3U for current profile.
-  Future<void> load() async {
-    if (_currentUUID == null) return;
-
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      // Try cached file first
-      final cached = await _readCachedM3U(_currentUUID!);
-
-      if (cached != null) {
-        _applyItems(parseM3U(cached));
-      } else {
-        // Fetch from network
-        final url = profileStore.getUrlFromUUID(_currentUUID!);
-        if (url == null) {
-          _error = 'No URL found for UUID: $_currentUUID';
-          return;
-        }
-        final content = await _fetchM3U(url);
-        await _cacheM3U(_currentUUID!, content);
-        _applyItems(parseM3U(content));
-      }
-
-      await _loadUserData();
-    } catch (e) {
-      _error = 'Failed to load content: $e';
-    } finally {
-      _isLoading = false;
+    // If no cached source exists, fetch from network automatically
+    if (error != null) await update();
+    if (isReady) {
+      justLoaded = true;
       notifyListeners();
     }
   }
 
-  /// Resets content state (e.g. after profile deletion).
-  void reset() {
-    _currentUsername = null;
-    _currentUUID = null;
-    _items = [];
-    _groups = [];
-    _userData = _emptyUserData();
-    _error = null;
+  // ---------------------------------------------------------------------------
+  // load — mirrors desktop load()
+  // ---------------------------------------------------------------------------
+
+  Future<void> load({bool fromUpdate = false}) async {
+    if (currentUsername == null || currentUUID == null) return;
+
+    isLoading = true;
+    error = null;
+    notifyListeners();
+
+    try {
+      debugPrint('[ContentStore] Loading ${currentUsername!}/${currentUUID!}');
+
+      final source = await _readFile(getM3USource(currentUUID!));
+      final update = await _readJsonOrDefault(
+        getM3UUpdate(currentUUID!),
+        M3UUpdateData.fresh(),
+        M3UUpdateData.fromJson,
+      );
+
+      // Remove items older than 30 days from recent tracking
+      final thirtyDaysAgo = DateTime.now().millisecondsSinceEpoch - 30 * 24 * 60 * 60 * 1000;
+      final keysToRemove = update.items.entries
+          .where((e) => e.value < thirtyDaysAgo)
+          .map((e) => e.key)
+          .toList();
+      for (final key in keysToRemove) {
+        update.items.remove(key);
+      }
+
+      if (source == null) {
+        if (!fromUpdate) {
+          debugPrint('[ContentStore] No source for ${currentUUID!}');
+          error = 'No source content found. Use refresh to download.';
+        }
+        return;
+      }
+
+      final m3uList = await parseM3UAsync(source);
+      debugPrint('[ContentStore] Parsed ${m3uList.length} items');
+
+      _buildGroups(m3uList, update);
+
+      final stats = calculateStats();
+      debugPrint('[ContentStore] Stats: movies=${stats.movieCount} '
+          'tvShows=${stats.tvShowCount} live=${stats.liveStreamCount}');
+      await _writeJson(getM3UStats(currentUUID!), stats.toJson());
+
+      // Write update file if newly created or items were pruned
+      if (update.items.isEmpty || keysToRemove.isNotEmpty) {
+        await _writeJson(getM3UUpdate(currentUUID!), update.toJson());
+      }
+    } catch (e) {
+      error = 'Failed to load content: $e';
+      debugPrint('[ContentStore] load error: $e');
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // update — fetch from network, add only new items
+  // Mirrors: desktop update()
+  // ---------------------------------------------------------------------------
+
+  Future<void> update() async {
+    if (currentUsername == null || currentUUID == null) return;
+
+    // Load existing content first so we can diff
+    await load(fromUpdate: true);
+
+    final url = currentM3UUrl ?? profileStore.getUrlFromUUID(currentUUID!);
+    if (url == null) {
+      error = 'No URL found for this profile';
+      notifyListeners();
+      return;
+    }
+
+    isLoading = true;
+    loadProgress = 0.0;
+    error = null;
+    notifyListeners();
+
+    try {
+      // Phase 1: Download (0.0 → 0.70 indeterminate, timer-driven)
+      _startDownloadProgress();
+      debugPrint('[ContentStore] Fetching from $url');
+      final sw = Stopwatch()..start();
+
+      final response = await HttpClient().getUrl(Uri.parse(url));
+      final res = await response.close();
+      final source = await res.transform(utf8.decoder).join();
+
+      _stopDownloadProgress();
+      loadProgress = 0.70;
+      notifyListeners();
+      debugPrint('[ContentStore] Fetched ${source.length} chars in ${sw.elapsedMilliseconds}ms');
+
+      // Phase 2: Rust parse (0.70 → 0.80)
+      sw.reset();
+      final m3uList = await parseM3UAsync(source);
+      loadProgress = 0.80;
+      notifyListeners();
+      debugPrint('[ContentStore] Parsed ${m3uList.length} items in ${sw.elapsedMilliseconds}ms (Rust FFI)');
+
+      if (m3uList.isEmpty) {
+        error = 'Fetched empty playlist';
+        return;
+      }
+
+      // Save source
+      await _writeFile(getM3USource(currentUUID!), source);
+
+      // Load existing update data
+      final update = await _readJsonOrDefault(
+        getM3UUpdate(currentUUID!),
+        M3UUpdateData.fresh(),
+        M3UUpdateData.fromJson,
+      );
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      // On first fetch update.items is empty — don't flood recent
+      final isFirstFetch = update.items.isEmpty;
+
+      // Add only new items
+      void addIfNew(GroupObject group, M3UObject item) {
+        if (group.has(item)) return;
+        final watchable = group.addGroup(item.group).add(item);
+        watchable.addedDate = DateTime.fromMillisecondsSinceEpoch(now);
+        update.items[item.url] = now;
+        if (!isFirstFetch) recentGroup.addWatchable(watchable);
+      }
+
+      // Phase 3: Tree build (0.80 → 1.0), tick every 10k items
+      sw.reset();
+      final total = m3uList.length;
+      for (var i = 0; i < total; i++) {
+        final item = m3uList[i];
+        switch (item.category) {
+          case M3UCategory.movie:
+            addIfNew(movieGroup, item);
+            break;
+          case M3UCategory.series:
+            addIfNew(tvShowGroup, item);
+            break;
+          case M3UCategory.liveStream:
+            addIfNew(streamGroup, item);
+            break;
+        }
+        if (i % 10000 == 9999) {
+          loadProgress = 0.80 + 0.20 * ((i + 1) / total);
+          notifyListeners();
+        }
+      }
+
+      movieGroup.lastCheck();
+      tvShowGroup.lastCheck();
+      streamGroup.lastCheck();
+      recentGroup.lastCheck();
+      debugPrint('[ContentStore] Tree built in ${sw.elapsedMilliseconds}ms');
+
+      final stats = calculateStats();
+      await _writeJson(getM3UUpdate(currentUUID!), update.toJson());
+      await _writeJson(getM3UStats(currentUUID!), stats.toJson());
+
+      debugPrint('[ContentStore] Update complete');
+    } catch (e) {
+      error = 'Failed to update: $e';
+      debugPrint('[ContentStore] update error: $e');
+    } finally {
+      _stopDownloadProgress();
+      loadProgress = 1.0;
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Navigation
+  // ---------------------------------------------------------------------------
+
+  void setGroup(GroupObject? group) {
+    if (currentGroup == group) return;
+    currentGroup = group;
+    _updateGroupedContent();
+    notifyListeners();
+  }
+
+  void setSearchQuery(String query) {
+    if (searchQuery == query) return;
+    searchQuery = query;
+    _updateGroupedContent();
+    notifyListeners();
+  }
+
+  void setSortBy(SortBy value) {
+    if (sortBy == value) return;
+    sortBy = value;
+    _updateGroupedContent();
+    _savePlayerData();
+    notifyListeners();
+  }
+
+  void setSortOrder(SortOrder value) {
+    if (sortOrder == value) return;
+    sortOrder = value;
+    _updateGroupedContent();
+    _savePlayerData();
+    notifyListeners();
+  }
+
+  void setGroupBy(GroupBy value) {
+    if (groupBy == value) return;
+    groupBy = value;
+    _updateGroupedContent();
+    _savePlayerData();
     notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
-  // UserData
+  // UserData mutations
   // ---------------------------------------------------------------------------
 
-  Future<void> setUserData(Map<String, dynamic> data) async {
-    _userData = data;
-    await _saveUserData();
+  void toggleFavorite(WatchableObject watchable) {
+    final current = watchable.userData.favorite?.value ?? false;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    watchable.userData = watchable.userData.copyWith(
+      favorite: FavoriteData(value: !current, updatedAt: now),
+    );
+    _persistWatchable(watchable);
+
+    if (!current) {
+      favoriteGroup.addWatchable(watchable);
+    } else {
+      favoriteGroup.removeWatchable(watchable);
+    }
     notifyListeners();
   }
 
-  /// Merges remote userData (from P2P) into local and persists.
-  Future<Map<String, dynamic>> mergeAndSaveUserData(
-      Map<String, dynamic> remote) async {
-    final merged = mergeUserData(_userData, remote);
-    await setUserData(merged);
-    return merged;
+  void toggleHidden(WatchableObject watchable) {
+    final current = watchable.userData.hidden?.value ?? false;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    watchable.userData = watchable.userData.copyWith(
+      hidden: HiddenData(value: !current, updatedAt: now),
+    );
+    _persistWatchable(watchable);
+    notifyListeners();
   }
 
-  void setFavorite(String url, bool value) {
-    _mutateWatchable(url, 'favorite', {
-      'value': value,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
-    });
+  void saveWatchProgress(
+      WatchableObject watchable, double position, double duration) {
+    if (watchable.category == M3UCategory.liveStream) return;
+
+    final progress = secondsToProgress(position, duration);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final isWatched = progress > 0.95;
+
+    final prevWatched = watchable.userData.watchProgress?.watched;
+    final wasWatched = prevWatched != null;
+
+    if (wasWatched && progress == 0) return;
+
+    watchable.userData = watchable.userData.copyWith(
+      watchProgress: WatchProgressData(
+        progress: isWatched ? 0 : progress,
+        updatedAt: now,
+        watched: wasWatched ? prevWatched : (isWatched ? now : null),
+      ),
+    );
+    _persistWatchable(watchable);
+
+    if (isWatched && !wasWatched) {
+      watchedGroup.addWatchable(watchable);
+    }
+    notifyListeners();
   }
 
-  void setWatchProgress(String url, double progress, {bool? watched}) {
-    _mutateWatchable(url, 'watchProgress', {
-      'progress': progress,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
-      'watched': watched == true ? DateTime.now().millisecondsSinceEpoch : null,
-    });
+  void saveTrackSelection(WatchableObject watchable,
+      {int? audioTrack, int? subtitleTrack}) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    watchable.userData = watchable.userData.copyWith(
+      tracks: TrackSelectionData(
+        audio: audioTrack,
+        subtitle: subtitleTrack,
+        updatedAt: now,
+      ),
+    );
+    _persistWatchable(watchable);
+    notifyListeners();
   }
 
-  void setTrackSelection(String url, {int? audio, int? subtitle}) {
-    _mutateWatchable(url, 'tracks', {
-      'audio': audio,
-      'subtitle': subtitle,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
-    });
+  // ---------------------------------------------------------------------------
+  // Episode navigation
+  // ---------------------------------------------------------------------------
+
+  WatchableObject? getNextEpisode(WatchableObject current) {
+    if (current.category != M3UCategory.series) return null;
+    final tv = current as TvShowWatchableObject;
+    final season = tv.upperLevel as TvShowSeasonGroupObject?;
+    if (season == null) return null;
+
+    final next = season.getEpisode(tv.episode + 1);
+    if (next != null) return next;
+
+    final show = season.upperLevel as TvShowGroupObject?;
+    return show?.getEpisode(season.season + 1, 1);
   }
 
-  Map<String, dynamic>? getItemData(String url) {
-    final watchables = _userData['watchables'] as Map<String, dynamic>?;
-    return watchables?[url] as Map<String, dynamic>?;
+  WatchableObject? getPreviousEpisode(WatchableObject current) {
+    if (current.category != M3UCategory.series) return null;
+    final tv = current as TvShowWatchableObject;
+    final season = tv.upperLevel as TvShowSeasonGroupObject?;
+    if (season == null) return null;
+
+    if (tv.episode > 1) return season.getEpisode(tv.episode - 1);
+
+    final show = season.upperLevel as TvShowGroupObject?;
+    if (show == null || season.season <= 1) return null;
+    final prevSeason = show.getSeason(season.season - 1);
+    return prevSeason?.getEpisode(prevSeason.episodeCount);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Stats
+  // ---------------------------------------------------------------------------
+
+  M3UStats calculateStats() {
+    int countGroups(GroupObject g) =>
+        g.groups.length +
+        g.groups.fold(0, (sum, sub) => sum + countGroups(sub));
+
+    return M3UStats(
+      groupCount: countGroups(movieGroup) +
+          countGroups(tvShowGroup) +
+          countGroups(streamGroup),
+      tvShowCount: tvShowGroup.tvShowCount,
+      tvShowEpisodeCount: tvShowGroup.tvShowEpisodeCount,
+      liveStreamCount: streamGroup.totalCount,
+      movieCount: movieGroup.totalCount,
+      totalWatchables: movieGroup.totalCount +
+          tvShowGroup.tvShowEpisodeCount +
+          streamGroup.totalCount,
+    );
   }
 
   // ---------------------------------------------------------------------------
   // P2P sync
   // ---------------------------------------------------------------------------
 
-  /// Writes M3U data received from a P2P peer.
-  /// Mirrors: desktop P2PManager syncM3UData call
+  /// Writes M3U data received from a P2P peer and reloads.
   Future<void> syncM3UData(
     String uuid,
     String source,
     Map<String, dynamic> update,
     Map<String, dynamic> stats,
   ) async {
-    await _cacheM3URaw(uuid, update, stats);
-    if (_currentUUID == uuid) {
-      await load();
-    }
+    await _writeFile(getM3USource(uuid), source);
+    await _writeJson(getM3UUpdate(uuid), update);
+    await _writeJson(getM3UStats(uuid), stats);
+    if (currentUUID == uuid) await load();
   }
 
-  /// Builds the welcome payload sent to a newly connected P2P client.
-  /// Mirrors: desktop content store getWellComePayload()
-  Map<String, dynamic>? getWelcomePayload() {
-    if (_currentUsername == null || _currentUUID == null) return null;
-
-    final profile = profileStore.getProfile(_currentUsername!);
-    if (profile == null) return null;
-
-    final url = profileStore.getUrlFromUUID(_currentUUID!);
-    if (url == null) return null;
-
-    return {
-      'profile': {
-        'username': _currentUsername,
-        'uuid': _currentUUID,
-        'url': url,
-      },
-      'userData': _userData,
-    };
+  /// Payload sent to newly connected P2P client.
+  /// Mirrors: desktop getWellComePayload()
+  ProfileSyncPayload? getWelcomePayload() {
+    if (currentUsername == null || currentUUID == null || currentM3UUrl == null) {
+      return null;
+    }
+    return ProfileSyncPayload(
+      profile: ProfileInfo(
+        username: currentUsername!,
+        uuid: currentUUID!,
+        url: currentM3UUrl!,
+      ),
+      userData: _userData.toJson(),
+    );
   }
 
   // ---------------------------------------------------------------------------
-  // Internal
+  // Internal — group building
   // ---------------------------------------------------------------------------
 
-  void _applyItems(List<M3UItem> items) {
-    _items = items;
-    _groups = _buildGroups(items);
-  }
+  void _buildGroups(List<M3UObject> m3uList, M3UUpdateData update) {
+    for (final item in m3uList) {
+      WatchableObject watchable;
 
-  List<M3UGroup> _buildGroups(List<M3UItem> items) {
-    final map = <String, List<M3UItem>>{};
-    for (final item in items) {
-      map.putIfAbsent(item.group, () => []).add(item);
+      switch (item.category) {
+        case M3UCategory.movie:
+          watchable = movieGroup.addGroup(item.group).add(item);
+          break;
+        case M3UCategory.series:
+          watchable = tvShowGroup.addGroup(item.group).addTvShow(item);
+          break;
+        case M3UCategory.liveStream:
+          watchable = streamGroup.addGroup(item.group).add(item);
+          break;
+      }
+
+      final addedTs = update.items[item.url];
+      watchable.addedDate = addedTs != null
+          ? DateTime.fromMillisecondsSinceEpoch(addedTs)
+          : DateTime.fromMillisecondsSinceEpoch(update.createdAt);
+
+      if (addedTs != null) recentGroup.addWatchable(watchable);
+
+      final userItem = _userData.watchables[item.url];
+      if (userItem != null) {
+        watchable.userData = userItem;
+        if (userItem.favorite?.value == true) favoriteGroup.addWatchable(watchable);
+        if (userItem.watchProgress?.watched != null) watchedGroup.addWatchable(watchable);
+      }
     }
-    return map.entries.map((e) {
-      final category = e.value.first.category;
-      return M3UGroup(name: e.key, category: category, items: e.value);
-    }).toList();
+
+    movieGroup.lastCheck();
+    tvShowGroup.lastCheck();
+    streamGroup.lastCheck();
+    recentGroup.lastCheck();
   }
 
-  void _mutateWatchable(String url, String field, Map<String, dynamic> data) {
-    final watchables =
-        Map<String, dynamic>.from(_userData['watchables'] as Map? ?? {});
-    final item =
-        Map<String, dynamic>.from(watchables[url] as Map? ?? {});
-    item[field] = data;
-    watchables[url] = item;
-    _userData = {..._userData, 'watchables': watchables};
-    _saveUserData();
+  // ---------------------------------------------------------------------------
+  // Internal — grouped content (mirrors desktop updateGroupedContent)
+  // ---------------------------------------------------------------------------
+
+  void _updateGroupedContent() {
+    if (currentGroup == null) {
+      groupedContent = [];
+      return;
+    }
+
+    final isSearching = searchQuery.trim().isNotEmpty;
+    final result = <ContentGroupData>[];
+
+    List<GroupObject> getGroups() {
+      if (isSearching) {
+        final all = collectGroupsRecursive(currentGroup!);
+        final q = searchQuery.toLowerCase();
+        return all.where((g) => g.name.toLowerCase().contains(q)).toList();
+      }
+      return [...currentGroup!.groups];
+    }
+
+    List<WatchableObject> getWatchables() {
+      if (isSearching) {
+        return filterBySearch(
+            collectWatchablesRecursive(currentGroup!), searchQuery);
+      }
+      return [...currentGroup!.watchables];
+    }
+
+    switch (groupBy) {
+      case GroupBy.none:
+      case GroupBy.group:
+        final groups = getGroups();
+        if (groups.isNotEmpty) {
+          result.add(ContentGroupData(
+            title: 'Groups',
+            items: sortItems(groups, sortBy, sortOrder),
+            isGroups: true,
+          ));
+        }
+        final watchables = getWatchables();
+        if (watchables.isNotEmpty) {
+          result.add(ContentGroupData(
+            title: currentGroup!.name,
+            items: sortItems(watchables, sortBy, sortOrder),
+            isGroups: false,
+          ));
+        }
+        break;
+
+      case GroupBy.year:
+        final byYear = <String, List<WatchableObject>>{};
+        for (final w in getWatchables()) {
+          final key = w.year?.toString() ?? 'Unknown Year';
+          byYear.putIfAbsent(key, () => []).add(w);
+        }
+        final years = byYear.keys.toList()
+          ..sort((a, b) {
+            if (a == 'Unknown Year') return 1;
+            if (b == 'Unknown Year') return -1;
+            return int.parse(b).compareTo(int.parse(a));
+          });
+        for (final year in years) {
+          final items = byYear[year]!;
+          if (items.isNotEmpty) {
+            result.add(ContentGroupData(
+              title: year,
+              items: sortItems(items, sortBy, sortOrder),
+              isGroups: false,
+            ));
+          }
+        }
+        break;
+
+      case GroupBy.alphabetic:
+        final byLetter = <String, List<WatchableObject>>{};
+        for (final w in getWatchables()) {
+          final letter = getFirstLetter(w.name);
+          byLetter.putIfAbsent(letter, () => []).add(w);
+        }
+        final letters = byLetter.keys.toList()
+          ..sort((a, b) {
+            final ia = kAlphabeticGroups.indexOf(a);
+            final ib = kAlphabeticGroups.indexOf(b);
+            return ia.compareTo(ib);
+          });
+        for (final letter in letters) {
+          final items = byLetter[letter]!;
+          if (items.isNotEmpty) {
+            result.add(ContentGroupData(
+              title: letter,
+              items: sortItems(items, sortBy, sortOrder),
+              isGroups: false,
+            ));
+          }
+        }
+        break;
+    }
+
+    groupedContent = result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal — reset
+  // ---------------------------------------------------------------------------
+
+  // Slowly advances loadProgress from current value toward 0.60
+  // until _stopDownloadProgress() is called.
+  void _startDownloadProgress() {
+    _downloadProgressTimer?.cancel();
+    _downloadProgressTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+      if (loadProgress < 0.60) {
+        loadProgress = (loadProgress + 0.02).clamp(0.0, 0.60);
+        notifyListeners();
+      }
+    });
+  }
+
+  void _stopDownloadProgress() {
+    _downloadProgressTimer?.cancel();
+    _downloadProgressTimer = null;
+  }
+
+  void _reset() {
+    movieGroup    = GroupObject('Movies');
+    tvShowGroup   = GroupObject('TV Shows');
+    streamGroup   = GroupObject('Live Streams');
+    recentGroup   = GroupObject('Recent');
+    favoriteGroup = GroupObject('Favorites');
+    watchedGroup  = GroupObject('Watched');
+    currentGroup  = null;
+    groupedContent = [];
+    searchQuery   = '';
+    currentUsername = null;
+    currentUUID   = null;
+    currentM3UUrl = null;
+    _userData     = UserData.empty;
+    error         = null;
+  }
+
+  void reset() {
+    _reset();
     notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
-  // File cache
+  // Internal — userData persistence
   // ---------------------------------------------------------------------------
 
-  Future<Directory> _m3uDir(String uuid) async {
-    final base = await getApplicationDocumentsDirectory();
-    final dir = Directory('${base.path}/m3u/$uuid');
-    if (!dir.existsSync()) dir.createSync(recursive: true);
+  Future<void> _loadUserData() async {
+    if (currentUsername == null) return;
+    final raw = await _readFile(getUserDataPath(currentUsername!));
+    if (raw == null) return;
+    try {
+      _userData = UserData.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      // Restore player preferences
+      sortBy = _userData.playerData.sortBy;
+      sortOrder = _userData.playerData.sortOrder;
+      groupBy = _userData.playerData.groupBy;
+    } catch (_) {
+      _userData = UserData.empty;
+    }
+  }
+
+  Future<void> _saveUserData() async {
+    if (currentUsername == null) return;
+    await _writeJson(getUserDataPath(currentUsername!), _userData.toJson());
+  }
+
+  void _persistWatchable(WatchableObject watchable) {
+    final updated = Map<String, UserItemData>.from(_userData.watchables);
+    updated[watchable.url] = watchable.userData;
+    _userData = _userData.copyWith(watchables: updated);
+    _saveUserData();
+  }
+
+  void _savePlayerData() {
+    _userData = _userData.copyWith(
+      playerData: PlayerData(
+        sortBy: sortBy,
+        sortOrder: sortOrder,
+        groupBy: groupBy,
+      ),
+    );
+    _saveUserData();
+  }
+
+  // ---------------------------------------------------------------------------
+  // File system helpers (path_provider + dart:io)
+  // ---------------------------------------------------------------------------
+
+  Future<Directory> get _baseDir async {
+    final dir = await getApplicationDocumentsDirectory();
     return dir;
   }
 
-  Future<String?> _readCachedM3U(String uuid) async {
+  Future<String> _resolvePath(String relative) async {
+    final base = await _baseDir;
+    return '${base.path}/$relative';
+  }
+
+  Future<String?> _readFile(String relative) async {
     try {
-      final dir = await _m3uDir(uuid);
-      final file = File('${dir.path}/content.m3u');
+      final path = await _resolvePath(relative);
+      final file = File(path);
       if (!file.existsSync()) return null;
       return file.readAsStringSync();
     } catch (_) {
@@ -306,69 +728,28 @@ class ContentStore extends ChangeNotifier {
     }
   }
 
-  Future<void> _cacheM3U(String uuid, String content) async {
-    final dir = await _m3uDir(uuid);
-    await File('${dir.path}/content.m3u').writeAsString(content);
-  }
-
-  Future<void> _cacheM3URaw(
-    String uuid,
-    Map<String, dynamic> update,
-    Map<String, dynamic> stats,
+  Future<T> _readJsonOrDefault<T>(
+    String relative,
+    T defaultValue,
+    T Function(Map<String, dynamic>) fromJson,
   ) async {
-    final dir = await _m3uDir(uuid);
-    await File('${dir.path}/update.json')
-        .writeAsString(jsonEncode(update));
-    await File('${dir.path}/stats.json')
-        .writeAsString(jsonEncode(stats));
-  }
-
-  // ---------------------------------------------------------------------------
-  // Network
-  // ---------------------------------------------------------------------------
-
-  Future<String> _fetchM3U(String url) async {
-    final uri = Uri.parse(url);
-    final response = await http.get(uri).timeout(const Duration(seconds: 30));
-    if (response.statusCode != 200) {
-      throw Exception('HTTP ${response.statusCode}');
-    }
-    return response.body;
-  }
-
-  // ---------------------------------------------------------------------------
-  // UserData persistence (SharedPreferences, keyed by uuid)
-  // ---------------------------------------------------------------------------
-
-  Future<void> _loadUserData() async {
-    if (_currentUUID == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('${_userDataPrefsKey}_$_currentUUID');
-    if (raw == null) {
-      _userData = _emptyUserData();
-      return;
-    }
+    final raw = await _readFile(relative);
+    if (raw == null) return defaultValue;
     try {
-      _userData = jsonDecode(raw) as Map<String, dynamic>;
+      return fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (_) {
-      _userData = _emptyUserData();
+      return defaultValue;
     }
   }
 
-  Future<void> _saveUserData() async {
-    if (_currentUUID == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      '${_userDataPrefsKey}_$_currentUUID',
-      jsonEncode(_userData),
-    );
+  Future<void> _writeFile(String relative, String content) async {
+    final path = await _resolvePath(relative);
+    final file = File(path);
+    await file.parent.create(recursive: true);
+    await file.writeAsString(content);
   }
 
-  static Map<String, dynamic> _emptyUserData() => {
-        'watchables': <String, dynamic>{},
-        'hiddenGroups': <String>[],
-        'stickyGroups': <String>[],
-        'playerData': null,
-        'layoutData': null,
-      };
+  Future<void> _writeJson(String relative, Map<String, dynamic> data) async {
+    await _writeFile(relative, jsonEncode(data));
+  }
 }
