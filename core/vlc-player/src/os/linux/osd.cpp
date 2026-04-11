@@ -284,8 +284,7 @@ void LinuxOSDWindow::CreateWindowInternal(int x, int y)
     if (!window_)
     {
         VlcPlayer::Log("ERROR: LinuxOSDWindow - XCreateWindow failed");
-        XCloseDisplay(display_);
-        display_ = nullptr;
+        display_ = nullptr; // Shared with parent, do NOT close
         return;
     }
 

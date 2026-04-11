@@ -181,6 +181,9 @@ private:
     void StopOSDRenderLoop();
     void ClearOSDs();
 
+protected:
+    void ShutdownOSD();
+
     /**
      * Find existing OSD of given type or create new one
      * @param type OSD type to find/create

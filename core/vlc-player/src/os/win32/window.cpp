@@ -242,6 +242,12 @@ void Win32Window::Destroy()
     if (!is_created_)
         return;
 
+    is_created_ = false; // Mark as destroyed immediately to block new OSD operations
+
+    // Stop OSD render loop and clear OSD windows BEFORE destroying the HWND.
+    // OSD render thread calls GetClientArea() -> GetClientRect(hwnd_) which needs a valid hwnd_.
+    ShutdownOSD();
+
     // Stop message pump thread
     if (message_thread_running_)
     {

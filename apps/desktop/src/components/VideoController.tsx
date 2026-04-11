@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useContentStore } from '../stores/content';
 import { useSettingsStore } from '../stores/settings';
 import { useUniversalPlayerStore } from '../stores/universalPlayerStore';
@@ -46,24 +46,6 @@ export function VideoController() {
 
 
 
-  // Setup keyboard shortcuts for VLC native window
-  useEffect(() => {
-    if (!vlc.isAvailable) return;
-
-    // Map settings shortcuts to VLC format: { "Space": "playPause", "Escape": "exitFullscreen" }
-    const vlcShortcuts: Record<string, string[]> = {};
-
-    Object.entries(keyboardShortcuts).forEach(([action, keyCombos]) => {
-      // Convert "ctrl+KeyF" to just "KeyF" for VLC (modifiers not supported in native yet)
-      const comboArray = Array.isArray(keyCombos) ? keyCombos : [keyCombos];
-      const cleanKeys = comboArray.map(keyCombo => keyCombo.split('+').pop() || keyCombo);
-      vlcShortcuts[action] = cleanKeys;
-    });
-
-    vlc.shortcut({ shortcuts: vlcShortcuts as Record<any, string[]> }).catch(err => {
-      console.error('[VLC] Failed to setup shortcuts:', err);
-    });
-  }, [vlc.isAvailable, keyboardShortcuts, vlc]);
 
   // Auto Play Next
   useEffect(() => {
@@ -76,24 +58,21 @@ export function VideoController() {
 
 
   // Handlers
-  const handlePlayPause = async () => {
+  const handlePlayPause = useCallback(async () => {
     if (vlc.playerState === 'playing') {
       await vlc.playback({ action: 'pause' });
     } else if (vlc.playerState === 'stopped' || vlc.playerState === 'ended' || vlc.playerState === 'idle') {
-      // If stopped/ended/idle, need to re-open and play
       if (vlc.currentItem) {
         await vlc.open(vlc.currentItem.Url);
-        await vlc.playback({ action: 'play' });
       }
     } else {
-      // Paused state - just resume
       await vlc.playback({ action: 'resume' });
     }
-  };
+  }, [vlc.playerState, vlc.currentItem, vlc.playback, vlc.open]);
 
-  const handleStop = async () => {
+  const handleStop = useCallback(async () => {
     await vlc.playback({ action: 'stop' });
-  };
+  }, [vlc.playback]);
 
   const handleSeek = async (vals: number[]) => {
     await vlc.playback({ time: vals[0] * 1000 });
@@ -104,9 +83,9 @@ export function VideoController() {
     await vlc.audio({ volume: vol });
   };
 
-  const toggleMute = async () => {
+  const toggleMute = useCallback(async () => {
     await vlc.audio({ mute: !vlc.isMuted });
-  };
+  }, [vlc.isMuted, vlc.audio]);
 
   const handleScreenTypeChange = (type: ScreenType) => {
     vlc.setScreenMode(type);
@@ -181,8 +160,9 @@ export function VideoController() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const isDisabled = vlc.playerState === 'stopped';
   const hasItem = !!vlc.currentItem;
+  const isPlaying = vlc.playerState === 'playing' || vlc.playerState === 'paused' || vlc.playerState === 'buffering' || vlc.playerState === 'opening';
+  const isDisabled = !isPlaying;
 
   // Helper to get episode info safely
   const getEpisodeInfo = () => {
@@ -197,7 +177,7 @@ export function VideoController() {
   };
 
   return (
-    <div className={`w-full bg-black border-t border-border p-4 ${isDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div className="w-full bg-black border-t border-border p-4">
       <div className="flex flex-col gap-2 max-w-screen-2xl mx-auto">
 
         {/* Progress Bar */}
@@ -223,12 +203,12 @@ export function VideoController() {
               {vlc.playerState === 'playing' ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
             </Button>
 
-            <Button variant="ghost" size="icon" onClick={handleStop} disabled={!hasItem}>
+            <Button variant="ghost" size="icon" onClick={handleStop} disabled={!isPlaying}>
               <Square className="h-5 w-5 fill-current" />
             </Button>
 
             <div className="flex items-center gap-2 group">
-              <Button variant="ghost" size="icon" onClick={toggleMute} disabled={!hasItem}>
+              <Button variant="ghost" size="icon" onClick={toggleMute}>
                 {vlc.isMuted || vlc.volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </Button>
               <div className="w-0 overflow-hidden group-hover:w-24 transition-all duration-300">
@@ -238,7 +218,6 @@ export function VideoController() {
                   step={1}
                   onValueChange={handleVolume}
                   className="w-24"
-                  disabled={isDisabled}
                 />
               </div>
             </div>
@@ -307,19 +286,26 @@ export function VideoController() {
                 { mode: 'free_ontop', icon: Layers, title: 'Always on Top' },
                 { mode: 'sticky', icon: StickyNote, title: 'Sticky' },
                 { mode: 'fullscreen', icon: Maximize, title: 'Fullscreen' },
-              ].map(({ mode, icon: Icon, title }) => (
-                <Button
-                  key={mode}
-                  variant={vlc.screenMode === mode ? 'outline' : 'ghost'}
-                  size="icon"
-                  className={`h-5 w-5 rounded-none p-3 ${vlc.screenMode === mode ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'}`}
-                  onClick={() => handleScreenTypeChange(mode as ScreenType)}
-                  title={title}
-                  disabled={isDisabled}
-                >
-                  <Icon className="h-full w-full" />
-                </Button>
-              ))}
+              ].map(({ mode, icon: Icon, title }) => {
+                const isActive = vlc.screenMode === mode;
+                return (
+                  <Button
+                    key={mode}
+                    variant="ghost"
+                    size="icon"
+                    className={`h-5 w-5 rounded-none p-3 transition-colors ${
+                      isActive
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'hover:bg-muted'
+                    }`}
+                    onClick={() => handleScreenTypeChange(mode as ScreenType)}
+                    title={isActive ? `${title} (click to toggle)` : title}
+                    disabled={!isPlaying}
+                  >
+                    <Icon className="h-full w-full" />
+                  </Button>
+                );
+              })}
             </div>
 
             <div className="h-6 w-px bg-border mx-2" />

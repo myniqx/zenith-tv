@@ -93,6 +93,14 @@ Napi::Value VlcPlayer::Open(const Napi::CallbackInfo &info)
     libvlc_media_release(current_media_);
     current_media_ = nullptr;
 
+    // Bind window and start playback — triggers libvlc_MediaPlayerOpening event on JS side,
+    // which is used to seek to saved position before playback begins.
+    if (osd_window_)
+    {
+        osd_window_->Bind(media_player_);
+    }
+    libvlc_media_player_play(media_player_);
+
     return env.Undefined();
 }
 

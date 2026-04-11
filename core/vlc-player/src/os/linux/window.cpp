@@ -202,14 +202,22 @@ bool LinuxWindow::Create(int width, int height)
 
 void LinuxWindow::Destroy()
 {
-    std::lock_guard<std::mutex> lock(window_mutex_);
-
-    if (!is_created_)
     {
-        return;
+        std::lock_guard<std::mutex> lock(window_mutex_);
+        if (!is_created_)
+        {
+            return;
+        }
+        is_created_ = false; // Mark as destroyed immediately to block new OSD operations
     }
 
     VlcPlayer::Log("Destroying Linux X11 window");
+
+    // Stop OSD render loop and clear OSD windows BEFORE closing display.
+    // Must happen outside window_mutex_ to avoid deadlock (OSD thread may try to lock it).
+    ShutdownOSD();
+
+    std::lock_guard<std::mutex> lock(window_mutex_);
 
     // Stop message loop
     StopMessageLoop();

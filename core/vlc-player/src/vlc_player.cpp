@@ -190,6 +190,7 @@ void VlcPlayer::SetupEventCallbacks()
     if (event_manager_)
     {
         libvlc_event_attach(event_manager_, libvlc_MediaPlayerTimeChanged, HandleTimeChanged, this);
+        libvlc_event_attach(event_manager_, libvlc_MediaPlayerOpening, HandleStateChanged, this);
         libvlc_event_attach(event_manager_, libvlc_MediaPlayerPlaying, HandleStateChanged, this);
         libvlc_event_attach(event_manager_, libvlc_MediaPlayerPaused, HandleStateChanged, this);
         libvlc_event_attach(event_manager_, libvlc_MediaPlayerStopped, HandleStateChanged, this);
@@ -205,6 +206,7 @@ void VlcPlayer::CleanupEventCallbacks()
     if (event_manager_)
     {
         libvlc_event_detach(event_manager_, libvlc_MediaPlayerTimeChanged, HandleTimeChanged, this);
+        libvlc_event_detach(event_manager_, libvlc_MediaPlayerOpening, HandleStateChanged, this);
         libvlc_event_detach(event_manager_, libvlc_MediaPlayerPlaying, HandleStateChanged, this);
         libvlc_event_detach(event_manager_, libvlc_MediaPlayerPaused, HandleStateChanged, this);
         libvlc_event_detach(event_manager_, libvlc_MediaPlayerStopped, HandleStateChanged, this);
@@ -285,6 +287,9 @@ void VlcPlayer::HandleStateChanged(const libvlc_event_t *event, void *data)
 
     switch (event->type)
     {
+    case libvlc_MediaPlayerOpening:
+        state = "opening";
+        break;
     case libvlc_MediaPlayerPlaying:
         state = "playing";
         break;

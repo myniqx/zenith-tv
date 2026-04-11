@@ -17,6 +17,8 @@ import { shortcutActions } from './helpers/shortcutAction';
 import { WatchableObject } from '@zenith-tv/content';
 import { useContentStore } from './content';
 
+export const DEFAULT_SCREEN_MODE: ScreenMode = 'free';
+
 // Event listeners state - module scope (singleton)
 let resizeObserver: ResizeObserver | null = null;
 let lastWindowPosition: { x: number; y: number; scaleFactor: number } | undefined = undefined;
@@ -32,6 +34,7 @@ interface VlcPlayerState {
   duration: number;
   volume: number;
   isMuted: boolean;
+  noAudio: boolean | undefined;
   audioTracks: VlcTrack[];
   subtitleTracks: VlcTrack[];
   videoTracks: VlcTrack[];
@@ -100,6 +103,7 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   duration: 0,
   volume: 100,
   isMuted: false,
+  noAudio: undefined,
   audioTracks: [],
   subtitleTracks: [],
   videoTracks: [],
@@ -117,8 +121,8 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   deinterlace: null,
   audioDelay: 0,
   subtitleDelay: 0,
-  screenMode: 'free',
-  prevScreenMode: 'free',
+  screenMode: DEFAULT_SCREEN_MODE,
+  prevScreenMode: DEFAULT_SCREEN_MODE,
   stickyElement: null,
   lastStickyBounds: undefined,
   wasPlayingBeforeMinimize: false,
@@ -126,19 +130,27 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
   lastSavedTime: 0,
 
   _setupVlcCore: async () => {
-    // Register keyboard shortcuts from settings
-    const settings = useSettingsStore.getState();
-    const shortcuts = settings.getAllShortcuts();
     const store = get();
-    await store.shortcut({ shortcuts });
 
+    // Keyboard shortcuts from settings
+    const settings = useSettingsStore.getState();
+    await store.shortcut({ shortcuts: settings.getAllShortcuts() });
+
+    // Restore volume + mute state
     await store.audio({
       volume: store.volume,
+      mute: store.isMuted,
     });
 
-    await store.playback({
-      rate: store.rate,
-    });
+    // Restore playback rate
+    await store.playback({ rate: store.rate });
+
+    // Restore screen mode
+    if (store.screenMode === 'sticky' && store.lastStickyBounds) {
+      await store.window({ screenMode: 'sticky', resize: store.lastStickyBounds });
+    } else {
+      await store.window({ screenMode: store.screenMode });
+    }
   },
 
   // Initialize VLC player and setup event listeners
@@ -256,11 +268,36 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
       // Handle PlayerInfo updates
       if (eventData.playerInfo) {
         const updates: Partial<VlcPlayerState> = {};
+        const pi = eventData.playerInfo;
 
-        if (eventData.playerInfo.volume !== undefined) updates.volume = eventData.playerInfo.volume;
-        if (eventData.playerInfo.muted !== undefined) updates.isMuted = eventData.playerInfo.muted;
-        if (eventData.playerInfo.rate !== undefined) updates.rate = eventData.playerInfo.rate;
-        if (eventData.playerInfo.screenMode !== undefined) updates.screenMode = eventData.playerInfo.screenMode;
+        // Audio: volume < 0 means source has no audio track
+        if (pi.volume !== undefined) {
+          if (pi.volume < 0) {
+            updates.noAudio = true;
+            // Keep current volume/muted — ignore -1 reports
+          } else {
+            updates.noAudio = false;
+            updates.volume = pi.volume;
+            if (pi.muted !== undefined) updates.isMuted = pi.muted;
+          }
+        } else if (pi.muted !== undefined && state.noAudio !== true) {
+          updates.isMuted = pi.muted;
+        }
+
+        if (pi.rate !== undefined) updates.rate = pi.rate;
+
+        // ScreenMode: VLC is the source of truth. Update both screenMode and prevScreenMode here.
+        if (pi.screenMode !== undefined && pi.screenMode !== state.screenMode) {
+          updates.prevScreenMode = state.screenMode;
+          updates.screenMode = pi.screenMode;
+
+          // Sticky observer lifecycle follows VLC confirmation
+          if (pi.screenMode === 'sticky') {
+            setTimeout(() => get()._setupStickyMode(), 0);
+          } else if (state.screenMode === 'sticky') {
+            setTimeout(() => get()._cleanupStickyMode(), 0);
+          }
+        }
 
         if (Object.keys(updates).length > 0) {
           set(updates);
@@ -306,6 +343,16 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
             );
             updates.lastSavedTime = state.time;
           }
+
+          // Stop clears per-media state — VLC window is torn down,
+          // no point sending commands to it.
+          if (cv.state === 'stopped') {
+            updates.noAudio = undefined;
+            if (state.screenMode === 'fullscreen') {
+              updates.prevScreenMode = 'fullscreen';
+              updates.screenMode = DEFAULT_SCREEN_MODE;
+            }
+          }
         }
 
         // Playback info
@@ -346,14 +393,32 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
           set(updates);
         }
 
-        // Save track selection AFTER state update (so we have fresh values)
+        // Save track selection AFTER state update (so we have fresh values).
+        // Skip if the selection matches global preferred language — no need to persist the default.
         if ((audioTrackChanged || subtitleTrackChanged) && state.currentItem) {
           const freshState = get();
-          useContentStore.getState().saveTrackSelection(
-            state.currentItem,
-            freshState.currentAudioTrack,
-            freshState.currentSubtitleTrack
-          );
+          const { preferredAudioLanguage, preferredSubtitleLanguage } = useSettingsStore.getState();
+
+          const matchTrack = (trackName: string, language: string) =>
+            trackName.toLowerCase().includes(language.toLowerCase());
+
+          const audioTrack = freshState.audioTracks.find(t => t.id === freshState.currentAudioTrack);
+          const subtitleTrack = freshState.subtitleTracks.find(t => t.id === freshState.currentSubtitleTrack);
+
+          const audioIsDefault = preferredAudioLanguage && audioTrack
+            ? matchTrack(audioTrack.name, preferredAudioLanguage)
+            : false;
+          const subtitleIsDefault = preferredSubtitleLanguage && subtitleTrack
+            ? matchTrack(subtitleTrack.name, preferredSubtitleLanguage)
+            : false;
+
+          if (!audioIsDefault || !subtitleIsDefault) {
+            useContentStore.getState().saveTrackSelection(
+              state.currentItem,
+              freshState.currentAudioTrack,
+              freshState.currentSubtitleTrack
+            );
+          }
         }
       }
 
@@ -371,34 +436,34 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
       scaleFactor: number;
       minimized: boolean
     }) => {
-      const state = get();
-
       // Always update last known position
       lastWindowPosition = { x: data.x, y: data.y, scaleFactor: data.scaleFactor };
 
       // Always try to sync/cache bounds
-      state._syncWindowBounds(lastWindowPosition);
+      get()._syncWindowBounds(lastWindowPosition);
 
       // Only handle visibility/playback if in sticky mode
-      if (state.screenMode !== 'sticky') return;
+      if (get().screenMode !== 'sticky') return;
 
       if (data.minimized) {
         // Window minimized - pause and hide VLC
-        const isPlaying = state.playerState === 'playing';
+        const fresh = get();
+        const isPlaying = fresh.playerState === 'playing';
         set({ wasPlayingBeforeMinimize: isPlaying });
 
         if (isPlaying) {
-          state.playback({ action: 'pause' }).catch(() => {});
+          fresh.playback({ action: 'pause' }).catch(() => {});
         }
 
-        state.window({ visible: false }).catch(() => {});
+        fresh.window({ visible: false }).catch(() => {});
       } else {
         // Window not minimized - sync bounds and show VLC
-        state.window({ visible: true }).catch(() => {});
+        const fresh = get();
+        fresh.window({ visible: true }).catch(() => {});
 
         // Resume if was playing before minimize
-        if (state.wasPlayingBeforeMinimize) {
-          state.playback({ action: 'resume' }).catch(() => {});
+        if (fresh.wasPlayingBeforeMinimize) {
+          fresh.playback({ action: 'resume' }).catch(() => {});
           set({ wasPlayingBeforeMinimize: false });
         }
       }
@@ -475,39 +540,30 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     }
   },
 
-  // Set screen mode and handle mode transitions
+  // Send screen mode command to VLC.
+  // State (screenMode, prevScreenMode) is updated from the VLC event, not here,
+  // because VLC itself can change modes via ESC/menu/keyboard.
   setScreenMode: (mode: ScreenMode) => {
     const state = get();
     const { screenMode: currentMode, prevScreenMode, isAvailable, lastStickyBounds } = state;
 
+    if (!isAvailable) return;
+
+    // Toggle: clicking the same mode returns to previous
     if (currentMode === mode) {
       mode = prevScreenMode;
     }
 
-    if (!isAvailable) return;
+    // Sticky requires an element to anchor to; fall back gracefully if missing.
+    if (mode === 'sticky' && !state.stickyElement) {
+      state.window({ screenMode: DEFAULT_SCREEN_MODE }).catch(() => {});
+      return;
+    }
 
-    set({ prevScreenMode: currentMode });
-
-    // Handle mode transitions
-    switch (mode) {
-      case 'fullscreen':
-        state.window({ screenMode: 'fullscreen' }).catch(() => {});
-        break;
-
-      case 'free_ontop':
-      case 'free':
-        state.window({ screenMode: mode }).catch(() => {});
-        if (currentMode === 'sticky') {
-          state._cleanupStickyMode();
-        }
-        break;
-
-      case 'sticky':
-        state.window({
-          screenMode: 'sticky',
-          resize: lastStickyBounds
-        }).catch(() => {});
-        break;
+    if (mode === 'sticky') {
+      state.window({ screenMode: 'sticky', resize: lastStickyBounds }).catch(() => {});
+    } else {
+      state.window({ screenMode: mode }).catch(() => {});
     }
   },
 
@@ -538,8 +594,6 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
     const opts = typeof options === 'string' ? { file: options } : options;
     await window.electron.vlc.open(opts);
-    // TODO: pencere şu an yeni oluşturuluyor, tüm vlc stateleri kayıp,
-    // ses defaultta pencere posizyonu defaultta.. bunları güncelle
   },
 
   // Unified API: Playback control
@@ -552,20 +606,21 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
   // Unified API: Audio control
   audio: async (options: AudioOptions) => {
-    const { isAvailable } = get();
-    if (!isAvailable) return;
+    const { isAvailable, playerState } = get();
 
-    await window.electron.vlc.audio(options);
-
-    // Update local state
+    // Always update local state so values are applied on next open()
     const updates: Partial<VlcPlayerState> = {};
     if (options.volume !== undefined) updates.volume = options.volume;
     if (options.mute !== undefined) updates.isMuted = options.mute;
     if (options.track !== undefined) updates.currentAudioTrack = options.track;
+    if (Object.keys(updates).length > 0) set(updates);
 
-    if (Object.keys(updates).length > 0) {
-      set(updates);
-    }
+    // Only send to VLC if actually playing
+    const isActive = playerState === 'playing' || playerState === 'paused' ||
+                     playerState === 'buffering' || playerState === 'opening';
+    if (!isAvailable || !isActive) return;
+
+    await window.electron.vlc.audio(options);
   },
 
   // Unified API: Video control

@@ -39,7 +39,10 @@ class VlcProcessManager extends EventEmitter {
       const isDev = process.env.NODE_ENV !== 'production';
 
       let scriptPath;
-      if (isDev) {
+      if (process.env.VLC_STANDALONE_SCRIPT) {
+        // Test override: direct path to standalone script
+        scriptPath = process.env.VLC_STANDALONE_SCRIPT;
+      } else if (isDev) {
         // Development: vlcProcessManager bundled in out/main/index.js
         // __dirname = out/main, standalone script at out/main/vlc/
         scriptPath = path.join(__dirname, 'vlc/vlcStandaloneProcess.cjs');

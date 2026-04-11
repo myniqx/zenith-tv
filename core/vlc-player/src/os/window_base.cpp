@@ -258,6 +258,16 @@ void OSWindow::StartOSDRenderLoop()
 }
 
 /**
+ * Stop OSD render loop and clear all OSD windows.
+ * Called by platform Destroy() before releasing native resources (HWND/Display).
+ */
+void OSWindow::ShutdownOSD()
+{
+    StopOSDRenderLoop();
+    ClearOSDs();
+}
+
+/**
  * Stop OSD render loop
  */
 void OSWindow::StopOSDRenderLoop()

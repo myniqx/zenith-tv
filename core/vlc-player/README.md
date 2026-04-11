@@ -63,15 +63,23 @@ npx node-gyp rebuild --arch=x64
 
 ### Linux
 
+VLC'ye ek olarak X11 geliştirme kütüphaneleri de gereklidir:
+
 ```bash
 # Ubuntu/Debian
-sudo apt install libvlc-dev vlc
+sudo apt install vlc libvlc-dev \
+  libx11-dev libxft-dev libxcomposite-dev \
+  libxrender-dev libxext-dev libxrandr-dev
 
 # Fedora
-sudo dnf install vlc-devel vlc
+sudo dnf install vlc vlc-devel \
+  libX11-devel libXft-devel libXcomposite-devel \
+  libXrender-devel libXext-devel libXrandr-devel
 
 # Arch
-sudo pacman -S vlc
+sudo pacman -S vlc \
+  libx11 libxft libxcomposite \
+  libxrender libxext libxrandr
 ```
 
 ### macOS
