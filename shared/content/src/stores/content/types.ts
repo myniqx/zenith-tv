@@ -88,6 +88,7 @@ export type ContentState = FileSyncedState<UserData, 'userData'> & {
 
   getNextEpisode: (currentItem: WatchableObject) => WatchableObject | undefined
   getPreviousEpisode: (currentItem: WatchableObject) => WatchableObject | undefined
+  findByUrl: (url: string) => WatchableObject | undefined
   calculateStats: () => M3UStats
   syncM3UData: (uuid: string, source: string, update: M3UUpdateData, stats: M3UStats) => Promise<void>
 

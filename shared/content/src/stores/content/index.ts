@@ -647,6 +647,15 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
       return undefined
     },
 
+    findByUrl: (url) => {
+      const { movieGroup, tvShowGroup, streamGroup } = get()
+      return (
+        movieGroup.findByUrl(url) ??
+        tvShowGroup.findByUrl(url) ??
+        streamGroup.findByUrl(url)
+      )
+    },
+
     calculateStats: () => {
       const { movieGroup, tvShowGroup, streamGroup } = get()
 

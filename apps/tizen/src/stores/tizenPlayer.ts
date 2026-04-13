@@ -10,7 +10,8 @@ import type {
   SubtitleOptions,
   WindowOptions,
   ShortcutOptions,
-} from './types/player-types';
+  ClientEventData,
+} from '@zenith-tv/content';
 import type { AVPlayTrackInfo, AVPlayState } from '../types/tizen';
 import { WatchableObject } from '@zenith-tv/content';
 import { useContentStore } from './content';
@@ -76,6 +77,11 @@ interface TizenPlayerState {
   subtitle: (options: SubtitleOptions) => Promise<void>;
   window: (options: WindowOptions) => Promise<boolean>;
   shortcut: (options: ShortcutOptions) => Promise<void>;
+
+  // P2P: Build a ClientEventData snapshot of the full current state. Used to
+  // answer `state_request` and as the payload of the interval broadcast,
+  // since AVPlay has no central event stream to forward per-change.
+  getFullVlcEvent: () => ClientEventData;
 
   // Internal helpers
   _setupEventListeners: () => void;
@@ -780,5 +786,45 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
   shouldStickyPanelVisible: () => {
     // STUB: Always false on Tizen (no sticky mode)
     return false;
+  },
+
+  // Build a ClientEventData snapshot for P2P sync. The URL is injected
+  // from currentItem so the server can resolve its own WatchableObject
+  // via findByUrl — same pattern as the desktop vlcPlayer store.
+  getFullVlcEvent: (): ClientEventData => {
+    const s = get();
+    return {
+      mediaInfo: {
+        duration: s.duration,
+        isSeekable: s.isSeekable,
+        audioTracks: s.audioTracks,
+        subtitleTracks: s.subtitleTracks,
+        videoTracks: s.videoTracks,
+        url: s.currentItem?.Url ?? null,
+      },
+      playerInfo: {
+        volume: s.volume,
+        muted: s.isMuted,
+        rate: s.rate,
+        screenMode: s.screenMode,
+      },
+      currentVideo: {
+        time: s.time,
+        state: s.playerState,
+        length: s.duration,
+        position: s.position,
+        buffering: s.buffering,
+        isSeekable: s.isSeekable,
+        aspectRatio: s.aspectRatio,
+        crop: s.crop,
+        scale: s.scale,
+        deinterlace: s.deinterlace,
+        audioDelay: s.audioDelay,
+        subtitleDelay: s.subtitleDelay,
+        audioTrack: s.currentAudioTrack,
+        subtitleTrack: s.currentSubtitleTrack,
+        videoTrack: s.currentVideoTrack,
+      },
+    };
   },
 }));

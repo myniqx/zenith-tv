@@ -10,6 +10,10 @@ interface PendingPairingRequest extends PairingRequestPayload {
   connectionId: string;
 }
 
+// Module-scope handler for client-mode inbound messages. See
+// setClientMessageHandler doc comment in the store interface.
+let clientMessageHandler: ((message: P2PMessage) => void) | null = null;
+
 // Trusted server for pairing and auto-connect
 export interface TrustedServer {
   deviceId: string;
@@ -82,6 +86,12 @@ interface P2PStoreState {
   handlePlayerConnection: (connection: P2PConnection) => void;
   handlePlayerDisconnection: (connectionId: string) => void;
   _handleMessage: (connectionId: string, message: P2PMessage) => void;
+
+  // Client-mode inbound command handler. Registered by the VLC layer so
+  // p2pStore stays decoupled from vlcPlayerStore (avoids an import cycle).
+  // Called for every message received while mode === 'client', EXCEPT
+  // pair_request / profile_sync which p2pStore handles itself.
+  setClientMessageHandler: (handler: ((message: P2PMessage) => void) | null) => void;
 }
 
 export const useP2PStore = create<P2PStoreState>()(
@@ -311,6 +321,13 @@ export const useP2PStore = create<P2PStoreState>()(
           // Auto-select the first connecting device
           selectedDeviceId: state.selectedDeviceId ?? connection.id,
         }));
+
+        // Server mode: as soon as a client connects, ask it for a full
+        // snapshot of its VLC state so our UI can render immediately
+        // instead of waiting for incremental events.
+        if (get().mode === 'server') {
+          await p2p.send(connection.id, { type: 'state_request' });
+        }
       },
 
       handlePlayerDisconnection: (connectionId) => {
@@ -336,6 +353,7 @@ export const useP2PStore = create<P2PStoreState>()(
               connectionId
             }
           });
+          return;
         }
 
         if (type === 'profile_sync') {
@@ -347,7 +365,19 @@ export const useP2PStore = create<P2PStoreState>()(
               timestamp: Date.now()
             }
           });
+          return;
         }
+
+        // Client mode: forward every remaining message (open/playback/
+        // audio/video/subtitle/window/shortcut/state_request) to the VLC
+        // layer via the registered handler.
+        if (get().mode === 'client' && clientMessageHandler) {
+          clientMessageHandler(message);
+        }
+      },
+
+      setClientMessageHandler: (handler) => {
+        clientMessageHandler = handler;
       },
 
       startScanning: async () => {

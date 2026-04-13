@@ -3,7 +3,7 @@ import { useP2PClientStore } from '../../stores/p2pClientStore';
 import { useTizenPlayerStore } from '../../stores/tizenPlayer';
 import { useProfilesStore } from '../../stores/profiles';
 import { useContentStore } from '../../stores/content';
-import {
+import type {
   PlaybackOptions,
   AudioOptions,
   VideoOptions,
@@ -11,10 +11,13 @@ import {
   WindowOptions,
   OpenOptions,
   ShortcutOptions,
-} from '../../stores/types/player-types';
+} from '@zenith-tv/content';
 import { ProfileSyncPayload, mergeUserData } from '@zenith-tv/content';
 
-const STATE_BROADCAST_INTERVAL_MS = 2000;
+// Tizen has no central player event stream (unlike VLC's event callback),
+// so we can't forward per-change events like the desktop client does.
+// Instead, we send a full VlcEventData snapshot on a fixed interval.
+const STATE_BROADCAST_INTERVAL_MS = 500;
 
 export function P2PManager() {
   const {
@@ -64,8 +67,12 @@ export function P2PManager() {
       case 'shortcut':
         playerStore.shortcut(payload as ShortcutOptions);
         break;
-      case 'state_update':
-        // Tizen is the player — ignore state_update coming from desktop
+      case 'state_request':
+        // Server wants a full snapshot right now — respond with a client_event.
+        sendMessage({
+          type: 'client_event',
+          payload: useTizenPlayerStore.getState().getFullVlcEvent(),
+        });
         break;
       case 'profile_sync':
         handleProfileSync(payload as ProfileSyncPayload, sendMessage);
@@ -78,27 +85,9 @@ export function P2PManager() {
     if (connectionStatus !== 'connected') return;
 
     const broadcastState = () => {
-      const state = useTizenPlayerStore.getState();
       sendMessage({
-        type: 'state_update',
-        payload: {
-          time: state.time,
-          duration: state.duration,
-          playerState: state.playerState,
-          volume: state.volume,
-          isMuted: state.isMuted,
-          isInitialized: state.isInitialized,
-          audioTracks: state.audioTracks,
-          subtitleTracks: state.subtitleTracks,
-          videoTracks: state.videoTracks,
-          currentAudioTrack: state.currentAudioTrack,
-          currentSubtitleTrack: state.currentSubtitleTrack,
-          currentVideoTrack: state.currentVideoTrack,
-          position: state.position,
-          rate: state.rate,
-          error: state.error,
-          currentItem: state.currentItem,
-        },
+        type: 'client_event',
+        payload: useTizenPlayerStore.getState().getFullVlcEvent(),
       });
     };
 

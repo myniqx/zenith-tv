@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { WatchableObject } from '@zenith-tv/content';
 import type {
   VlcState,
   VlcTrack,
@@ -11,11 +12,12 @@ import type {
   WindowOptions,
   ShortcutOptions,
   VlcEventData,
-} from '../types/types';
+  ClientEventData,
+} from '@zenith-tv/content';
 import { useSettingsStore } from './settings';
 import { shortcutActions } from './helpers/shortcutAction';
-import { WatchableObject } from '@zenith-tv/content';
 import { useContentStore } from './content';
+import { useP2PStore } from './p2pStore';
 
 export const DEFAULT_SCREEN_MODE: ScreenMode = 'free';
 
@@ -92,6 +94,7 @@ interface VlcPlayerState {
 
   // Helpers
   shouldStickyPanelVisible: () => boolean;
+  getFullVlcEvent: () => ClientEventData;
 }
 
 export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
@@ -427,6 +430,24 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
         const action = eventData.shortcut;
         shortcutActions(state, action);
       }
+
+      // In client mode, forward every VLC event to the server. The server
+      // mirrors these into its p2pPlayerStore so its UI tracks us live.
+      // If a mediaInfo is present, inject currentItem.Url so the server
+      // can resolve the item from its own content store via findByUrl —
+      // VLC itself doesn't know about our M3U URLs.
+      if (useP2PStore.getState().mode === 'client') {
+        const forwarded: ClientEventData = eventData.mediaInfo
+          ? {
+              ...eventData,
+              mediaInfo: {
+                ...eventData.mediaInfo,
+                url: eventData.mediaInfo.url ?? get().currentItem?.Url ?? null,
+              },
+            }
+          : eventData;
+        useP2PStore.getState().sendToRemote({ type: 'client_event', payload: forwarded });
+      }
     };
 
     // Handle window position changes for sticky mode
@@ -474,6 +495,43 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
 
     // Register window event listener (for sticky mode)
     window.electron.window.onPositionChanged(handlePositionChanged);
+
+    // Register P2P client-mode inbound command handler. When this desktop
+    // is in client mode (i.e. another device is acting as the remote), the
+    // server sends us open/playback/audio/... commands to drive VLC, plus
+    // state_request when it wants a full snapshot.
+    useP2PStore.getState().setClientMessageHandler((message) => {
+      const s = get();
+      switch (message.type) {
+        case 'open':
+          s.open(message.payload as OpenOptions | string);
+          break;
+        case 'playback':
+          s.playback(message.payload as PlaybackOptions);
+          break;
+        case 'audio':
+          s.audio(message.payload as AudioOptions);
+          break;
+        case 'video':
+          s.video(message.payload as VideoOptions);
+          break;
+        case 'subtitle':
+          s.subtitle(message.payload as SubtitleOptions);
+          break;
+        case 'window':
+          s.window(message.payload as WindowOptions);
+          break;
+        case 'shortcut':
+          s.shortcut(message.payload as ShortcutOptions);
+          break;
+        case 'state_request': {
+          // Server wants a full snapshot — reply with a client_event.
+          const snapshot = s.getFullVlcEvent();
+          useP2PStore.getState().sendToRemote({ type: 'client_event', payload: snapshot });
+          break;
+        }
+      }
+    });
 
     listenersInitialized = true;
   },
@@ -669,4 +727,46 @@ export const useVlcPlayerStore = create<VlcPlayerState>((set, get) => ({
     const isPlayingOrPaused = playerState === 'playing' || playerState === 'paused' || playerState === 'buffering' || playerState === 'opening';
     return isPlayingOrPaused && screenMode === 'sticky';
   },
+
+  // Build a ClientEventData snapshot of the complete current state.
+  // Sent to the server on state_request and on every incremental VLC event
+  // while in client mode. mediaInfo.url lets the server resolve currentItem
+  // via findByUrl.
+  getFullVlcEvent: (): ClientEventData => {
+    const s = get();
+    return {
+      mediaInfo: {
+        url: s.currentItem?.Url ?? null,
+        duration: s.duration,
+        isSeekable: s.isSeekable,
+        audioTracks: s.audioTracks,
+        subtitleTracks: s.subtitleTracks,
+        videoTracks: s.videoTracks,
+      },
+      playerInfo: {
+        volume: s.volume,
+        muted: s.isMuted,
+        rate: s.rate,
+        screenMode: s.screenMode,
+      },
+      currentVideo: {
+        time: s.time,
+        state: s.playerState,
+        length: s.duration,
+        position: s.position,
+        buffering: s.buffering,
+        isSeekable: s.isSeekable,
+        aspectRatio: s.aspectRatio,
+        crop: s.crop,
+        scale: s.scale,
+        deinterlace: s.deinterlace,
+        audioDelay: s.audioDelay,
+        subtitleDelay: s.subtitleDelay,
+        audioTrack: s.currentAudioTrack,
+        subtitleTrack: s.currentSubtitleTrack,
+        videoTrack: s.currentVideoTrack,
+      },
+    };
+  },
+
 }));

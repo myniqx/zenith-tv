@@ -1,63 +1,7 @@
-// VLC Player Types
+import type { VlcState, ScreenMode, VlcTrack, OpenOptions, PlaybackOptions, AudioOptions, VideoOptions, SubtitleOptions, WindowOptions, ShortcutOptions } from '@zenith-tv/content';
 
-export type VlcState =
-  | 'idle'
-  | 'opening'
-  | 'buffering'
-  | 'playing'
-  | 'paused'
-  | 'stopped'
-  | 'ended'
-  | 'error'
-  | 'unknown';
-
-export type ScreenMode = 'free' | 'free_ontop' | 'sticky' | 'fullscreen';
-
-export interface VlcTrack {
-  id: number;
-  name: string;
-}
-
-// Unified API Options
-export interface OpenOptions {
-  file: string;
-}
-
-export interface PlaybackOptions {
-  action?: 'play' | 'pause' | 'resume' | 'stop';
-  time?: number;
-  position?: number;
-  rate?: number;
-}
-
-export interface AudioOptions {
-  volume?: number;
-  mute?: boolean;
-  track?: number;
-  delay?: number;
-}
-
-export interface VideoOptions {
-  track?: number;
-  scale?: number;
-  aspectRatio?: string;
-  crop?: string;
-  deinterlace?: string;
-  teletext?: number;
-}
-
-export interface SubtitleOptions {
-  track?: number;
-  delay?: number;
-}
-
-export interface WindowResizeOptions {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
+// Electron-specific window styling knobs (native window chrome). Not
+// applicable to Tizen since TV apps are always fullscreen.
 export interface WindowStyleOptions {
   border?: boolean;
   titleBar?: boolean;
@@ -65,87 +9,7 @@ export interface WindowStyleOptions {
   taskbar?: boolean;
 }
 
-export interface WindowOptions {
-  resize?: WindowResizeOptions;
-  visible?: boolean;
-  screenMode?: ScreenMode;
-}
-
-// Shortcut action types
-export type ShortcutAction =
-  | 'playPause'
-  | 'stop'
-  | 'seekForward'        // +10s
-  | 'seekBackward'       // -10s
-  | 'seekForwardSmall'   // +3s
-  | 'seekBackwardSmall'  // -3s
-  | 'volumeUp'           // +5
-  | 'volumeDown'         // -5
-  | 'toggleMute'
-  | 'toggleFullscreen'
-  | 'exitFullscreen'
-  | 'stickyMode'
-  | 'freeScreenMode'
-  | 'subtitleDelayPlus'  // +100ms
-  | 'subtitleDelayMinus' // -100ms
-  | 'subtitleDisable';
-
-export interface ShortcutOptions {
-  shortcuts: Record<ShortcutAction, string[]>; // { "playPause": ["Space", "KeyK"], "volumeUp": ["ArrowUp"] }
-}
-
-// Unified API Response Types
-export interface MediaInfo {
-  duration: number;
-  isSeekable: boolean;
-  audioTracks: VlcTrack[];
-  subtitleTracks: VlcTrack[];
-  videoTracks: VlcTrack[];
-}
-
-export interface PlayerSettings {
-  volume?: number;
-  muted?: boolean;
-  rate?: number;
-  screenMode?: ScreenMode;
-}
-
-export interface CurrentVideoState {
-  // Playback info
-  time?: number;
-  state?: VlcState;
-  endReached?: boolean;
-  error?: string;
-  length?: number;
-  position?: number;           // 0.0 - 1.0 (normalized position)
-  buffering?: number;          // 0.0 - 100.0 (buffering progress, only when buffering)
-  isSeekable?: boolean;        // Real-time seekability
-
-  // Video settings (set on video load + when changed)
-  aspectRatio?: string | null;
-  crop?: string | null;
-  scale?: number;
-  deinterlace?: string | null;
-
-  // Delay settings (absolute values in microseconds)
-  audioDelay?: number;
-  subtitleDelay?: number;
-
-  // Current tracks (per-video selection)
-  audioTrack?: number;
-  subtitleTrack?: number;
-  videoTrack?: number;
-}
-
-// Unified Event Data Structure
-export interface VlcEventData {
-  mediaInfo?: MediaInfo;
-  playerInfo?: PlayerSettings;
-  currentVideo?: CurrentVideoState;
-  shortcut?: ShortcutAction;
-}
-
-// Hook Return Type
+// Desktop React hook return type — kept local to this app.
 export interface UseVlcPlayerReturn {
   // State
   isAvailable: boolean;
