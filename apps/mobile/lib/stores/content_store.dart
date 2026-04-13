@@ -213,6 +213,21 @@ class ContentStore extends ChangeNotifier {
     return watchables?[url] as Map<String, dynamic>?;
   }
 
+  /// Resolves an M3U item by its stream URL.
+  /// Used by the server-side mirror store to set currentItem from
+  /// mediaInfo.url in incoming client_event messages.
+  /// Searches per category group to avoid returning duplicates if the
+  /// same URL appears in multiple groups (Movie → Series → LiveStream order).
+  M3UItem? findByUrl(String url) {
+    for (final category in ['Movie', 'Series', 'LiveStream']) {
+      for (final group in _groups.where((g) => g.category == category)) {
+        final match = group.items.where((i) => i.url == url).firstOrNull;
+        if (match != null) return match;
+      }
+    }
+    return null;
+  }
+
   // ---------------------------------------------------------------------------
   // P2P sync
   // ---------------------------------------------------------------------------

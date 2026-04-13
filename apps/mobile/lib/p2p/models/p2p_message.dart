@@ -38,7 +38,10 @@ abstract final class P2PMessageType {
   static const String shortcut = 'shortcut';
 
   // Player → Server (state)
-  static const String stateUpdate = 'state_update';
+  static const String clientEvent = 'client_event';
+
+  // Server → Player (resync request)
+  static const String stateRequest = 'state_request';
 
   // Bidirectional
   static const String profileSync = 'profile_sync';

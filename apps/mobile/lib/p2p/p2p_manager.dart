@@ -6,19 +6,19 @@ import 'utils/merge_user_data.dart' as merge_utils;
 
 /// Routes incoming P2P messages to the appropriate handler.
 ///
-/// Client mode (TV / phone connected to desktop):
+/// Client mode (TV / tablet playing video, controlled by a remote):
 ///   - Routes open/playback/audio/video/subtitle/window/shortcut → player store
-///   - Broadcasts player state every 2 seconds as state_update
+///   - Responds to state_request with a full client_event snapshot immediately
+///   - Broadcasts full player state every 500 ms as client_event
 ///   - Handles profile_sync flow (profile info → M3U request → userData merge)
 ///
-/// Server mode (phone/tablet acting as controller):
-///   - Routes state_update from player device → remote player state store
+/// Server mode (phone/tablet acting as remote control):
+///   - Routes client_event from player device → remote player state store
 ///   - Handles profile_sync responses from connected clients
 ///
 /// Mirrors: apps/tizen/src/components/P2P/P2PManager.tsx
-///          apps/desktop/src/components/P2P/P2PManager.tsx
 class P2PManager {
-  static const Duration _stateBroadcastInterval = Duration(seconds: 2);
+  static const Duration _stateBroadcastInterval = Duration(milliseconds: 500);
 
   final P2PClientStore? clientStore;
   final P2PServerStore? serverStore;
@@ -26,14 +26,19 @@ class P2PManager {
   /// Called when an open/playback/audio/video/subtitle/window/shortcut command arrives.
   final void Function(String type, Map<String, dynamic>? payload)? onPlayerCommand;
 
-  /// Called to read current player state for state_update broadcast.
+  /// Called to read current player state for client_event broadcast.
   final Map<String, dynamic> Function()? getPlayerState;
 
-  /// Called when a state_update arrives from a remote player (server mode).
+  /// Called when a client_event arrives from a remote player (server mode).
   final void Function(Map<String, dynamic> state)? onRemoteStateUpdate;
 
   /// Called when profile sync data arrives — host app handles persistence.
   final Future<void> Function(ProfileSyncPayload payload, void Function(P2PMessage) reply)? onProfileSync;
+
+  /// Called when a new client connects in server mode.
+  /// Should return the welcome profile_sync payload to send to the client,
+  /// or null if no active profile exists yet.
+  final ProfileSyncPayload? Function(String connectionId)? onClientConnected;
 
   StreamSubscription? _clientMessageSub;
   StreamSubscription? _serverMessageSub;
@@ -46,6 +51,7 @@ class P2PManager {
     this.getPlayerState,
     this.onRemoteStateUpdate,
     this.onProfileSync,
+    this.onClientConnected,
   });
 
   // ---------------------------------------------------------------------------
@@ -59,6 +65,7 @@ class P2PManager {
     _clientMessageSub?.cancel();
     _serverMessageSub?.cancel();
     _broadcastTimer?.cancel();
+    serverStore?.removeConnectionListener(_onClientConnected);
   }
 
   // --- Client mode ---
@@ -100,8 +107,15 @@ class P2PManager {
         onPlayerCommand?.call(type, payload);
         break;
 
-      case P2PMessageType.stateUpdate:
-        // Client is the player — ignore state_update coming from server
+      case P2PMessageType.stateRequest:
+        // Server wants a full snapshot right now — respond with a client_event.
+        final state = getPlayerState?.call();
+        if (state != null) {
+          clientStore?.sendMessage(P2PMessage(
+            type: P2PMessageType.clientEvent,
+            payload: state,
+          ));
+        }
         break;
 
       case P2PMessageType.profileSync:
@@ -124,7 +138,7 @@ class P2PManager {
       final state = getPlayerState?.call();
       if (state == null) return;
       clientStore?.sendMessage(P2PMessage(
-        type: P2PMessageType.stateUpdate,
+        type: P2PMessageType.clientEvent,
         payload: state,
       ));
     });
@@ -144,6 +158,18 @@ class P2PManager {
     _serverMessageSub = server.messageStream.listen((event) {
       _handleServerMessage(event.connectionId, event.message);
     });
+
+    server.addConnectionListener(_onClientConnected);
+  }
+
+  void _onClientConnected(String connectionId) {
+    final welcome = onClientConnected?.call(connectionId);
+    if (welcome == null) return;
+
+    serverStore?.sendTo(
+      connectionId,
+      P2PMessage(type: P2PMessageType.profileSync, payload: welcome.toJson()),
+    );
   }
 
   void _handleServerMessage(String connectionId, Map<String, dynamic> raw) {
@@ -153,7 +179,7 @@ class P2PManager {
     final payload = raw['payload'] as Map<String, dynamic>?;
 
     switch (type) {
-      case P2PMessageType.stateUpdate:
+      case P2PMessageType.clientEvent:
         if (payload != null) {
           onRemoteStateUpdate?.call(payload);
         }

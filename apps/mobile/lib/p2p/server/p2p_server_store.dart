@@ -22,6 +22,9 @@ class P2PServerStore extends ChangeNotifier {
   final _messageController =
       StreamController<({String connectionId, Map<String, dynamic> message})>.broadcast();
 
+  // --- Connection listeners ---
+  final List<void Function(String connectionId)> _connectionListeners = [];
+
   // --- Getters ---
   bool get isRunning => _isRunning;
   int get port => _port;
@@ -61,6 +64,15 @@ class P2PServerStore extends ChangeNotifier {
 
       // Auto-select first connecting device
       _selectedDeviceId ??= connectionId;
+
+      // Ask the client for a full state snapshot immediately so the
+      // server UI doesn't have to wait for the next broadcast interval.
+      _server!.send(connectionId, P2PMessage(type: 'state_request'));
+
+      // Notify connection listeners (e.g. P2PManager sends welcome profile_sync)
+      for (final listener in _connectionListeners) {
+        listener(connectionId);
+      }
 
       notifyListeners();
     };
@@ -117,6 +129,16 @@ class P2PServerStore extends ChangeNotifier {
     _server?.broadcast(message);
   }
 
+  // --- Connection listeners ---
+
+  void addConnectionListener(void Function(String connectionId) listener) {
+    _connectionListeners.add(listener);
+  }
+
+  void removeConnectionListener(void Function(String connectionId) listener) {
+    _connectionListeners.remove(listener);
+  }
+
   // --- Selection ---
 
   void selectDevice(String connectionId) {
@@ -129,6 +151,7 @@ class P2PServerStore extends ChangeNotifier {
 
   @override
   Future<void> dispose() async {
+    _connectionListeners.clear();
     await stopServer();
     await _messageController.close();
     super.dispose();

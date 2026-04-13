@@ -67,7 +67,7 @@ class _AppShellState extends State<AppShell> {
 }
 
 // ---------------------------------------------------------------------------
-// Phone shell — bottom nav, 5 tabs, no client P2P
+// Phone shell — bottom nav, 5 tabs, server (controller) mode only
 // ---------------------------------------------------------------------------
 
 class _PhoneShell extends StatelessWidget {
@@ -83,7 +83,7 @@ class _PhoneShell extends StatelessWidget {
     required this.content,
   });
 
-  // Phone has no client — show only server-side P2P screen
+  // Phone is server-only — acts as remote control, no local video playback
   static const _tabs = [
     AppSection.content,
     AppSection.favorites,
@@ -176,7 +176,7 @@ class _TabletShell extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// TV shell — top header (Tizen style), client + server P2P, D-pad focus
+// TV shell — top header (Tizen style), client (player) mode only, D-pad focus
 // ---------------------------------------------------------------------------
 
 class _TVShell extends StatelessWidget {
