@@ -1,55 +1,57 @@
 {
-  "name": "zenith-tv",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Modern cross-platform IPTV player with peer-to-peer remote control",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/myniqx/zenith-tv.git"
-  },
-  "author": "myniqx",
-  "license": "MIT",
-  "scripts": {
-    "dev:desktop": "pnpm --filter @zenith-tv/desktop dev",
-    "dev:tizen": "pnpm --filter @zenith-tv/tizen dev",
-    "build:parser": "cd core/parser && wasm-pack build --target web --release",
-    "build:vlc": "pnpm --filter @zenith-tv/vlc-player build",
-    "rebuild:vlc": "pnpm --filter @zenith-tv/vlc-player rebuild",
-    "download:vlc-sdk": "pnpm --filter @zenith-tv/vlc-player download-sdk",
-    "download:vlc-sdk:all": "pnpm --filter @zenith-tv/vlc-player download-sdk:all",
-    "build:desktop": "pnpm --filter @zenith-tv/desktop build",
-    "build:electron": "pnpm --filter @zenith-tv/desktop build:electron",
-    "build:tizen": "pnpm --filter @zenith-tv/tizen build",
-    "package:tizen": "pnpm --filter @zenith-tv/tizen package",
-    "build:all": "pnpm build:parser && pnpm build:vlc && pnpm build:desktop",
-    "clean": "pnpm -r exec rm -rf node_modules dist build .turbo",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "lint": "eslint \"**/*.{ts,tsx,js,jsx}\" --fix",
-    "lint:check": "eslint \"**/*.{ts,tsx,js,jsx}\"",
-    "tsc": "pnpm -r --parallel run tsc",
-    "test": "vitest",
-    "test:run": "vitest run"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.39.1",
-    "@types/node": "^20.11.0",
-    "@typescript-eslint/eslint-plugin": "^8.46.4",
-    "@typescript-eslint/parser": "^8.46.4",
-    "eslint": "^9.39.1",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "prettier": "^3.6.2",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.4"
-  },
-  "engines": {
-    "node": ">=18.0.0",
-    "pnpm": ">=8.0.0"
-  },
-  "packageManager": "pnpm@10.26.2",
-  "workspaces": [
-    "core/*",
-    "shared/*",
-    "apps/*"
-  ]
+	"name": "zenith-tv",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Modern cross-platform IPTV player with peer-to-peer remote control",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/myniqx/zenith-tv.git"
+	},
+	"author": "myniqx",
+	"license": "MIT",
+	"scripts": {
+		"dev:desktop": "pnpm --filter @zenith-tv/desktop dev",
+		"dev:tizen": "pnpm --filter @zenith-tv/tizen dev",
+		"build:parser": "cd core/parser && wasm-pack build --target web --release --features wasm",
+		"build:parser:android": "node core/parser/scripts/build-android.cjs",
+		"build:parser:android:all": "node core/parser/scripts/build-android.cjs --targets=arm64-v8a,armeabi-v7a,x86_64",
+		"build:vlc": "pnpm --filter @zenith-tv/vlc-player build",
+		"rebuild:vlc": "pnpm --filter @zenith-tv/vlc-player rebuild",
+		"download:vlc-sdk": "pnpm --filter @zenith-tv/vlc-player download-sdk",
+		"download:vlc-sdk:all": "pnpm --filter @zenith-tv/vlc-player download-sdk:all",
+		"build:desktop": "pnpm --filter @zenith-tv/desktop build",
+		"build:electron": "pnpm --filter @zenith-tv/desktop build:electron",
+		"build:tizen": "pnpm --filter @zenith-tv/tizen build",
+		"package:tizen": "pnpm --filter @zenith-tv/tizen package",
+		"build:all": "pnpm build:parser && pnpm build:vlc && pnpm build:desktop",
+		"clean": "pnpm -r exec rm -rf node_modules dist build .turbo",
+		"format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+		"lint": "eslint \"**/*.{ts,tsx,js,jsx}\" --fix",
+		"lint:check": "eslint \"**/*.{ts,tsx,js,jsx}\"",
+		"tsc": "pnpm -r --parallel run tsc",
+		"test": "vitest",
+		"test:run": "vitest run"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.39.1",
+		"@types/node": "^20.11.0",
+		"@typescript-eslint/eslint-plugin": "^8.46.4",
+		"@typescript-eslint/parser": "^8.46.4",
+		"eslint": "^9.39.1",
+		"eslint-plugin-react": "^7.37.5",
+		"eslint-plugin-react-hooks": "^7.0.1",
+		"prettier": "^3.6.2",
+		"typescript": "^5.9.3",
+		"vitest": "^4.1.4"
+	},
+	"engines": {
+		"node": ">=18.0.0",
+		"pnpm": ">=8.0.0"
+	},
+	"packageManager": "pnpm@10.26.2",
+	"workspaces": [
+		"core/*",
+		"shared/*",
+		"apps/*"
+	]
 }

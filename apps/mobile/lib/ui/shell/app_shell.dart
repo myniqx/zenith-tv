@@ -5,6 +5,8 @@ import '../../p2p/client/p2p_client_store.dart';
 import '../../p2p/server/p2p_server_store.dart';
 import '../../stores/content_store.dart';
 import '../p2p/p2p_screen.dart';
+import '../profile/profile_screen.dart';
+import '../content/content_screen.dart';
 
 enum AppSection { content, favorites, p2p, profile, settings }
 
@@ -17,22 +19,20 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  AppSection _section = AppSection.profile; // profile is always the first screen
-
-  bool get _isReady => context.watch<ContentStore>().isReady;
+  AppSection _section = AppSection.profile;
 
   void _navigate(AppSection section) => setState(() => _section = section);
 
   Widget _buildContent() {
     switch (_section) {
       case AppSection.content:
-        return const _Placeholder(label: 'Content Browser');
+        return const ContentScreen();
       case AppSection.favorites:
         return const _Placeholder(label: 'Favorites');
       case AppSection.p2p:
         return const P2PScreen();
       case AppSection.profile:
-        return const _Placeholder(label: 'Profile');
+        return const ProfileScreen();
       case AppSection.settings:
         return const _Placeholder(label: 'Settings');
     }
@@ -40,26 +40,51 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    final contentStore = context.watch<ContentStore>();
+    final isReady = contentStore.isReady;
+
+    // Jump to content browser only after a user-triggered load completes
+    if (contentStore.justLoaded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          contentStore.justLoaded = false;
+          setState(() => _section = AppSection.content);
+        }
+      });
+    }
+
+    final loadingBanner = contentStore.isLoading
+        ? LinearProgressIndicator(
+            value: contentStore.loadProgress > 0 ? contentStore.loadProgress : null,
+            backgroundColor: const Color(0xFF1E293B),
+            valueColor: const AlwaysStoppedAnimation(Color(0xFFEF4444)),
+            minHeight: 3,
+          )
+        : const SizedBox.shrink();
+
     switch (DeviceTypeDetector.current) {
       case DeviceType.phone:
         return _PhoneShell(
           section: _section,
           onNavigate: _navigate,
-          isReady: _isReady,
+          isReady: isReady,
+          loadingBanner: loadingBanner,
           content: _buildContent(),
         );
       case DeviceType.tablet:
         return _TabletShell(
           section: _section,
           onNavigate: _navigate,
-          isReady: _isReady,
+          isReady: isReady,
+          loadingBanner: loadingBanner,
           content: _buildContent(),
         );
       case DeviceType.tv:
         return _TVShell(
           section: _section,
           onNavigate: _navigate,
-          isReady: _isReady,
+          isReady: isReady,
+          loadingBanner: loadingBanner,
           content: _buildContent(),
         );
     }
@@ -75,12 +100,14 @@ class _PhoneShell extends StatelessWidget {
   final void Function(AppSection) onNavigate;
   final bool isReady;
   final Widget content;
+  final Widget loadingBanner;
 
   const _PhoneShell({
     required this.section,
     required this.onNavigate,
     required this.isReady,
     required this.content,
+    required this.loadingBanner,
   });
 
   // Phone is server-only — acts as remote control, no local video playback
@@ -96,30 +123,53 @@ class _PhoneShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Not ready: show profile setup full screen, no nav bar
-    if (!isReady) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
-        body: content,
-      );
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
-      body: content,
+      body: Column(
+        children: [
+          loadingBanner,
+          Expanded(child: content),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
-        onTap: (i) => onNavigate(_tabs[i]),
+        onTap: (i) {
+          final target = _tabs[i];
+          // Content and Favorites require a loaded profile
+          if (!isReady &&
+              (target == AppSection.content ||
+                  target == AppSection.favorites)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Select a profile first'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+            return;
+          }
+          onNavigate(target);
+        },
         backgroundColor: const Color(0xFF1E293B),
         selectedItemColor: const Color(0xFFEF4444),
         unselectedItemColor: const Color(0xFF64748B),
         type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.tv), label: 'Content'),
-          BottomNavigationBarItem(icon: Icon(Icons.star), label: 'Favorites'),
-          BottomNavigationBarItem(icon: Icon(Icons.wifi), label: 'P2P'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+        items: [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.tv,
+                color: !isReady ? const Color(0xFF334155) : null),
+            label: 'Content',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.star,
+                color: !isReady ? const Color(0xFF334155) : null),
+            label: 'Favorites',
+          ),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.wifi), label: 'P2P'),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.person), label: 'Profile'),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );
@@ -135,25 +185,33 @@ class _TabletShell extends StatelessWidget {
   final void Function(AppSection) onNavigate;
   final bool isReady;
   final Widget content;
+  final Widget loadingBanner;
 
   const _TabletShell({
     required this.section,
     required this.onNavigate,
     required this.isReady,
     required this.content,
+    required this.loadingBanner,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Not ready: split screen — profile left, P2P right
     if (!isReady) {
       return Scaffold(
         backgroundColor: const Color(0xFF0F172A),
-        body: Row(
+        body: Column(
           children: [
-            Expanded(child: content), // profile section
-            const VerticalDivider(color: Color(0xFF334155), width: 1),
-            const Expanded(child: P2PScreen()),
+            loadingBanner,
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(child: content),
+                  const VerticalDivider(color: Color(0xFF334155), width: 1),
+                  const Expanded(child: P2PScreen()),
+                ],
+              ),
+            ),
           ],
         ),
       );
@@ -163,11 +221,8 @@ class _TabletShell extends StatelessWidget {
       backgroundColor: const Color(0xFF0F172A),
       body: Column(
         children: [
-          _TopHeader(
-            section: section,
-            onNavigate: onNavigate,
-            showP2PBadge: true,
-          ),
+          _TopHeader(section: section, onNavigate: onNavigate, showP2PBadge: true),
+          loadingBanner,
           Expanded(child: content),
         ],
       ),
@@ -184,25 +239,33 @@ class _TVShell extends StatelessWidget {
   final void Function(AppSection) onNavigate;
   final bool isReady;
   final Widget content;
+  final Widget loadingBanner;
 
   const _TVShell({
     required this.section,
     required this.onNavigate,
     required this.isReady,
     required this.content,
+    required this.loadingBanner,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Not ready: split screen — profile left, P2P right
     if (!isReady) {
       return Scaffold(
         backgroundColor: const Color(0xFF0F172A),
-        body: Row(
+        body: Column(
           children: [
-            Expanded(child: content), // profile section
-            const VerticalDivider(color: Color(0xFF334155), width: 1),
-            const Expanded(child: P2PScreen()),
+            loadingBanner,
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(child: content),
+                  const VerticalDivider(color: Color(0xFF334155), width: 1),
+                  const Expanded(child: P2PScreen()),
+                ],
+              ),
+            ),
           ],
         ),
       );
@@ -212,12 +275,8 @@ class _TVShell extends StatelessWidget {
       backgroundColor: const Color(0xFF0F172A),
       body: Column(
         children: [
-          _TopHeader(
-            section: section,
-            onNavigate: onNavigate,
-            showP2PBadge: true,
-            isTV: true,
-          ),
+          _TopHeader(section: section, onNavigate: onNavigate, showP2PBadge: true, isTV: true),
+          loadingBanner,
           Expanded(child: content),
         ],
       ),
