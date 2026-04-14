@@ -67,7 +67,6 @@ interface P2PStoreState {
   sendToRemote: <T = unknown>(message: P2PMessage<T>) => Promise<boolean>;
   // Using if this device is web server and remote!
   sendToPlayer: <T = unknown>(message: P2PMessage<T>, toIds?: string[]) => Promise<boolean>;
-  broadcastState: <T>(state: T) => void;
 
   // Discovery actions
   startScanning: () => Promise<void>;
@@ -302,16 +301,6 @@ export const useP2PStore = create<P2PStoreState>()(
           return result;
         }
         return false;
-      },
-
-      broadcastState: (state) => {
-        const { mode, clientSocket } = get();
-        if (mode === 'client' && clientSocket && clientSocket.readyState === WebSocket.OPEN) {
-          clientSocket.send(JSON.stringify({
-            type: 'state_update',
-            payload: state
-          }));
-        }
       },
 
       handlePlayerConnection: async (connection) => {

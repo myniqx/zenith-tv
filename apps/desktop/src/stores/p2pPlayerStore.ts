@@ -129,7 +129,7 @@ export const useP2PPlayerStore = create<P2PPlayerState>((set, get) => ({
     // the client's actual player state.
     p2p.onMessage(({ message }) => {
       if (useP2PStore.getState().mode !== 'server') return;
-      if (message.type === 'client_event' || message.type === 'state_update') {
+      if (message.type === 'client_event') {
         get()._handleRemoteVlcEvent(message.payload as ClientEventData);
       }
     });

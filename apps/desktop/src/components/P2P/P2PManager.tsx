@@ -3,13 +3,13 @@ import { useP2PStore } from '../../stores/p2pStore';
 import { useVlcPlayerStore } from '../../stores/vlcPlayer';
 import { useContentStore, UserData } from '../../stores/content';
 import { useProfilesStore } from '../../stores/profiles';
-import { PlaybackOptions, AudioOptions, VideoOptions, SubtitleOptions, WindowOptions, ShortcutOptions, OpenOptions } from '../../types/types';
+import { PlaybackOptions, AudioOptions, VideoOptions, SubtitleOptions, WindowOptions, ShortcutOptions, OpenOptions } from '@zenith-tv/content';
 import { ProfileSyncPayload } from '../../../../../shared/content/src/types/p2p';
 import { mergeUserData } from '../../utils/profileSync';
 import { fileSystem } from '../../libs/fileSystem';
 
 export function P2PManager() {
-  const { mode, connectionStatus, broadcastState, lastReceivedMessage, lastProfileSync, sendToPlayer, sendToRemote, lastConnection } = useP2PStore();
+  const { mode, connectionStatus, lastReceivedMessage, lastProfileSync, sendToPlayer, sendToRemote, lastConnection } = useP2PStore();
   const vlcStore = useVlcPlayerStore();
   const contentStore = useContentStore();
   const profilesStore = useProfilesStore();
@@ -199,39 +199,6 @@ export function P2PManager() {
     await contentStore.setUserData(mergedUserData);
     console.log('[P2PManager] Merged and saved userData');
   };
-
-  // Sync Logic (Client -> Server)
-  useEffect(() => {
-    if (mode !== 'client' || connectionStatus !== 'connected') return;
-
-    // Subscribe to VLC store changes and broadcast them
-    const unsub = useVlcPlayerStore.subscribe((state) => {
-      // We should debounce this or only send significant changes
-      // For now, let's send everything.
-      // Optimization: Only send if changed?
-
-      // We need to map VlcState to a payload
-      const payload = {
-        time: state.time,
-        duration: state.duration,
-        playerState: state.playerState,
-        volume: state.volume,
-        isMuted: state.isMuted,
-        isInitialized: state.isInitialized,
-        audioTracks: state.audioTracks,
-        subtitleTracks: state.subtitleTracks,
-        videoTracks: state.videoTracks,
-        currentAudioTrack: state.currentAudioTrack,
-        currentSubtitleTrack: state.currentSubtitleTrack,
-        currentVideoTrack: state.currentVideoTrack,
-        // ... other fields
-      };
-
-      broadcastState(payload);
-    });
-
-    return () => unsub();
-  }, [mode, connectionStatus, broadcastState]);
 
   return null;
 }

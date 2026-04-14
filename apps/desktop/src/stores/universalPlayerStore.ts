@@ -137,7 +137,7 @@ const pickState = (src: AnyPlayerSnapshot): PlayerStateFields => ({
 
 export const useUniversalPlayerStore = create<UniversalPlayerState>((set) => {
   // Ensure the P2P mirror listeners are live from the start so we don't
-  // miss state_update packets that arrive before the user opens the UI.
+  // miss client_event packets that arrive before the user opens the UI.
   useP2PPlayerStore.getState()._setupListeners();
 
   // Re-sync whenever P2P mode flips (off ↔ client ↔ server).
