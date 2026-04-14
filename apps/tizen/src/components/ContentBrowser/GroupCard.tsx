@@ -26,7 +26,7 @@ export function GroupCard({ group, focusId }: GroupCardProps) {
       className="h-full"
     >
       <CardContent className="p-0 h-full flex flex-col">
-        <div className="relative aspect-[2/3] bg-muted rounded-t-lg overflow-hidden">
+        <div className="relative aspect-2/3 bg-muted rounded-t-lg overflow-hidden">
           {coverImages.length > 0 ? (
             <div className="w-full h-full grid grid-cols-3 grid-rows-3 gap-0.5">
               {coverImages.slice(0, 9).map((cover, index) => (
@@ -67,7 +67,7 @@ export function GroupCard({ group, focusId }: GroupCardProps) {
 
         <div className="p-3 flex-1">
           <h3 className="text-sm font-medium line-clamp-2 flex items-center gap-2">
-            <Icon className="w-4 h-4 flex-shrink-0" />
+            <Icon className="w-4 h-4 shrink-0" />
             {group.Name}
           </h3>
           {group.Groups.length > 0 && (

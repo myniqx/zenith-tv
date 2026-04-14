@@ -39,7 +39,7 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
       style={{ height: HEADER_HEIGHT }}
     >
       <div className="flex items-center">
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+        <h1 className="text-2xl font-bold bg-linear-to-r from-primary to-primary/60 bg-clip-text text-transparent">
           Zenith TV
         </h1>
       </div>

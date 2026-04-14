@@ -40,7 +40,7 @@ export function WatchableCard({ watchable, focusId }: WatchableCardProps) {
       className="h-full"
     >
       <CardContent className="p-0 h-full flex flex-col">
-        <div className="relative aspect-[2/3] bg-muted rounded-t-lg overflow-hidden">
+        <div className="relative aspect-2/3 bg-muted rounded-t-lg overflow-hidden">
           {watchable.Logo ? (
             <img
               src={watchable.Logo}
