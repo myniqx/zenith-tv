@@ -21,6 +21,11 @@ import { useSettingsStore } from './settings';
 let listenersInitialized = false;
 let initializationPromise: Promise<void> | null = null;
 
+// P2P pending event accumulator. AVPlay callbacks write partial data here.
+// The P2PManager interval calls flushPendingEvent() to send and reset it.
+// Kept outside Zustand to avoid type spread issues with ClientEventData.
+let pendingEvent: Partial<ClientEventData> = {};
+
 interface TizenPlayerState {
   // State
   isAvailable: boolean;
@@ -78,10 +83,12 @@ interface TizenPlayerState {
   window: (options: WindowOptions) => Promise<boolean>;
   shortcut: (options: ShortcutOptions) => Promise<void>;
 
-  // P2P: Build a ClientEventData snapshot of the full current state. Used to
-  // answer `state_request` and as the payload of the interval broadcast,
-  // since AVPlay has no central event stream to forward per-change.
+  // P2P: Build a ClientEventData snapshot of the full current state.
+  // Used to answer `state_request` from the server.
   getFullVlcEvent: () => ClientEventData;
+
+  // P2P: Flush accumulated pending event data. Returns null if nothing changed.
+  flushPendingEvent: () => ClientEventData | null;
 
   // Internal helpers
   _setupEventListeners: () => void;
@@ -258,6 +265,7 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
       onstreamcompleted: () => {
         const state = get();
         set({ playerState: 'ended' });
+        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, endReached: true };
 
         // Save final progress
         if (state.currentItem && state.duration > 0) {
@@ -280,6 +288,12 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
           position,
         });
 
+        pendingEvent.currentVideo = {
+          ...pendingEvent.currentVideo,
+          time: timeInSeconds,
+          position,
+        };
+
         // Auto-save progress every 10 seconds
         if (state.currentItem && state.duration > 0) {
           const timeSinceLastSave = Math.abs(timeInSeconds - state.lastSavedTime);
@@ -297,16 +311,19 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
       // Buffering started
       onbufferingstart: () => {
         set({ playerState: 'buffering', buffering: 0 });
+        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'buffering', buffering: 0 };
       },
 
       // Buffering progress (0-100)
       onbufferingprogress: (percent: number) => {
         set({ buffering: percent });
+        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, buffering: percent };
       },
 
       // Buffering completed
       onbufferingcomplete: () => {
         set({ playerState: 'playing', buffering: 0 });
+        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'playing', buffering: 0 };
       },
 
       // Error occurred
@@ -316,6 +333,7 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
           error: `AVPlay error: ${errorType}`,
           playerState: 'error',
         });
+        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, error: `AVPlay error: ${errorType}` };
       },
 
       // Error with message
@@ -325,6 +343,7 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
           error: `${errorType}: ${errorMsg}`,
           playerState: 'error',
         });
+        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, error: `${errorType}: ${errorMsg}` };
       },
 
       // Subtitle change
@@ -388,6 +407,14 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
         playerState: 'paused', // Ready to play
       });
 
+      pendingEvent.mediaInfo = {
+        duration,
+        isSeekable: true,
+        audioTracks: tracks.audio,
+        subtitleTracks: tracks.subtitle,
+        videoTracks: tracks.video,
+      };
+
       // Apply user's saved track preferences
       const state = get();
       const savedTracks = state.currentItem?.userData?.tracks;
@@ -443,6 +470,7 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
       // Auto-play
       avplay.play();
       set({ playerState: 'playing' });
+      pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'playing' };
 
       // Resume from saved position if available
       const savedPosition = state.currentItem?.userData?.position;
@@ -473,11 +501,13 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
           case 'resume':
             avplay.play();
             set({ playerState: 'playing' });
+            pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'playing' };
             break;
 
           case 'pause':
             avplay.pause();
             set({ playerState: 'paused' });
+            pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'paused' };
 
             // Save progress on pause
             if (currentItem && duration > 0) {
@@ -489,6 +519,7 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
           case 'stop':
             avplay.stop();
             set({ playerState: 'stopped' });
+            pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'stopped' };
 
             // Save progress on stop
             if (currentItem && duration > 0) {
@@ -520,6 +551,7 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
         );
         avplay.setSpeed(closestRate);
         set({ rate: closestRate });
+        pendingEvent.playerInfo = { ...pendingEvent.playerInfo, rate: closestRate };
       }
     } catch (error) {
       console.error('[Tizen] Playback error:', error);
@@ -545,6 +577,7 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
         );
         // Update local state for UI purposes, but it won't affect actual volume
         set({ volume: options.volume });
+        pendingEvent.playerInfo = { ...pendingEvent.playerInfo, volume: options.volume };
       }
 
       // STUB: Mute control
@@ -557,6 +590,7 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
           avplay.enableAudioStream();
         }
         set({ isMuted: options.mute });
+        pendingEvent.playerInfo = { ...pendingEvent.playerInfo, muted: options.mute };
       }
 
       // Track selection
@@ -565,9 +599,11 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
           // Disable audio (not typical, but supported)
           avplay.disableAudioStream();
           set({ currentAudioTrack: -1 });
+          pendingEvent.currentVideo = { ...pendingEvent.currentVideo, audioTrack: -1 };
         } else {
           avplay.setSelectTrack('AUDIO', options.track);
           set({ currentAudioTrack: options.track });
+          pendingEvent.currentVideo = { ...pendingEvent.currentVideo, audioTrack: options.track };
 
           // Save track selection
           if (currentItem) {
@@ -588,6 +624,7 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
         );
         // Update local state for UI purposes
         set({ audioDelay: options.delay });
+        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, audioDelay: options.delay };
       }
     } catch (error) {
       console.error('[Tizen] Audio control error:', error);
@@ -660,10 +697,12 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
           // Disable subtitles
           avplay.setSilentSubtitle(true);
           set({ currentSubtitleTrack: -1 });
+          pendingEvent.currentVideo = { ...pendingEvent.currentVideo, subtitleTrack: -1 };
         } else {
           avplay.setSelectTrack('TEXT', options.track);
           avplay.setSilentSubtitle(false);
           set({ currentSubtitleTrack: options.track });
+          pendingEvent.currentVideo = { ...pendingEvent.currentVideo, subtitleTrack: options.track };
 
           // Save track selection
           if (currentItem) {
@@ -680,6 +719,7 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
         const delayMs = Math.floor(options.delay / 1000);
         avplay.setSubtitlePosition(delayMs);
         set({ subtitleDelay: options.delay });
+        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, subtitleDelay: options.delay };
       }
     } catch (error) {
       console.error('[Tizen] Subtitle control error:', error);
@@ -786,6 +826,21 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
   shouldStickyPanelVisible: () => {
     // STUB: Always false on Tizen (no sticky mode)
     return false;
+  },
+
+  flushPendingEvent: (): ClientEventData | null => {
+    if (!pendingEvent.mediaInfo && !pendingEvent.playerInfo && !pendingEvent.currentVideo) {
+      return null;
+    }
+
+    // Inject currentItem URL into mediaInfo if present
+    if (pendingEvent.mediaInfo) {
+      pendingEvent.mediaInfo.url = get().currentItem?.Url ?? null;
+    }
+
+    const flushed = pendingEvent as ClientEventData;
+    pendingEvent = {};
+    return flushed;
   },
 
   // Build a ClientEventData snapshot for P2P sync. The URL is injected

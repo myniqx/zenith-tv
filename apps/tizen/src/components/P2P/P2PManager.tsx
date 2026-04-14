@@ -80,18 +80,19 @@ export function P2PManager() {
     }
   }, [lastReceivedMessage]);
 
-  // Sync player state to desktop on a fixed interval (throttled)
+  // Flush accumulated player events to desktop on a fixed interval.
+  // Only sends if something actually changed since the last flush.
   useEffect(() => {
     if (connectionStatus !== 'connected') return;
 
-    const broadcastState = () => {
-      sendMessage({
-        type: 'client_event',
-        payload: useTizenPlayerStore.getState().getFullVlcEvent(),
-      });
+    const flushAndSend = () => {
+      const event = useTizenPlayerStore.getState().flushPendingEvent();
+      if (event) {
+        sendMessage({ type: 'client_event', payload: event });
+      }
     };
 
-    broadcastTimerRef.current = setInterval(broadcastState, STATE_BROADCAST_INTERVAL_MS);
+    broadcastTimerRef.current = setInterval(flushAndSend, STATE_BROADCAST_INTERVAL_MS);
 
     return () => {
       if (broadcastTimerRef.current) {
@@ -135,15 +136,24 @@ async function handleProfileSync(
       profilesStore.addM3UToProfile(username, url);
     }
 
-    // Select profile so content store knows the active UUID
-    await profilesStore.selectProfile(username, uuid);
+    // Select profile using Tizen's own UUID for this URL (not the desktop's UUID).
+    // Desktop and Tizen generate UUIDs independently; using the desktop UUID here
+    // would cause setContent to look for a non-existent local directory.
+    const localUUID = profilesStore.getUUIDFromURL(url);
+    await profilesStore.selectProfile(username, localUUID ?? undefined);
 
     if (!m3uExists) {
-      // Request full M3U data from desktop
+      // Request full M3U data from desktop.
+      // Return early — the welcome message also carries userData but we must
+      // not process it yet: sending both request:'full' and userData back-to-back
+      // causes the desktop's lastProfileSync to be overwritten by the second
+      // message before React processes the first, so request:'full' is lost.
+      // userData will be handled after M3U download completes.
       sendMessage({
         type: 'profile_sync',
         payload: { request: 'full' },
       });
+      return;
     } else {
       // M3U already on disk — just reload
       await contentStore.load();
