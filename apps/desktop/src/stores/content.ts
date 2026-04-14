@@ -23,4 +23,4 @@ export const useContentStore = createContentStore({
 })
 
 // Re-export types for backward compatibility
-export type { ContentState, CategoryType, SortBy, SortOrder, GroupBy, UserData, M3UStats, M3UUpdateData } from '@zenith-tv/content'
+export type { ContentState, CategoryType, SortBy, SortOrder, GroupBy, UserData, M3UStats, M3UUpdateData, StatusMessage, StatusKind } from '@zenith-tv/content'

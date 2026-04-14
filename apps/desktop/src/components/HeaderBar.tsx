@@ -16,7 +16,11 @@ function getBreadcrumbs(group: GroupObject | null): GroupObject[] {
   return crumbs;
 }
 
-export function HeaderBar() {
+interface HeaderBarProps {
+  profileManagerInitialOpen?: boolean;
+}
+
+export function HeaderBar({ profileManagerInitialOpen = false }: HeaderBarProps) {
   const { currentGroup, setGroup } = useContentStore();
   const { getCurrentUsername } = useProfilesStore();
 
@@ -67,7 +71,7 @@ export function HeaderBar() {
       <div className="flex items-center gap-2">
         <P2PControl />
         <Settings />
-        <ProfileManager />
+        <ProfileManager initialOpen={profileManagerInitialOpen} />
       </div>
     </header>
   );

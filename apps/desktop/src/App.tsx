@@ -36,6 +36,7 @@ function App() {
   const [isCategoryCollapsed, setIsCategoryCollapsed] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [lastProfileLoaded, setLastProfileLoaded] = useState(false);
+  const [openProfileManager, setOpenProfileManager] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // const { startServer, stopServer } = useP2PStore();
@@ -66,19 +67,24 @@ function App() {
 
   // Auto-load last profile on startup
   useEffect(() => {
-    if (lastProfileLoaded)
-      return; // dont let changing profile trigger this
+    if (lastProfileLoaded) return;
+
+    // If auto-load is off or no saved profile — open profile manager immediately
     if (!autoLoadLastProfile || !lastProfileUsername || !lastProfileUUID) {
       setLastProfileLoaded(true);
+      setOpenProfileManager(true);
       return;
     }
-    if (!profiles || !profiles.length)
-      return; // if lastProfileUsername exists maybe profiles are not loaded yet
+
+    if (!profiles || !profiles.length) return; // profiles not hydrated yet
 
     const profile = profiles.find((p) => p.username === lastProfileUsername);
 
     if (profile && profile.m3uRefs.includes(lastProfileUUID)) {
       selectProfile(lastProfileUsername, lastProfileUUID);
+    } else {
+      // Saved profile no longer exists — open profile manager
+      setOpenProfileManager(true);
     }
 
     setLastProfileLoaded(true);
@@ -151,7 +157,7 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
-      <HeaderBar />
+      <HeaderBar profileManagerInitialOpen={openProfileManager} />
 
       <main className="flex-1 overflow-hidden" role="main">
         <PanelGroup direction="horizontal" autoSaveId="main-layout">
