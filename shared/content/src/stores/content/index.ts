@@ -15,7 +15,10 @@ import type {
   UserData,
   M3UUpdateData,
   ContentGroupData,
+  StatusMessage,
 } from './types'
+import { IDLE_STATUS } from './types'
+
 import {
   ALPHABETIC_GROUPS,
   secondsToProgress,
@@ -66,6 +69,7 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
     groupBy: 'none',
     groupedContent: [],
     isLoading: false,
+    statusMessage: IDLE_STATUS,
     currentUsername: null,
     currentUUID: null,
     currentM3UUrl: null,
@@ -106,6 +110,7 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
         sortOrder: playerData?.sortOrder || 'asc',
         groupBy: playerData?.groupBy || 'none',
         isLoading: false,
+        statusMessage: IDLE_STATUS,
         currentUsername: null,
         currentUUID: null,
         currentM3UUrl: null,
@@ -142,23 +147,23 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
         throw new Error('Cannot load content: profile not set')
       }
 
-      set({ isLoading: true })
+      const status = (msg: StatusMessage) => set({ statusMessage: msg })
+      const startedAt = Date.now()
+
+      set({ isLoading: true, statusMessage: { status: 'loading', message: 'Loading M3U...', percent: 0 } })
 
       try {
-        console.log(`[Content Store] Loading content for ${currentUsername}/${currentUUID}`)
         const dateNow = Date.now()
 
-        const source = await fileSystem.readFile(getM3USource(currentUUID))
+        status({ status: 'loading', message: 'Reading file...', percent: 20 })
+        const sourceExists = await fileSystem.exists(getM3USource(currentUUID))
+        const source = sourceExists ? await fileSystem.readFile(getM3USource(currentUUID)) : null
+
         const update = await fileSystem.readJSONOrDefault<M3UUpdateData>(
           getM3UUpdate(currentUUID),
-          {
-            items: {},
-            createdAt: dateNow,
-            updatedAt: dateNow
-          }
+          { items: {}, createdAt: dateNow, updatedAt: dateNow }
         )
 
-        // Remove items older than 30 days from recent tracking
         const thirtyDaysAgo = dateNow - 30 * 24 * 60 * 60 * 1000
         let removedCount = 0
         for (const url of Object.keys(update.items)) {
@@ -168,19 +173,25 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
           }
         }
 
-        const { userData } = get()
-
         if (!source) {
           if (!fromUpdate) {
-            console.error(`[Content Store] No source content found for ${currentUUID}`)
-            toast.error('No source content found, use update instead')
+            const msg = 'M3U not synced yet. Use the sync button to download.'
+            status({ status: 'error', message: msg, percent: null })
+            toast.error(msg)
           }
           return
         }
 
+        status({ status: 'loading', message: 'Parsing M3U...', percent: 40 })
+        const parseStart = Date.now()
         const m3uList = await parseM3U(source)
+        const parseMs = Date.now() - parseStart
+        status({ status: 'loading', message: `Parsed in ${parseMs}ms — building content...`, percent: 55 })
 
-        for (const item of m3uList) {
+        const { userData } = get()
+        const BATCH = 10000
+        for (let i = 0; i < m3uList.length; i++) {
+          const item = m3uList[i]
           let watchable: WatchableObject = null!
           switch (item.category) {
             case 'Movie':
@@ -205,14 +216,13 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
           const userItemData = userData?.watchables?.[item.url]
           if (userItemData) {
             watchable.userData = userItemData
+            if (userItemData.favorite?.value) get().favoriteGroup.AddWatchable(watchable)
+            if (userItemData.watchProgress?.watched) get().watchedGroup.AddWatchable(watchable)
+          }
 
-            if (userItemData.favorite?.value) {
-              get().favoriteGroup.AddWatchable(watchable)
-            }
-
-            if (userItemData.watchProgress?.watched) {
-              get().watchedGroup.AddWatchable(watchable)
-            }
+          if ((i + 1) % BATCH === 0) {
+            const buildPercent = Math.round(55 + ((i + 1) / m3uList.length) * 40)
+            status({ status: 'loading', message: `Building content... (${i + 1}/${m3uList.length})`, percent: buildPercent })
           }
         }
 
@@ -230,9 +240,14 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
         if (update.createdAt === dateNow || removedCount > 0) {
           await fileSystem.writeJSON(getM3UUpdate(currentUUID), update)
         }
+
+        const totalMs = Date.now() - startedAt
+        status({ status: 'ready', message: `Loaded in ${totalMs}ms`, percent: 100 })
       } catch (error) {
         console.error('[Content Store] Failed to load content:', error)
-        toast.error('Failed to load content')
+        const msg = (error instanceof Error ? error.message : null) || 'Failed to load content.'
+        status({ status: 'error', message: msg, percent: null })
+        toast.error(msg)
       } finally {
         set({ isLoading: false })
       }
@@ -241,67 +256,75 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
     update: async () => {
       const { currentUsername, currentUUID } = get()
 
-      await get().load(true)
-
       if (!currentUsername || !currentUUID) {
         console.error('Cannot update: username or UUID not set. Call setContent first.')
         throw new Error('Cannot update content: profile not set')
       }
 
-      set({ isLoading: true })
+      const status = (msg: StatusMessage) => set({ statusMessage: msg })
+      const startedAt = Date.now()
+
+      set({ isLoading: true, statusMessage: { status: 'loading', message: 'Starting update...', percent: 0 } })
 
       try {
-        console.log(`[Content Store] Updating content for ${currentUsername}/${currentUUID}`)
         const dateNow = Date.now()
 
         const url = getUrlFromUUID(currentUUID)
-        if (!url) {
-          throw new Error('No URL found for this UUID')
-        }
+        if (!url) throw new Error('No URL found for this UUID')
 
         const update = await fileSystem.readJSONOrDefault<M3UUpdateData>(
           getM3UUpdate(currentUUID),
-          {
-            items: {},
-            createdAt: dateNow,
-            updatedAt: dateNow
-          }
+          { items: {}, createdAt: dateNow, updatedAt: dateNow }
         )
 
-        console.log(`[Content Store] Fetching from: ${url}`)
+        // Fake ramp up to %35 while fetching (callback cannot be passed over IPC)
+        let fetchTimer: ReturnType<typeof setInterval> | null = null
+        let fakePercent = 0
 
-        const source = await http.fetchM3U(url)
-        console.log(`[Content Store] Fetched ${source.length} bytes`)
+        fetchTimer = setInterval(() => {
+          fakePercent = Math.min(fakePercent + 2, 34)
+          status({ status: 'loading', message: 'Fetching M3U...', percent: fakePercent })
+        }, 300)
 
+        const source = await http.fetchM3U(url).catch((e) => {
+          if (fetchTimer) { clearInterval(fetchTimer); fetchTimer = null }
+          throw e
+        })
+        if (fetchTimer) { clearInterval(fetchTimer); fetchTimer = null }
+
+        status({ status: 'loading', message: `Fetched ${(source.length / 1024).toFixed(0)} KB — parsing...`, percent: 40 })
+
+        const parseStart = Date.now()
         const m3uList = await parseM3U(source)
+        const parseMs = Date.now() - parseStart
+        status({ status: 'loading', message: `Parsed in ${parseMs}ms — building content...`, percent: 55 })
 
         if (m3uList.length) {
           await fileSystem.writeFile(getM3USource(currentUUID), source)
         }
 
         const isFirstFetch = Object.keys(update.items).length === 0
-        const AddIf = (group: GroupObject, item: any) => {
-          if (group.has(item)) return
-          const watchable = group.addGroup(item.group).Add(item)
-          watchable.AddedDate = new Date(dateNow)
-          update.items[item.url] = dateNow
-          // On first fetch, don't add to recent — only new items on subsequent updates
-          if (!isFirstFetch) get().recentGroup.AddWatchable(watchable)
-        }
-
         const { movieGroup, tvShowGroup, streamGroup } = get()
+        const BATCH = 10000
 
-        for (const item of m3uList) {
+        for (let i = 0; i < m3uList.length; i++) {
+          const item = m3uList[i]
+          const addItem = (group: GroupObject) => {
+            if (group.has(item)) return
+            const watchable = group.addGroup(item.group).Add(item)
+            watchable.AddedDate = new Date(dateNow)
+            update.items[item.url] = dateNow
+            if (!isFirstFetch) get().recentGroup.AddWatchable(watchable)
+          }
           switch (item.category) {
-            case 'Movie':
-              AddIf(movieGroup, item)
-              break
-            case 'Series':
-              AddIf(tvShowGroup, item)
-              break
-            case 'LiveStream':
-              AddIf(streamGroup, item)
-              break
+            case 'Movie': addItem(movieGroup); break
+            case 'Series': addItem(tvShowGroup); break
+            case 'LiveStream': addItem(streamGroup); break
+          }
+
+          if ((i + 1) % BATCH === 0) {
+            const buildPercent = Math.round(55 + ((i + 1) / m3uList.length) * 40)
+            status({ status: 'loading', message: `Building content... (${i + 1}/${m3uList.length})`, percent: buildPercent })
           }
         }
 
@@ -318,11 +341,14 @@ export const createContentStore = (deps: ContentStoreDependencies) => {
         await fileSystem.writeJSON(getM3UUpdate(currentUUID), update)
         await fileSystem.writeJSON(getM3UStats(currentUUID), stats)
 
-        console.log(`[Content Store] Content updated successfully`)
+        const totalMs = Date.now() - startedAt
+        status({ status: 'ready', message: `Updated in ${totalMs}ms`, percent: 100 })
         toast.success('Content updated successfully')
       } catch (error) {
         console.error('[Content Store] Failed to update content:', error)
-        toast.error(`Failed to update content: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        const msg = (error instanceof Error ? error.message : null) || 'Failed to update content.'
+        status({ status: 'error', message: msg, percent: null })
+        toast.error(msg)
       } finally {
         set({ isLoading: false })
       }

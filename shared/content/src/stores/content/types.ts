@@ -48,6 +48,16 @@ export interface M3UStats {
   totalWatchables: number
 }
 
+export type StatusKind = 'idle' | 'loading' | 'ready' | 'error'
+
+export interface StatusMessage {
+  status: StatusKind
+  message: string | null
+  percent: number | null
+}
+
+export const IDLE_STATUS: StatusMessage = { status: 'idle', message: null, percent: null }
+
 export type ContentState = FileSyncedState<UserData, 'userData'> & {
   items: WatchableObject[]
   recentItems: WatchableObject[]
@@ -59,6 +69,7 @@ export type ContentState = FileSyncedState<UserData, 'userData'> & {
   groupBy: GroupBy
   groupedContent: ContentGroupData[]
   isLoading: boolean
+  statusMessage: StatusMessage
   currentUsername: string | null
   currentUUID: string | null
   currentM3UUrl: string | null
@@ -107,9 +118,10 @@ export interface ContentStoreDependencies {
     writeJSON: <T>(path: string, data: T) => Promise<void>
     readJSONOrDefault: <T>(path: string, defaultValue: T) => Promise<T>
     ensureFile: <T>(path: string, defaultData: T) => Promise<T>
+    exists: (path: string) => Promise<boolean>
   }
   http: {
-    fetchM3U: (url: string, onProgress?: (progress: number) => void) => Promise<string>
+    fetchM3U: (url: string) => Promise<string>
   }
   parseM3U: (source: string) => Promise<M3UObject[]>
   toast: {
