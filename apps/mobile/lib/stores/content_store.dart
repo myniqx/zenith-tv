@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/index.dart';
 import '../p2p/models/profile_sync_payload.dart';
+import '../p2p/utils/merge_user_data.dart';
 import '../parser/m3u_parser_ffi.dart';
 import 'content_helpers.dart';
 import 'profile_store.dart';
@@ -22,10 +23,10 @@ class ContentStore extends ChangeNotifier {
   final ProfileStore profileStore;
 
   // --- Content groups (mirrors desktop) ---
-  GroupObject movieGroup   = GroupObject('Movies');
-  GroupObject tvShowGroup  = GroupObject('TV Shows');
-  GroupObject streamGroup  = GroupObject('Live Streams');
-  GroupObject recentGroup  = GroupObject('Recent');
+  GroupObject movieGroup = GroupObject('Movies');
+  GroupObject tvShowGroup = GroupObject('TV Shows');
+  GroupObject streamGroup = GroupObject('Live Streams');
+  GroupObject recentGroup = GroupObject('Recent');
   GroupObject favoriteGroup = GroupObject('Favorites');
   GroupObject watchedGroup = GroupObject('Watched');
 
@@ -49,6 +50,7 @@ class ContentStore extends ChangeNotifier {
   // --- Status ---
   bool isLoading = false;
   String? error;
+
   /// True only after a user-triggered setContent() completes loading.
   /// Shell uses this to auto-navigate to content browser once, then clears it.
   bool justLoaded = false;
@@ -88,6 +90,10 @@ class ContentStore extends ChangeNotifier {
     await load();
     // If no cached source exists, fetch from network automatically
     if (error != null) await update();
+    debugPrint(
+      '[ContentStore] setContent done — isReady=$isReady error=$error '
+      'movies=${movieGroup.totalCount} tv=${tvShowGroup.totalCount} streams=${streamGroup.totalCount}',
+    );
     if (isReady) {
       justLoaded = true;
       notifyListeners();
@@ -116,7 +122,8 @@ class ContentStore extends ChangeNotifier {
       );
 
       // Remove items older than 30 days from recent tracking
-      final thirtyDaysAgo = DateTime.now().millisecondsSinceEpoch - 30 * 24 * 60 * 60 * 1000;
+      final thirtyDaysAgo =
+          DateTime.now().millisecondsSinceEpoch - 30 * 24 * 60 * 60 * 1000;
       final keysToRemove = update.items.entries
           .where((e) => e.value < thirtyDaysAgo)
           .map((e) => e.key)
@@ -126,6 +133,7 @@ class ContentStore extends ChangeNotifier {
       }
 
       if (source == null) {
+        // TODO: source null ve url file: ile basliyorsa bu m3u kaynagini silmeyi teklif et kullaniciya
         if (!fromUpdate) {
           debugPrint('[ContentStore] No source for ${currentUUID!}');
           error = 'No source content found. Use refresh to download.';
@@ -139,8 +147,10 @@ class ContentStore extends ChangeNotifier {
       _buildGroups(m3uList, update);
 
       final stats = calculateStats();
-      debugPrint('[ContentStore] Stats: movies=${stats.movieCount} '
-          'tvShows=${stats.tvShowCount} live=${stats.liveStreamCount}');
+      debugPrint(
+        '[ContentStore] Stats: movies=${stats.movieCount} '
+        'tvShows=${stats.tvShowCount} live=${stats.liveStreamCount}',
+      );
       await _writeJson(getM3UStats(currentUUID!), stats.toJson());
 
       // Write update file if newly created or items were pruned
@@ -174,6 +184,13 @@ class ContentStore extends ChangeNotifier {
       return;
     }
 
+    if (url.startsWith('file:')) {
+      debugPrint(
+        '[ContentStore] Skipping update — source is a local file: $url',
+      );
+      return;
+    }
+
     isLoading = true;
     loadProgress = 0.0;
     error = null;
@@ -192,14 +209,18 @@ class ContentStore extends ChangeNotifier {
       _stopDownloadProgress();
       loadProgress = 0.70;
       notifyListeners();
-      debugPrint('[ContentStore] Fetched ${source.length} chars in ${sw.elapsedMilliseconds}ms');
+      debugPrint(
+        '[ContentStore] Fetched ${source.length} chars in ${sw.elapsedMilliseconds}ms',
+      );
 
       // Phase 2: Rust parse (0.70 → 0.80)
       sw.reset();
       final m3uList = await parseM3UAsync(source);
       loadProgress = 0.80;
       notifyListeners();
-      debugPrint('[ContentStore] Parsed ${m3uList.length} items in ${sw.elapsedMilliseconds}ms (Rust FFI)');
+      debugPrint(
+        '[ContentStore] Parsed ${m3uList.length} items in ${sw.elapsedMilliseconds}ms (Rust FFI)',
+      );
 
       if (m3uList.isEmpty) {
         error = 'Fetched empty playlist';
@@ -346,7 +367,10 @@ class ContentStore extends ChangeNotifier {
   }
 
   void saveWatchProgress(
-      WatchableObject watchable, double position, double duration) {
+    WatchableObject watchable,
+    double position,
+    double duration,
+  ) {
     if (watchable.category == M3UCategory.liveStream) return;
 
     final progress = secondsToProgress(position, duration);
@@ -373,8 +397,11 @@ class ContentStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void saveTrackSelection(WatchableObject watchable,
-      {int? audioTrack, int? subtitleTrack}) {
+  void saveTrackSelection(
+    WatchableObject watchable, {
+    int? audioTrack,
+    int? subtitleTrack,
+  }) {
     final now = DateTime.now().millisecondsSinceEpoch;
     watchable.userData = watchable.userData.copyWith(
       tracks: TrackSelectionData(
@@ -428,32 +455,41 @@ class ContentStore extends ChangeNotifier {
         g.groups.fold(0, (sum, sub) => sum + countGroups(sub));
 
     return M3UStats(
-      groupCount: countGroups(movieGroup) +
+      groupCount:
+          countGroups(movieGroup) +
           countGroups(tvShowGroup) +
           countGroups(streamGroup),
       tvShowCount: tvShowGroup.tvShowCount,
       tvShowEpisodeCount: tvShowGroup.tvShowEpisodeCount,
       liveStreamCount: streamGroup.totalCount,
       movieCount: movieGroup.totalCount,
-      totalWatchables: movieGroup.totalCount +
+      totalWatchables:
+          movieGroup.totalCount +
           tvShowGroup.tvShowEpisodeCount +
           streamGroup.totalCount,
     );
   }
 
-  /// Resolves an M3U item by its stream URL.
+  /// Resolves a watchable by its stream URL.
   /// Used by the server-side mirror store to set currentItem from
   /// mediaInfo.url in incoming client_event messages.
-  /// Searches per category group to avoid returning duplicates if the
-  /// same URL appears in multiple groups (Movie → Series → LiveStream order).
-  M3UItem? findByUrl(String url) {
-    for (final category in ['Movie', 'Series', 'LiveStream']) {
-      for (final group in _groups.where((g) => g.category == category)) {
-        final match = group.items.where((i) => i.url == url).firstOrNull;
-        if (match != null) return match;
-      }
-    }
-    return null;
+  /// Searches Movie → Series → LiveStream order.
+  WatchableObject? findByUrl(String url) {
+    return movieGroup.findByUrl(url) ??
+        tvShowGroup.findByUrl(url) ??
+        streamGroup.findByUrl(url);
+  }
+
+  /// Merges remote userData into local (timestamp-based) and persists.
+  /// Returns the merged userData as a JSON map to send back.
+  Future<Map<String, dynamic>> mergeAndSaveUserData(
+    Map<String, dynamic> remoteJson,
+  ) async {
+    final merged = mergeUserData(_userData.toJson(), remoteJson);
+    _userData = UserData.fromJson(merged);
+    await _saveUserData();
+    notifyListeners();
+    return merged;
   }
 
   // ---------------------------------------------------------------------------
@@ -476,7 +512,9 @@ class ContentStore extends ChangeNotifier {
   /// Payload sent to newly connected P2P client.
   /// Mirrors: desktop getWellComePayload()
   ProfileSyncPayload? getWelcomePayload() {
-    if (currentUsername == null || currentUUID == null || currentM3UUrl == null) {
+    if (currentUsername == null ||
+        currentUUID == null ||
+        currentM3UUrl == null) {
       return null;
     }
     return ProfileSyncPayload(
@@ -519,8 +557,10 @@ class ContentStore extends ChangeNotifier {
       final userItem = _userData.watchables[item.url];
       if (userItem != null) {
         watchable.userData = userItem;
-        if (userItem.favorite?.value == true) favoriteGroup.addWatchable(watchable);
-        if (userItem.watchProgress?.watched != null) watchedGroup.addWatchable(watchable);
+        if (userItem.favorite?.value == true)
+          favoriteGroup.addWatchable(watchable);
+        if (userItem.watchProgress?.watched != null)
+          watchedGroup.addWatchable(watchable);
       }
     }
 
@@ -555,7 +595,9 @@ class ContentStore extends ChangeNotifier {
     List<WatchableObject> getWatchables() {
       if (isSearching) {
         return filterBySearch(
-            collectWatchablesRecursive(currentGroup!), searchQuery);
+          collectWatchablesRecursive(currentGroup!),
+          searchQuery,
+        );
       }
       return [...currentGroup!.watchables];
     }
@@ -565,19 +607,23 @@ class ContentStore extends ChangeNotifier {
       case GroupBy.group:
         final groups = getGroups();
         if (groups.isNotEmpty) {
-          result.add(ContentGroupData(
-            title: 'Groups',
-            items: sortItems(groups, sortBy, sortOrder),
-            isGroups: true,
-          ));
+          result.add(
+            ContentGroupData(
+              title: 'Groups',
+              items: sortItems(groups, sortBy, sortOrder),
+              isGroups: true,
+            ),
+          );
         }
         final watchables = getWatchables();
         if (watchables.isNotEmpty) {
-          result.add(ContentGroupData(
-            title: currentGroup!.name,
-            items: sortItems(watchables, sortBy, sortOrder),
-            isGroups: false,
-          ));
+          result.add(
+            ContentGroupData(
+              title: currentGroup!.name,
+              items: sortItems(watchables, sortBy, sortOrder),
+              isGroups: false,
+            ),
+          );
         }
         break;
 
@@ -596,11 +642,13 @@ class ContentStore extends ChangeNotifier {
         for (final year in years) {
           final items = byYear[year]!;
           if (items.isNotEmpty) {
-            result.add(ContentGroupData(
-              title: year,
-              items: sortItems(items, sortBy, sortOrder),
-              isGroups: false,
-            ));
+            result.add(
+              ContentGroupData(
+                title: year,
+                items: sortItems(items, sortBy, sortOrder),
+                isGroups: false,
+              ),
+            );
           }
         }
         break;
@@ -620,11 +668,13 @@ class ContentStore extends ChangeNotifier {
         for (final letter in letters) {
           final items = byLetter[letter]!;
           if (items.isNotEmpty) {
-            result.add(ContentGroupData(
-              title: letter,
-              items: sortItems(items, sortBy, sortOrder),
-              isGroups: false,
-            ));
+            result.add(
+              ContentGroupData(
+                title: letter,
+                items: sortItems(items, sortBy, sortOrder),
+                isGroups: false,
+              ),
+            );
           }
         }
         break;
@@ -641,7 +691,9 @@ class ContentStore extends ChangeNotifier {
   // until _stopDownloadProgress() is called.
   void _startDownloadProgress() {
     _downloadProgressTimer?.cancel();
-    _downloadProgressTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+    _downloadProgressTimer = Timer.periodic(const Duration(milliseconds: 300), (
+      _,
+    ) {
       if (loadProgress < 0.60) {
         loadProgress = (loadProgress + 0.02).clamp(0.0, 0.60);
         notifyListeners();
@@ -655,20 +707,20 @@ class ContentStore extends ChangeNotifier {
   }
 
   void _reset() {
-    movieGroup    = GroupObject('Movies');
-    tvShowGroup   = GroupObject('TV Shows');
-    streamGroup   = GroupObject('Live Streams');
-    recentGroup   = GroupObject('Recent');
+    movieGroup = GroupObject('Movies');
+    tvShowGroup = GroupObject('TV Shows');
+    streamGroup = GroupObject('Live Streams');
+    recentGroup = GroupObject('Recent');
     favoriteGroup = GroupObject('Favorites');
-    watchedGroup  = GroupObject('Watched');
-    currentGroup  = null;
+    watchedGroup = GroupObject('Watched');
+    currentGroup = null;
     groupedContent = [];
-    searchQuery   = '';
+    searchQuery = '';
     currentUsername = null;
-    currentUUID   = null;
+    currentUUID = null;
     currentM3UUrl = null;
-    _userData     = UserData.empty;
-    error         = null;
+    _userData = UserData.empty;
+    error = null;
   }
 
   void reset() {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import '../p2p/models/client_event.dart' as p2p;
@@ -26,6 +28,7 @@ class MediaPlayerStore extends ChangeNotifier {
   double _time = 0;
   double _duration = 0;
   double _position = 0;
+  // ignore: prefer_final_fields
   double _buffering = 0;
   double _volume = 100;
   bool _isMuted = false;
@@ -38,6 +41,8 @@ class MediaPlayerStore extends ChangeNotifier {
   List<p2p.VlcTrack> _subtitleTracks = [];
   int _currentAudioTrack = -1;
   int _currentSubtitleTrack = -1;
+
+  final List<StreamSubscription<dynamic>> _subs = [];
 
   // --- Getters ---
   bool get isInitialized => _isInitialized;
@@ -64,81 +69,70 @@ class MediaPlayerStore extends ChangeNotifier {
   Future<void> init() async {
     if (_isInitialized) return;
 
-    _player.stream.playing.listen((playing) {
-      _playerState = playing ? PlayerState.playing : PlayerState.paused;
-      notifyListeners();
-    });
-
-    _player.stream.buffering.listen((buffering) {
-      if (buffering) {
-        _playerState = PlayerState.buffering;
+    _subs.addAll([
+      _player.stream.playing.listen((playing) {
+        _playerState = playing ? PlayerState.playing : PlayerState.paused;
         notifyListeners();
-      }
-    });
-
-    _player.stream.position.listen((pos) {
-      _time = pos.inMilliseconds / 1000.0;
-      final dur = _duration;
-      _position = dur > 0 ? (_time / dur).clamp(0.0, 1.0) : 0.0;
-      notifyListeners();
-    });
-
-    _player.stream.duration.listen((dur) {
-      _duration = dur.inMilliseconds / 1000.0;
-      _isSeekable = _duration > 0;
-      notifyListeners();
-    });
-
-    _player.stream.volume.listen((vol) {
-      _volume = vol;
-      notifyListeners();
-    });
-
-    _player.stream.rate.listen((r) {
-      _rate = r;
-      notifyListeners();
-    });
-
-    _player.stream.tracks.listen((tracks) {
-      _audioTracks = tracks.audio
-          .where((t) => t.id != null)
-          .map((t) => p2p.VlcTrack(
-                id: int.tryParse(t.id ?? '') ?? -1,
-                name: t.title ?? t.language ?? 'Track ${t.id}',
-              ))
-          .toList();
-
-      _subtitleTracks = tracks.subtitle
-          .where((t) => t.id != null)
-          .map((t) => p2p.VlcTrack(
-                id: int.tryParse(t.id ?? '') ?? -1,
-                name: t.title ?? t.language ?? 'Sub ${t.id}',
-              ))
-          .toList();
-
-      notifyListeners();
-    });
-
-    _player.stream.track.listen((track) {
-      _currentAudioTrack = int.tryParse(track.audio?.id ?? '') ?? -1;
-      _currentSubtitleTrack = int.tryParse(track.subtitle?.id ?? '') ?? -1;
-      notifyListeners();
-    });
-
-    _player.stream.completed.listen((completed) {
-      if (completed) {
-        _playerState = PlayerState.ended;
+      }),
+      _player.stream.buffering.listen((buffering) {
+        if (buffering) {
+          _playerState = PlayerState.buffering;
+          notifyListeners();
+        }
+      }),
+      _player.stream.position.listen((pos) {
+        _time = pos.inMilliseconds / 1000.0;
+        final dur = _duration;
+        _position = dur > 0 ? (_time / dur).clamp(0.0, 1.0) : 0.0;
         notifyListeners();
-      }
-    });
-
-    _player.stream.error.listen((err) {
-      if (err.isNotEmpty) {
-        _error = err;
-        _playerState = PlayerState.error;
+      }),
+      _player.stream.duration.listen((dur) {
+        _duration = dur.inMilliseconds / 1000.0;
+        _isSeekable = _duration > 0;
         notifyListeners();
-      }
-    });
+      }),
+      _player.stream.volume.listen((vol) {
+        _volume = vol;
+        notifyListeners();
+      }),
+      _player.stream.rate.listen((r) {
+        _rate = r;
+        notifyListeners();
+      }),
+      _player.stream.tracks.listen((tracks) {
+        _audioTracks = tracks.audio
+            .map((t) => p2p.VlcTrack(
+                  id: int.tryParse(t.id) ?? -1,
+                  name: t.title ?? t.language ?? 'Track ${t.id}',
+                ))
+            .toList();
+        _subtitleTracks = tracks.subtitle
+            .map((t) => p2p.VlcTrack(
+                  id: int.tryParse(t.id) ?? -1,
+                  name: t.title ?? t.language ?? 'Sub ${t.id}',
+                ))
+            .toList();
+        notifyListeners();
+      }),
+      _player.stream.track.listen((track) {
+        _currentAudioTrack = int.tryParse(track.audio.id) ?? -1;
+        _currentSubtitleTrack = int.tryParse(track.subtitle.id) ?? -1;
+        notifyListeners();
+      }),
+      _player.stream.completed.listen((completed) {
+        if (completed) {
+          _playerState = PlayerState.ended;
+          notifyListeners();
+        }
+      }),
+      _player.stream.error.listen((err) {
+        if (err.isNotEmpty) {
+          _error = err;
+          _playerState = PlayerState.error;
+          notifyListeners();
+        }
+      }),
+    ]);
 
     await _player.setVolume(_volume);
 
@@ -207,7 +201,7 @@ class MediaPlayerStore extends ChangeNotifier {
 
     if (track != null) {
       final audioTrack = _player.state.tracks.audio
-          .where((t) => int.tryParse(t.id ?? '') == track)
+          .where((t) => int.tryParse(t.id) == track)
           .firstOrNull;
       if (audioTrack != null) {
         await _player.setAudioTrack(audioTrack);
@@ -224,7 +218,7 @@ class MediaPlayerStore extends ChangeNotifier {
     }
 
     final subTrack = _player.state.tracks.subtitle
-        .where((t) => int.tryParse(t.id ?? '') == track)
+        .where((t) => int.tryParse(t.id) == track)
         .firstOrNull;
     if (subTrack != null) {
       await _player.setSubtitleTrack(subTrack);
@@ -268,6 +262,10 @@ class MediaPlayerStore extends ChangeNotifier {
 
   @override
   Future<void> dispose() async {
+    for (final sub in _subs) {
+      await sub.cancel();
+    }
+    _subs.clear();
     await _player.dispose();
     super.dispose();
   }

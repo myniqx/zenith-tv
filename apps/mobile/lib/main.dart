@@ -11,7 +11,6 @@ import 'stores/content_store.dart';
 import 'stores/media_player_store.dart';
 import 'stores/remote_player_store.dart';
 import 'stores/universal_player_store.dart';
-import 'p2p/models/client_event.dart';
 import 'p2p/models/index.dart';
 import 'ui/shell/app_shell.dart';
 
@@ -162,9 +161,7 @@ class _AppInitializerState extends State<_AppInitializer> {
 
       // Server mode: send welcome profile_sync to newly connected client
       onClientConnected: (_) {
-        final welcome = contentStore.getWelcomePayload();
-        if (welcome == null) return null;
-        return ProfileSyncPayload.fromJson(welcome);
+        return contentStore.getWelcomePayload();
       },
     );
 
@@ -199,8 +196,8 @@ class _AppInitializerState extends State<_AppInitializer> {
       if (profileStore.getProfile(p.username) == null) {
         profileStore.createProfile(p.username);
       }
-      profileStore.addM3UToProfile(p.username, p.url);
-      await contentStore.setContent(p.username, p.uuid);
+      final localUuid = profileStore.addM3UToProfile(p.username, p.url);
+      await contentStore.setContent(p.username, localUuid);
 
       if (!m3uExists) {
         reply(P2PMessage(
