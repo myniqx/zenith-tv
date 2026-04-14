@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useProfilesStore } from '@/stores/profiles'
 import { FocusScope } from '@/contexts/FocusScope'
 import { ProfileList } from './ProfileList'
@@ -9,7 +9,11 @@ import { ConfirmDialog } from './ConfirmDialog'
 import type { View, DeleteItem } from './types'
 import { useContentStore } from '@/stores/content'
 
-export function ProfileManager() {
+interface ProfileManagerProps {
+  onDone?: () => void
+}
+
+export function ProfileManager({ onDone }: ProfileManagerProps) {
   const {
     profiles,
     createProfile,
@@ -21,12 +25,15 @@ export function ProfileManager() {
     getCurrentUsername,
   } = useProfilesStore()
 
-  const { currentUUID, update } = useContentStore()
+  const { currentUUID, update, statusMessage } = useContentStore()
 
   const [view, setView] = useState<View>('main')
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null)
   const [deleteItem, setDeleteItem] = useState<DeleteItem | null>(null)
   const [syncingUUID, setSyncingUUID] = useState<string | null>(null)
+
+  const pendingDone = useRef(false)
+  const isLocked = statusMessage.status === 'loading' && statusMessage.percent !== null
 
   const currentUsername = getCurrentUsername()
 
@@ -40,17 +47,23 @@ export function ProfileManager() {
     }
   }, [sortedProfiles, currentUsername, selectedProfile])
 
+  useEffect(() => {
+    if (pendingDone.current && statusMessage.status === 'ready') {
+      pendingDone.current = false
+      onDone?.()
+    }
+    if (pendingDone.current && statusMessage.status === 'error') {
+      pendingDone.current = false
+    }
+  }, [statusMessage.status, onDone])
+
   const handleSyncM3U = async (uuid: string) => {
     setSyncingUUID(uuid)
     try {
-      if (currentUUID === uuid) {
-        update()
-      } else {
-        if (selectedProfile) {
-          await selectProfile(selectedProfile, uuid)
-          await update()
-        }
+      if (currentUUID !== uuid && selectedProfile) {
+        await selectProfile(selectedProfile, uuid)
       }
+      await update()
     } catch (error) {
       console.error('Failed to sync M3U:', error)
     } finally {
@@ -58,12 +71,14 @@ export function ProfileManager() {
     }
   }
 
+  const handleSelectM3U = async (username: string, uuid: string) => {
+    if (currentUUID === uuid && getCurrentUsername() === username) return
+    pendingDone.current = true
+    await selectProfile(username, uuid)
+  }
+
   const handleDeleteProfile = (username: string) => {
-    setDeleteItem({
-      type: 'profile',
-      username,
-      displayName: username
-    })
+    setDeleteItem({ type: 'profile', username, displayName: username })
     setView('confirm-delete')
   }
 
@@ -74,20 +89,14 @@ export function ProfileManager() {
     if (url) {
       try {
         const urlObj = new URL(url)
-        const pathname = urlObj.pathname
-        const filename = pathname.split('/').pop()
+        const filename = urlObj.pathname.split('/').pop()
         displayName = filename || urlObj.hostname
       } catch {
         displayName = url.slice(0, 30) + (url.length > 30 ? '...' : '')
       }
     }
 
-    setDeleteItem({
-      type: 'm3u',
-      username,
-      uuid,
-      displayName
-    })
+    setDeleteItem({ type: 'm3u', username, uuid, displayName })
     setView('confirm-delete')
   }
 
@@ -110,10 +119,13 @@ export function ProfileManager() {
 
   const handleAddProfile = async (username: string, url: string) => {
     try {
-      await createProfile(username)
-      await addM3UToProfile(username, url)
+      createProfile(username)
+      const uuid = addM3UToProfile(username, url)
       setView('main')
       setSelectedProfile(username)
+      pendingDone.current = true
+      await selectProfile(username, uuid)
+      update()
     } catch (error) {
       console.error('Failed to add profile:', error)
     }
@@ -123,8 +135,11 @@ export function ProfileManager() {
     if (!selectedProfile) return
 
     try {
-      await addM3UToProfile(selectedProfile, url)
+      const uuid = addM3UToProfile(selectedProfile, url)
       setView('main')
+      pendingDone.current = true
+      await selectProfile(selectedProfile, uuid)
+      update()
     } catch (error) {
       console.error('Failed to add M3U:', error)
     }
@@ -132,8 +147,8 @@ export function ProfileManager() {
 
   if (view === 'main') {
     return (
-      <div className="h-full bg-gray-900 text-white flex flex-col">
-        <div className="flex-1 flex overflow-hidden">
+      <div className="h-full bg-background flex flex-col">
+        <div className={`flex-1 flex overflow-hidden${isLocked ? ' pointer-events-none select-none opacity-60' : ''}`}>
           <ProfileList
             profiles={sortedProfiles}
             selectedProfile={selectedProfile}
@@ -146,13 +161,35 @@ export function ProfileManager() {
           <M3USourceList
             selectedProfile={selectedProfile}
             syncingUUID={syncingUUID}
+            onSelectM3U={handleSelectM3U}
             onSyncM3U={handleSyncM3U}
             onDeleteM3U={handleDeleteM3U}
             onAddM3U={() => setView('add-m3u')}
           />
         </div>
 
-        <div className="bg-gray-800 px-8 py-4 text-gray-400 text-sm flex gap-8">
+        {/* Status Bar */}
+        <div className={`px-8 pt-2 ${statusMessage.status === 'idle' ? 'invisible' : 'visible'}`}>
+          <span className={`text-xs ${
+            statusMessage.status === 'error' ? 'text-destructive' :
+            statusMessage.status === 'ready' ? 'text-green-400' :
+            'text-muted-foreground'
+          }`}>
+            {statusMessage.message ?? '\u00A0'}
+          </span>
+          <div className="mt-1 h-[2px] w-full overflow-hidden rounded-full bg-border">
+            <div
+              className={`h-full transition-all duration-300 ${
+                statusMessage.status === 'loading' ? 'bg-primary' :
+                statusMessage.status === 'ready' ? 'bg-green-500' :
+                'bg-transparent'
+              }`}
+              style={{ width: statusMessage.percent !== null ? `${statusMessage.percent}%` : '0%' }}
+            />
+          </div>
+        </div>
+
+        <div className="bg-card border-t border-border px-8 py-4 text-muted-foreground text-sm flex gap-8">
           <span>↑ ↓ ← → : Gezin</span>
           <span>Enter : Seç</span>
           <span>ESC : Çık</span>
@@ -210,8 +247,4 @@ export function ProfileManager() {
   }
 
   return null
-}
-
-async function syncM3U(uuid: string): Promise<void> {
-
 }

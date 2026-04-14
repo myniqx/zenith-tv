@@ -27,35 +27,27 @@ export function M3UStatsPlaceholder({ uuid }: M3UStatsPlaceholderProps) {
 
   if (!stats) {
     return (
-      <div className="flex items-center gap-6 text-sm text-gray-400">
-        <span className="flex items-center gap-2">
-          <Film className="w-4 h-4" />
-          --- filmler
-        </span>
-        <span className="flex items-center gap-2">
-          <Tv className="w-4 h-4" />
-          --- diziler
-        </span>
-        <span className="flex items-center gap-2">
-          <Radio className="w-4 h-4" />
-          --- canlı
+      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <Film className="w-3.5 h-3.5" />
+          Henüz senkronize edilmedi
         </span>
       </div>
     )
   }
 
   return (
-    <div className="flex items-center gap-6 text-sm text-gray-400">
-      <span className="flex items-center gap-2">
-        <Film className="w-4 h-4" />
-        {stats.movieCount} filmler
+    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1.5">
+        <Film className="w-3.5 h-3.5" />
+        {stats.movieCount} film
       </span>
-      <span className="flex items-center gap-2">
-        <Tv className="w-4 h-4" />
-        {stats.tvShowCount} diziler
+      <span className="flex items-center gap-1.5">
+        <Tv className="w-3.5 h-3.5" />
+        {stats.tvShowCount} dizi
       </span>
-      <span className="flex items-center gap-2">
-        <Radio className="w-4 h-4" />
+      <span className="flex items-center gap-1.5">
+        <Radio className="w-3.5 h-3.5" />
         {stats.liveStreamCount} canlı
       </span>
     </div>

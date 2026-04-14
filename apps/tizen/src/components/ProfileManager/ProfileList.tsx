@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib/cn'
-import { FocusButton } from '@/components/Navigation'
-import { Card, CardContent } from '@zenith-tv/ui/card'
+import { FocusCard, FocusButton } from '@/components/Navigation'
+import { CardContent } from '@zenith-tv/ui/card'
 import { Badge } from '@zenith-tv/ui/badge'
 import type { Profile } from '@/stores/profiles'
 
@@ -10,7 +9,7 @@ interface ProfileListProps {
   profiles: Profile[]
   selectedProfile: string | null
   currentUsername: string | null
-  onSelectProfile: (username: string | null) => void
+  onSelectProfile: (username: string) => void
   onDeleteProfile: (username: string) => void
   onAddProfile: () => void
 }
@@ -23,99 +22,74 @@ export function ProfileList({
   onDeleteProfile,
   onAddProfile,
 }: ProfileListProps) {
-  const [selectedIndex, setSelectedIndex] = useState(0)
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.keyCode === 38) {
-        e.preventDefault()
-        e.stopPropagation()
-        setSelectedIndex(Math.max(0, selectedIndex - 1))
-      }
-      if (e.keyCode === 40) {
-        e.preventDefault()
-        e.stopPropagation()
-        setSelectedIndex(Math.min(profiles.length, selectedIndex + 1))
-      }
-      if (e.keyCode === 13) {
-        e.preventDefault()
-        e.stopPropagation()
-        if (selectedIndex < profiles.length) {
-          onSelectProfile(profiles[selectedIndex].username)
-        } else {
-          onAddProfile()
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedIndex, profiles, onSelectProfile, onAddProfile])
-
-  useEffect(() => {
-    if (selectedIndex < profiles.length) {
-      onSelectProfile(profiles[selectedIndex].username)
-    } else {
-      onSelectProfile(null)
-    }
-  }, [selectedIndex, profiles, onSelectProfile])
-
   return (
-    <div className="w-1/3 border-r border-gray-800 p-6 flex flex-col">
-      <h2 className="text-xl font-semibold mb-4 text-gray-400">Profiller</h2>
+    <div className="w-1/3 border-r border-border p-6 flex flex-col gap-2">
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        Profiller
+      </h2>
 
-      <div className="flex-1 overflow-y-auto space-y-3">
-        {profiles.map((profile, index) => (
-          <Card
-            key={profile.username}
-            className={cn(
-              'bg-gray-800 transition-all',
-              selectedIndex === index && 'bg-red-600 scale-105'
-            )}
-          >
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2 flex-1">
-                  <span className="text-xl font-semibold">{profile.username}</span>
-                  {currentUsername === profile.username && (
-                    <Badge variant="secondary" className="text-xs px-2 py-0.5">
-                      Active
-                    </Badge>
-                  )}
-                </div>
-                {selectedIndex === index && (
+      <div className="flex-1 overflow-y-auto space-y-2">
+        {profiles.map((profile) => {
+          const isSelected = selectedProfile === profile.username
+          const isActive = currentUsername === profile.username
+
+          return (
+            <FocusCard
+              key={profile.username}
+              focusId={`profile-${profile.username}`}
+              onEnter={() => onSelectProfile(profile.username)}
+              onClick={() => onSelectProfile(profile.username)}
+              className={cn(
+                isActive && 'border-l-primary/40',
+              )}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {isActive && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                    )}
+                    <span className={cn(
+                      'font-medium truncate text-base',
+                      isActive ? 'text-foreground' : 'text-foreground/80'
+                    )}>
+                      {profile.username}
+                    </span>
+                    {isActive && (
+                      <Badge variant="secondary" className="text-xs shrink-0">Aktif</Badge>
+                    )}
+                  </div>
                   <FocusButton
                     focusId={`delete-profile-${profile.username}`}
-                    onClick={() => onDeleteProfile(profile.username)}
+                    onClick={(e) => { e.stopPropagation(); onDeleteProfile(profile.username) }}
                     variant="ghost"
                     size="icon"
-                    className="p-2 hover:bg-red-700 rounded"
+                    focusStyle="highlight"
+                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                     title="Profili sil"
                   >
-                    <Trash2 className="w-5 h-5" />
+                    <Trash2 className="w-4 h-4" />
                   </FocusButton>
-                )}
-              </div>
-              <p className="text-gray-400">
-                {profile.m3uRefs.length} kaynak
-              </p>
-            </CardContent>
-          </Card>
-        ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5 ml-3.5">
+                  {profile.m3uRefs.length} kaynak
+                </p>
+              </CardContent>
+            </FocusCard>
+          )
+        })}
 
-        <div
+        <FocusCard
+          focusId="add-profile"
+          onEnter={onAddProfile}
           onClick={onAddProfile}
-          className={cn(
-            'p-6 rounded-lg border-2 border-dashed transition-all cursor-pointer',
-            'flex items-center justify-center gap-3',
-            selectedIndex === profiles.length
-              ? 'border-red-600 bg-red-600/20 scale-105'
-              : 'border-gray-700 hover:border-gray-600'
-          )}
+          className="border-dashed border-2 bg-transparent hover:bg-muted/30"
         >
-          <Plus className="w-6 h-6" />
-          <span className="text-lg">Yeni Profil</span>
-        </div>
+          <CardContent className="p-4 flex items-center justify-center gap-2 text-muted-foreground">
+            <Plus className="w-4 h-4" />
+            <span className="text-sm">Yeni Profil</span>
+          </CardContent>
+        </FocusCard>
       </div>
     </div>
   )

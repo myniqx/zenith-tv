@@ -8,7 +8,7 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   return (
     <main
-      className="bg-gray-900 overflow-auto"
+      className="bg-background overflow-auto"
       style={{ minHeight: `calc(100vh - ${HEADER_HEIGHT}px)` }}
     >
       {children}

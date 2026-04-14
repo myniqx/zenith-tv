@@ -9,10 +9,11 @@ export interface FocusButtonProps extends Omit<ButtonProps, 'ref'> {
   scopeId?: string
   onEnter?: () => void
   disabled?: boolean
+  focusStyle?: 'ring' | 'highlight'
 }
 
 export const FocusButton = forwardRef<HTMLButtonElement, FocusButtonProps>(
-  ({ focusId, scopeId: scopeIdProp, onEnter, disabled, className, onClick, children, ...props }, forwardedRef) => {
+  ({ focusId, scopeId: scopeIdProp, onEnter, disabled, focusStyle = 'ring', className, onClick, children, ...props }, forwardedRef) => {
     const scopeContext = useFocusScopeContext()
     const scopeId = scopeIdProp || scopeContext?.scopeId
 
@@ -26,7 +27,6 @@ export const FocusButton = forwardRef<HTMLButtonElement, FocusButtonProps>(
     return (
       <Button
         ref={(node) => {
-          // Merge refs
           if (typeof focusRef === 'function') focusRef(node)
           else if (focusRef) focusRef.current = node
 
@@ -37,13 +37,12 @@ export const FocusButton = forwardRef<HTMLButtonElement, FocusButtonProps>(
         onClick={onClick}
         disabled={disabled}
         className={cn(
-          // Base transition
-          'transition-all duration-200',
-          // Focus styles - TV-optimized ring
-          isFocused && [
-            'ring-4 ring-white ring-offset-4 ring-offset-gray-900',
-            'scale-105',
-            'shadow-lg shadow-white/20',
+          'transition-all duration-150',
+          isFocused && focusStyle === 'ring' && [
+            'ring-2 ring-primary/70 ring-offset-1 ring-offset-background',
+          ],
+          isFocused && focusStyle === 'highlight' && [
+            'bg-muted text-foreground',
           ],
           className
         )}

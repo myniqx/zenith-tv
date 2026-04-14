@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react'
 import { Plus, RefreshCw, X, User } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib/cn'
-import { FocusButton } from '@/components/Navigation'
-import { Card, CardContent } from '@zenith-tv/ui/card'
+import { FocusCard, FocusButton } from '@/components/Navigation'
+import { CardContent } from '@zenith-tv/ui/card'
 import { useProfilesStore } from '@/stores/profiles'
+import { useContentStore } from '@/stores/content'
 import { M3UStatsPlaceholder } from './M3UStatsPlaceholder'
 
 interface M3USourceListProps {
   selectedProfile: string | null
   syncingUUID: string | null
+  onSelectM3U: (username: string, uuid: string) => void
   onSyncM3U: (uuid: string) => void
   onDeleteM3U: (username: string, uuid: string) => void
   onAddM3U: () => void
@@ -17,53 +18,28 @@ interface M3USourceListProps {
 export function M3USourceList({
   selectedProfile,
   syncingUUID,
+  onSelectM3U,
   onSyncM3U,
   onDeleteM3U,
   onAddM3U,
 }: M3USourceListProps) {
   const { profiles, getUrlFromUUID } = useProfilesStore()
+  const { currentUUID } = useContentStore()
+  const currentUsername = useProfilesStore(s => s.getCurrentUsername())
+
   const profile = profiles.find(p => p.username === selectedProfile)
-  const [selectedIndex, setSelectedIndex] = useState(0)
-
-  useEffect(() => {
-    setSelectedIndex(0)
-  }, [selectedProfile])
-
-  useEffect(() => {
-    if (!profile) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.keyCode === 38) {
-        e.preventDefault()
-        e.stopPropagation()
-        setSelectedIndex(Math.max(0, selectedIndex - 1))
-      }
-      if (e.keyCode === 40) {
-        e.preventDefault()
-        e.stopPropagation()
-        setSelectedIndex(Math.min(profile.m3uRefs.length, selectedIndex + 1))
-      }
-      if (e.keyCode === 13) {
-        e.preventDefault()
-        e.stopPropagation()
-        if (selectedIndex === profile.m3uRefs.length) {
-          onAddM3U()
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedIndex, profile, onAddM3U])
 
   const getM3UDisplayName = (uuid: string): string => {
     const url = getUrlFromUUID(uuid)
     if (!url) return uuid.slice(0, 8)
 
+    if (url.startsWith('file://')) {
+      return url.replace('file://', '').split(/[/\\]/).pop() || uuid.slice(0, 8)
+    }
+
     try {
       const urlObj = new URL(url)
-      const pathname = urlObj.pathname
-      const filename = pathname.split('/').pop()
+      const filename = urlObj.pathname.split('/').pop()
       return filename || urlObj.hostname
     } catch {
       return url.slice(0, 30) + (url.length > 30 ? '...' : '')
@@ -72,89 +48,98 @@ export function M3USourceList({
 
   if (!profile) {
     return (
-      <div className="flex-1 p-6 flex flex-col">
-        <div className="flex-1 flex items-center justify-center text-gray-500">
-          <div className="text-center">
-            <User className="w-24 h-24 mx-auto mb-4 opacity-30" />
-            <p className="text-xl">Profil seçin veya yeni profil oluşturun</p>
-          </div>
+      <div className="flex-1 p-8 flex items-center justify-center text-muted-foreground">
+        <div className="text-center">
+          <User className="w-16 h-16 mx-auto mb-4 opacity-20" />
+          <p className="text-lg">Profil seçin veya yeni profil oluşturun</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex-1 p-6 flex flex-col">
+    <div className="flex-1 p-6 flex flex-col overflow-hidden">
       <div className="mb-4">
-        <h2 className="text-2xl font-semibold">{profile.username}</h2>
-        <p className="text-gray-400">
+        <h2 className="text-xl font-semibold text-foreground">{profile.username}</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
           {profile.m3uRefs.length} M3U kaynağı
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-3">
-        {profile.m3uRefs.map((uuid, index) => (
-          <Card
-            key={uuid}
-            className={cn(
-              'bg-gray-800 transition-all',
-              selectedIndex === index && 'bg-red-600 scale-105'
-            )}
-          >
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-3">
-                <h3 className="text-lg font-semibold flex-1">
-                  {getM3UDisplayName(uuid)}
-                </h3>
+      <div className="flex-1 overflow-y-auto space-y-2">
+        {profile.m3uRefs.map((uuid) => {
+          const isActive = currentUUID === uuid && currentUsername === selectedProfile
 
-                {selectedIndex === index && (
-                  <div className="flex gap-2">
+          return (
+            <FocusCard
+              key={uuid}
+              focusId={`m3u-${uuid}`}
+              onEnter={() => { if (!isActive) onSelectM3U(profile.username, uuid) }}
+              onClick={() => { if (!isActive) onSelectM3U(profile.username, uuid) }}
+              className={cn(
+                isActive
+                  ? 'border-l-primary bg-primary/5 cursor-default'
+                  : 'cursor-pointer'
+              )}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {isActive && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                    )}
+                    <span className={cn(
+                      'font-medium truncate text-base',
+                      isActive ? 'text-foreground' : 'text-foreground/80'
+                    )}>
+                      {getM3UDisplayName(uuid)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
                     <FocusButton
                       focusId={`sync-m3u-${uuid}`}
-                      onClick={() => onSyncM3U(uuid)}
+                      onClick={(e) => { e.stopPropagation(); onSyncM3U(uuid) }}
                       variant="ghost"
                       size="icon"
+                      focusStyle="highlight"
                       disabled={syncingUUID === uuid}
-                      className="p-2 hover:bg-red-700 rounded"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
                       title="Senkronize et"
                     >
-                      <RefreshCw className={cn(
-                        'w-5 h-5',
-                        syncingUUID === uuid && 'animate-spin'
-                      )} />
+                      <RefreshCw className={cn('w-4 h-4', syncingUUID === uuid && 'animate-spin')} />
                     </FocusButton>
                     <FocusButton
                       focusId={`delete-m3u-${uuid}`}
-                      onClick={() => onDeleteM3U(profile.username, uuid)}
+                      onClick={(e) => { e.stopPropagation(); onDeleteM3U(profile.username, uuid) }}
                       variant="ghost"
                       size="icon"
-                      className="p-2 hover:bg-red-700 rounded"
+                      focusStyle="highlight"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       title="Kaynağı kaldır"
                     >
-                      <X className="w-5 h-5" />
+                      <X className="w-4 h-4" />
                     </FocusButton>
                   </div>
-                )}
-              </div>
+                </div>
+                <div className="mt-2 ml-3.5">
+                  <M3UStatsPlaceholder uuid={uuid} />
+                </div>
+              </CardContent>
+            </FocusCard>
+          )
+        })}
 
-              <M3UStatsPlaceholder uuid={uuid} />
-            </CardContent>
-          </Card>
-        ))}
-
-        <div
+        <FocusCard
+          focusId="add-m3u"
+          onEnter={onAddM3U}
           onClick={onAddM3U}
-          className={cn(
-            'p-6 rounded-lg border-2 border-dashed transition-all cursor-pointer',
-            'flex items-center justify-center gap-3',
-            selectedIndex === profile.m3uRefs.length
-              ? 'border-red-600 bg-red-600/20 scale-105'
-              : 'border-gray-700 hover:border-gray-600'
-          )}
+          className="border-dashed border-2 bg-transparent hover:bg-muted/30"
         >
-          <Plus className="w-6 h-6" />
-          <span className="text-lg">Yeni M3U Kaynağı</span>
-        </div>
+          <CardContent className="p-4 flex items-center justify-center gap-2 text-muted-foreground">
+            <Plus className="w-4 h-4" />
+            <span className="text-sm">Yeni M3U Kaynağı</span>
+          </CardContent>
+        </FocusCard>
       </div>
     </div>
   )

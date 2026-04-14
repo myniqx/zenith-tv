@@ -40,10 +40,7 @@ export const FocusInput = forwardRef<HTMLInputElement, FocusInputProps>(
           'transition-all duration-200',
           // Focus styles - TV-optimized ring
           isFocused && [
-            'ring-4 ring-white ring-offset-4 ring-offset-gray-900',
-            'scale-105',
-            'shadow-lg shadow-white/20',
-            'border-white',
+            'border-primary ring-0',
           ],
           className
         )}

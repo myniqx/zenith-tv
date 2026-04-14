@@ -37,16 +37,11 @@ export const FocusCard = forwardRef<HTMLDivElement, FocusCardProps>(
         {...focusProps}
         onClick={onClick}
         className={cn(
-          // Base transition and cursor
-          'transition-all duration-200 cursor-pointer',
-          // Focus styles - TV-optimized ring
+          'transition-all duration-150 cursor-pointer',
+          'border-l-4 border-l-transparent',
           isFocused && [
-            'ring-4 ring-white ring-offset-4 ring-offset-gray-900',
-            'scale-105',
-            'shadow-lg shadow-white/20',
-            'border-white',
+            'border-l-primary bg-muted/60',
           ],
-          // Disabled state
           disabled && 'opacity-50 cursor-not-allowed',
           className
         )}

@@ -26,11 +26,11 @@ export function GroupCard({ group, focusId }: GroupCardProps) {
       className="h-full"
     >
       <CardContent className="p-0 h-full flex flex-col">
-        <div className="relative aspect-[2/3] bg-gray-800 rounded-t-lg overflow-hidden">
+        <div className="relative aspect-[2/3] bg-muted rounded-t-lg overflow-hidden">
           {coverImages.length > 0 ? (
             <div className="w-full h-full grid grid-cols-3 grid-rows-3 gap-0.5">
               {coverImages.slice(0, 9).map((cover, index) => (
-                <div key={index} className="relative overflow-hidden bg-gray-700">
+                <div key={index} className="relative overflow-hidden bg-muted/70">
                   {cover.Logo ? (
                     <img
                       src={cover.Logo}
@@ -42,21 +42,21 @@ export function GroupCard({ group, focusId }: GroupCardProps) {
                       }}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-700">
-                      <Folder className="w-4 h-4 text-gray-600" />
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/70">
+                      <Folder className="w-4 h-4 text-muted-foreground/40" />
                     </div>
                   )}
                 </div>
               ))}
               {Array.from({ length: Math.max(0, 9 - coverImages.length) }).map((_, index) => (
-                <div key={`empty-${index}`} className="bg-gray-700 flex items-center justify-center">
-                  <Folder className="w-4 h-4 text-gray-600" />
+                <div key={`empty-${index}`} className="bg-muted/70 flex items-center justify-center">
+                  <Folder className="w-4 h-4 text-muted-foreground/40" />
                 </div>
               ))}
             </div>
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-700">
-              <Icon className="w-16 h-16 text-gray-600" />
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/70">
+              <Icon className="w-16 h-16 text-muted-foreground/40" />
             </div>
           )}
 
@@ -71,7 +71,7 @@ export function GroupCard({ group, focusId }: GroupCardProps) {
             {group.Name}
           </h3>
           {group.Groups.length > 0 && (
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               {group.Groups.length} subgroups
             </p>
           )}

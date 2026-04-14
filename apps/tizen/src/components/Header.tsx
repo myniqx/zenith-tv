@@ -24,7 +24,6 @@ function HeaderButton({ section, active, onClick }: { section: MenuSection; acti
       focusId={`menu-${section}`}
       onClick={onClick}
       variant={active ? 'default' : 'secondary'}
-      className={active ? 'bg-red-600 hover:bg-red-700' : ''}
     >
       {MENU_LABELS[section]}
     </FocusButton>
@@ -36,11 +35,13 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
 
   return (
     <header
-      className="bg-gray-800 px-6 flex items-center justify-between shadow-lg"
+      className="bg-card border-b border-border px-6 flex items-center justify-between shadow-md"
       style={{ height: HEADER_HEIGHT }}
     >
       <div className="flex items-center">
-        <h1 className="text-2xl font-bold text-red-500">Zenith TV</h1>
+        <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+          Zenith TV
+        </h1>
       </div>
 
       <nav className="flex gap-3">

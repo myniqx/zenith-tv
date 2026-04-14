@@ -43,12 +43,12 @@ function App() {
       <NavigationProvider initialFocusId="menu-all" onBack={handleBack}>
         <P2PManager /> {/* Always run P2P Manager in background */}
         <FocusScope id="app" active={true}>
-          <div className="w-full h-screen bg-gray-900 text-white flex flex-col overflow-hidden">
+          <div className="w-full h-screen bg-background text-foreground flex flex-col overflow-hidden">
             <Header activeSection={activeSection} onSectionChange={setActiveSection} />
 
             {activeSection === 'profile' ? (
               <div className="flex-1 overflow-hidden">
-                <ProfileManager />
+                <ProfileManager onDone={() => setActiveSection('all')} />
               </div>
             ) : activeSection === 'p2p' ? (
               <div className="flex-1 overflow-hidden">
@@ -71,10 +71,10 @@ function App() {
                 <div className="flex-1 flex items-center justify-center">
                   <div className="text-center">
                     <h2 className="text-4xl font-bold mb-4">Hoş Geldiniz</h2>
-                    <p className="text-gray-500 mt-4">
+                    <p className="text-muted-foreground mt-4">
                       Tizen TV platformu için modern IPTV oynatıcı
                     </p>
-                    <p className="text-gray-600 mt-2 text-sm">
+                    <p className="text-muted-foreground/70 mt-2 text-sm">
                       Navigasyon için yön tuşlarını (↑ ↓ ← →) kullanın
                     </p>
                   </div>

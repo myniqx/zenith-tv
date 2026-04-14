@@ -40,7 +40,7 @@ export function WatchableCard({ watchable, focusId }: WatchableCardProps) {
       className="h-full"
     >
       <CardContent className="p-0 h-full flex flex-col">
-        <div className="relative aspect-[2/3] bg-gray-800 rounded-t-lg overflow-hidden">
+        <div className="relative aspect-[2/3] bg-muted rounded-t-lg overflow-hidden">
           {watchable.Logo ? (
             <img
               src={watchable.Logo}
@@ -52,8 +52,8 @@ export function WatchableCard({ watchable, focusId }: WatchableCardProps) {
               }}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-700">
-              <CategoryIcon className="w-16 h-16 text-gray-600" />
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/70">
+              <CategoryIcon className="w-16 h-16 text-muted-foreground/40" />
             </div>
           )}
 
@@ -70,7 +70,7 @@ export function WatchableCard({ watchable, focusId }: WatchableCardProps) {
           {watchProgress && progressPercent > 0 && progressPercent < 95 && (
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/50">
               <div
-                className="h-full bg-red-600 transition-all"
+                className="h-full bg-primary transition-all"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -80,7 +80,7 @@ export function WatchableCard({ watchable, focusId }: WatchableCardProps) {
         <div className="p-3 flex-1">
           <h3 className="text-sm font-medium line-clamp-2">{watchable.Name}</h3>
           {watchable.Group && (
-            <p className="text-xs text-gray-400 mt-1 line-clamp-1">{watchable.Group}</p>
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{watchable.Group}</p>
           )}
         </div>
       </CardContent>

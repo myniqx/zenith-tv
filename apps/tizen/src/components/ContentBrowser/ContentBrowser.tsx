@@ -25,7 +25,7 @@ function ContentBrowserInner() {
   const breadcrumb = groupStack.map(g => g.Name).join(' > ')
 
   return (
-    <div className="h-full bg-gray-900 text-white flex flex-col overflow-hidden">
+    <div className="h-full bg-background text-foreground flex flex-col overflow-hidden">
       <div className="flex-1 overflow-hidden">
         <ContentGrid />
       </div>
