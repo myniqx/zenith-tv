@@ -165,13 +165,20 @@ export class P2PServer {
   }
 
   stop(): void {
+    for (const [id, ws] of this.clients) {
+      ws.terminate()
+      console.log('[P2P] Terminated client:', id)
+    }
+    this.clients.clear()
+
     if (this.wss) {
       this.wss.close()
+      this.wss = null
     }
     if (this.httpServer) {
       this.httpServer.close()
+      this.httpServer = null
     }
-    this.clients.clear()
     console.log('[P2P] Server stopped')
   }
 }
