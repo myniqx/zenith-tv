@@ -33,7 +33,7 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
               Zenith TV
             </h1>
 
-            <nav className="flex items-center gap-8">
+            <nav className="flex items-center gap-2">
               {NAV_SECTIONS.map((section) => {
                 const isActive = activeSection === section
                 return (
@@ -44,20 +44,22 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
                     className="relative"
                   >
                     {({ focused }) => (
-                      <>
-                        <span className={cn(
-                          'text-xs font-bold tracking-widest uppercase transition-colors duration-200',
-                          focused ? 'text-foreground' : isActive ? 'text-primary' : 'text-muted-foreground',
-                        )}>
-                          {MENU_LABELS[section]}
-                        </span>
+                      <span className={cn(
+                        'relative px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase transition-all duration-200',
+                        focused
+                          ? 'bg-accent scale-110 text-foreground'
+                          : isActive
+                          ? 'text-primary'
+                          : 'text-muted-foreground',
+                      )}>
+                        {MENU_LABELS[section]}
                         {isActive && (
                           <span className={cn(
                             'absolute -bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full',
                             focused ? 'bg-foreground' : 'bg-primary',
                           )} />
                         )}
-                      </>
+                      </span>
                     )}
                   </Button>
                 )
@@ -73,19 +75,29 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
 
             <Button fKey="menu-profile" onClick={() => onSectionChange('profile')}>
               {({ focused }) => (
-                <UserCircle size={22} className={cn(
-                  'transition-colors duration-200',
-                  focused || activeSection === 'profile' ? 'text-primary' : 'text-foreground',
-                )} />
+                <span className={cn(
+                  'flex items-center justify-center p-2 rounded-full transition-all duration-200',
+                  focused ? 'bg-accent scale-110' : '',
+                )}>
+                  <UserCircle size={22} className={cn(
+                    'transition-colors duration-200',
+                    focused ? 'text-foreground' : activeSection === 'profile' ? 'text-primary' : 'text-foreground/60',
+                  )} />
+                </span>
               )}
             </Button>
 
             <Button fKey="menu-settings" onClick={() => onSectionChange('settings')}>
               {({ focused }) => (
-                <Settings size={22} className={cn(
-                  'transition-colors duration-200',
-                  focused || activeSection === 'settings' ? 'text-primary' : 'text-foreground',
-                )} />
+                <span className={cn(
+                  'flex items-center justify-center p-2 rounded-full transition-all duration-200',
+                  focused ? 'bg-accent scale-110' : '',
+                )}>
+                  <Settings size={22} className={cn(
+                    'transition-colors duration-200',
+                    focused ? 'text-foreground' : activeSection === 'settings' ? 'text-primary' : 'text-foreground/60',
+                  )} />
+                </span>
               )}
             </Button>
           </div>

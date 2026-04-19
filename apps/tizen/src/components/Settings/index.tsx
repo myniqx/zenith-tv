@@ -1,45 +1,7 @@
 import { useSettingsStore } from '../../stores/settings'
-import { Button, HorizontalList, VerticalList } from '@navix/react'
+import { Switch, Button, HorizontalList, VerticalList } from '@navix/react'
 import { cn } from '@zenith-tv/ui/lib'
 import { Check } from 'lucide-react'
-
-interface ToggleRowProps {
-  fKey: string
-  label: string
-  description: string
-  value: boolean
-  onChange: (v: boolean) => void
-}
-
-function ToggleRow({ fKey, label, description, value, onChange }: ToggleRowProps) {
-  return (
-    <div className="flex items-center justify-between py-5">
-      <div>
-        <p className="text-base font-semibold text-foreground">{label}</p>
-        <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
-      </div>
-      <Button
-        fKey={fKey}
-        onClick={() => onChange(!value)}
-        className="cursor-pointer"
-      >
-        {({ focused }) => (
-          <div className={cn(
-            'flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold transition-all duration-200',
-            value
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-secondary text-muted-foreground',
-            focused && !value && 'bg-accent text-foreground',
-            focused && 'ring-2 ring-primary/50',
-          )}>
-            {value && <Check className="w-3.5 h-3.5" />}
-            {value ? 'Açık' : 'Kapalı'}
-          </div>
-        )}
-      </Button>
-    </div>
-  )
-}
 
 interface LanguageRowProps {
   fKeyPrefix: string
@@ -131,21 +93,53 @@ export function Settings() {
             </h2>
             <div className="bg-secondary rounded-xl overflow-hidden">
               <div className="px-6">
-                <ToggleRow
-                  fKey="settings-auto-resume"
-                  label="Kaldığım Yerden Devam Et"
-                  description="Videoyu son bıraktığın konumdan başlatır"
-                  value={autoResume}
-                  onChange={setAutoResume}
-                />
+                <Switch fKey="settings-auto-resume" checked={autoResume} onChange={setAutoResume}>
+                  {(checked, focused) => (
+                    <div className={cn(
+                      'flex items-center justify-between py-5 px-4 border-l-2 transition-all duration-200 cursor-pointer',
+                      focused ? 'border-primary' : 'border-transparent',
+                    )}>
+                      <div>
+                        <p className={cn('text-base font-semibold transition-colors duration-200', focused ? 'text-foreground' : 'text-foreground/80')}>
+                          Kaldığım Yerden Devam Et
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-0.5">Videoyu son bıraktığın konumdan başlatır</p>
+                      </div>
+                      <div className={cn(
+                        'flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold transition-all duration-200 shrink-0',
+                        checked ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+                        focused && 'scale-105',
+                      )}>
+                        {checked && <Check className="w-3.5 h-3.5" />}
+                        {checked ? 'Açık' : 'Kapalı'}
+                      </div>
+                    </div>
+                  )}
+                </Switch>
                 <div className="h-px bg-border/20" />
-                <ToggleRow
-                  fKey="settings-auto-next"
-                  label="Sonraki Bölüme Geç"
-                  description="Dizi biterken otomatik sonraki bölümü başlatır"
-                  value={autoPlayNext}
-                  onChange={setAutoPlayNext}
-                />
+                <Switch fKey="settings-auto-next" checked={autoPlayNext} onChange={setAutoPlayNext}>
+                  {(checked, focused) => (
+                    <div className={cn(
+                      'flex items-center justify-between py-5 px-4 border-l-2 transition-all duration-200 cursor-pointer',
+                      focused ? 'border-primary' : 'border-transparent',
+                    )}>
+                      <div>
+                        <p className={cn('text-base font-semibold transition-colors duration-200', focused ? 'text-foreground' : 'text-foreground/80')}>
+                          Sonraki Bölüme Geç
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-0.5">Dizi biterken otomatik sonraki bölümü başlatır</p>
+                      </div>
+                      <div className={cn(
+                        'flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold transition-all duration-200 shrink-0',
+                        checked ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+                        focused && 'scale-105',
+                      )}>
+                        {checked && <Check className="w-3.5 h-3.5" />}
+                        {checked ? 'Açık' : 'Kapalı'}
+                      </div>
+                    </div>
+                  )}
+                </Switch>
               </div>
             </div>
           </section>
