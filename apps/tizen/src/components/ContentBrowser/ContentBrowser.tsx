@@ -2,31 +2,23 @@ import { GroupObject } from '@zenith-tv/content'
 import { ContentBrowserProvider, useContentBrowser } from './ContentBrowserProvider'
 import { ContentGrid } from './ContentGrid'
 import { VideoPlayer } from './VideoPlayer'
+import { cn } from '@zenith-tv/ui/lib'
 
 interface ContentBrowserProps {
   initialGroup: GroupObject
+  className?: string
   gridConfig?: {
     cols?: number
     rows?: number
   }
 }
 
-function ContentBrowserInner() {
-  const {
-    groupStack,
-    currentGroup,
-    currentPage,
-    totalPages,
-    isPlayingVideo,
-    currentWatchable,
-    closeVideo,
-  } = useContentBrowser()
-
-  const breadcrumb = groupStack.map(g => g.Name).join(' > ')
+function ContentBrowserInner({ className }: { className?: string }) {
+  const { isPlayingVideo, currentWatchable, closeVideo } = useContentBrowser()
 
   return (
-    <div className="h-full bg-background text-foreground flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-hidden">
+    <div className={cn('bg-background text-foreground flex flex-col overflow-hidden', className)}>
+      <div className="flex-1 min-h-0 flex flex-col">
         <ContentGrid />
       </div>
 
@@ -37,10 +29,10 @@ function ContentBrowserInner() {
   )
 }
 
-export function ContentBrowser({ initialGroup, gridConfig }: ContentBrowserProps) {
+export function ContentBrowser({ initialGroup, className, gridConfig }: ContentBrowserProps) {
   return (
     <ContentBrowserProvider initialGroup={initialGroup} gridConfig={gridConfig}>
-      <ContentBrowserInner />
+      <ContentBrowserInner className={className} />
     </ContentBrowserProvider>
   )
 }

@@ -1,17 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useProfilesStore } from '@/stores/profiles'
-import { FocusScope } from '@/contexts/FocusScope'
 import { ProfileList } from './ProfileList'
 import { M3USourceList } from './M3USourceList'
 import { AddProfileForm } from './AddProfileForm'
-import { AddM3UForm } from './AddM3UForm'
 import { ConfirmDialog } from './ConfirmDialog'
-import type { View, DeleteItem } from './types'
+import type { DeleteItem } from './types'
 import { useContentStore } from '@/stores/content'
 
 interface ProfileManagerProps {
   onDone?: () => void
 }
+
+type Panel = 'list' | 'add-profile'
 
 export function ProfileManager({ onDone }: ProfileManagerProps) {
   const {
@@ -27,14 +27,21 @@ export function ProfileManager({ onDone }: ProfileManagerProps) {
 
   const { currentUUID, update, statusMessage } = useContentStore()
 
-  const [view, setView] = useState<View>('main')
+  const [panel, setPanel] = useState<Panel>('list')
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null)
   const [deleteItem, setDeleteItem] = useState<DeleteItem | null>(null)
   const [syncingUUID, setSyncingUUID] = useState<string | null>(null)
 
+  // inline add-m3u form state
+  const [showAddM3U, setShowAddM3U] = useState(false)
+  const [addM3UUrl, setAddM3UUrl] = useState('')
+
+  // add-profile form state
+  const [newUsername, setNewUsername] = useState('')
+  const [newProfileUrl, setNewProfileUrl] = useState('')
+
   const pendingDone = useRef(false)
   const isLocked = statusMessage.status === 'loading' && statusMessage.percent !== null
-
   const currentUsername = getCurrentUsername()
 
   const sortedProfiles = useMemo(() => {
@@ -79,13 +86,11 @@ export function ProfileManager({ onDone }: ProfileManagerProps) {
 
   const handleDeleteProfile = (username: string) => {
     setDeleteItem({ type: 'profile', username, displayName: username })
-    setView('confirm-delete')
   }
 
   const handleDeleteM3U = (username: string, uuid: string) => {
     const url = getUrlFromUUID(uuid)
     let displayName = uuid.slice(0, 8)
-
     if (url) {
       try {
         const urlObj = new URL(url)
@@ -95,14 +100,11 @@ export function ProfileManager({ onDone }: ProfileManagerProps) {
         displayName = url.slice(0, 30) + (url.length > 30 ? '...' : '')
       }
     }
-
     setDeleteItem({ type: 'm3u', username, uuid, displayName })
-    setView('confirm-delete')
   }
 
   const handleConfirmDelete = async () => {
     if (!deleteItem) return
-
     try {
       if (deleteItem.type === 'profile' && deleteItem.username) {
         await deleteProfile(deleteItem.username)
@@ -110,33 +112,36 @@ export function ProfileManager({ onDone }: ProfileManagerProps) {
       } else if (deleteItem.type === 'm3u' && deleteItem.username && deleteItem.uuid) {
         await removeM3UFromProfile(deleteItem.username, deleteItem.uuid)
       }
-      setView('main')
-      setDeleteItem(null)
     } catch (error) {
       console.error('Failed to delete:', error)
+    } finally {
+      setDeleteItem(null)
     }
   }
 
-  const handleAddProfile = async (username: string, url: string) => {
+  const handleAddProfile = async () => {
+    if (!newUsername.trim() || !newProfileUrl.trim()) return
     try {
-      createProfile(username)
-      const uuid = addM3UToProfile(username, url)
-      setView('main')
-      setSelectedProfile(username)
+      createProfile(newUsername.trim())
+      const uuid = addM3UToProfile(newUsername.trim(), newProfileUrl.trim())
+      setPanel('list')
+      setSelectedProfile(newUsername.trim())
+      setNewUsername('')
+      setNewProfileUrl('')
       pendingDone.current = true
-      await selectProfile(username, uuid)
+      await selectProfile(newUsername.trim(), uuid)
       update()
     } catch (error) {
       console.error('Failed to add profile:', error)
     }
   }
 
-  const handleAddM3U = async (url: string) => {
-    if (!selectedProfile) return
-
+  const handleAddM3USubmit = async () => {
+    if (!selectedProfile || !addM3UUrl.trim()) return
     try {
-      const uuid = addM3UToProfile(selectedProfile, url)
-      setView('main')
+      const uuid = addM3UToProfile(selectedProfile, addM3UUrl.trim())
+      setShowAddM3U(false)
+      setAddM3UUrl('')
       pendingDone.current = true
       await selectProfile(selectedProfile, uuid)
       update()
@@ -145,106 +150,84 @@ export function ProfileManager({ onDone }: ProfileManagerProps) {
     }
   }
 
-  if (view === 'main') {
-    return (
-      <div className="h-full bg-background flex flex-col">
-        <div className={`flex-1 flex overflow-hidden${isLocked ? ' pointer-events-none select-none opacity-60' : ''}`}>
-          <ProfileList
-            profiles={sortedProfiles}
-            selectedProfile={selectedProfile}
-            currentUsername={currentUsername}
-            onSelectProfile={setSelectedProfile}
-            onDeleteProfile={handleDeleteProfile}
-            onAddProfile={() => setView('add-profile')}
-          />
+  return (
+    <div className="flex-1 min-h-0 bg-background text-foreground flex flex-col relative">
+      <div className={`flex-1 flex overflow-hidden${isLocked ? ' pointer-events-none select-none opacity-60' : ''}`}>
+        <ProfileList
+          profiles={sortedProfiles}
+          selectedProfile={selectedProfile}
+          currentUsername={currentUsername}
+          onSelectProfile={(u) => { setSelectedProfile(u); setPanel('list'); setShowAddM3U(false) }}
+          onDeleteProfile={handleDeleteProfile}
+          onAddProfile={() => { setPanel('add-profile'); setShowAddM3U(false) }}
+        />
 
+        {panel === 'add-profile' ? (
+          <AddProfileForm
+            username={newUsername}
+            url={newProfileUrl}
+            onUsernameChange={setNewUsername}
+            onUrlChange={setNewProfileUrl}
+            onSubmit={handleAddProfile}
+            onCancel={() => setPanel('list')}
+          />
+        ) : (
           <M3USourceList
             selectedProfile={selectedProfile}
             syncingUUID={syncingUUID}
+            showAddForm={showAddM3U}
+            addUrl={addM3UUrl}
+            onAddUrlChange={setAddM3UUrl}
             onSelectM3U={handleSelectM3U}
             onSyncM3U={handleSyncM3U}
             onDeleteM3U={handleDeleteM3U}
-            onAddM3U={() => setView('add-m3u')}
+            onAddM3U={() => setShowAddM3U(true)}
+            onAddSubmit={handleAddM3USubmit}
+            onAddCancel={() => { setShowAddM3U(false); setAddM3UUrl('') }}
+          />
+        )}
+      </div>
+
+      {/* status bar */}
+      <div className={`px-8 py-2 ${statusMessage.status === 'idle' ? 'invisible' : 'visible'}`}>
+        <span className={`text-xs ${
+          statusMessage.status === 'error' ? 'text-destructive' :
+          statusMessage.status === 'ready' ? 'text-success' :
+          'text-muted-foreground'
+        }`}>
+          {statusMessage.message ?? '\u00A0'}
+        </span>
+        <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-border/20">
+          <div
+            className={`h-full transition-all duration-300 ${
+              statusMessage.status === 'loading' ? 'bg-primary' :
+              statusMessage.status === 'ready' ? 'bg-success' :
+              'bg-transparent'
+            }`}
+            style={{ width: statusMessage.percent !== null ? `${statusMessage.percent}%` : '0%' }}
           />
         </div>
-
-        {/* Status Bar */}
-        <div className={`px-8 pt-2 ${statusMessage.status === 'idle' ? 'invisible' : 'visible'}`}>
-          <span className={`text-xs ${
-            statusMessage.status === 'error' ? 'text-destructive' :
-            statusMessage.status === 'ready' ? 'text-green-400' :
-            'text-muted-foreground'
-          }`}>
-            {statusMessage.message ?? '\u00A0'}
-          </span>
-          <div className="mt-1 h-[2px] w-full overflow-hidden rounded-full bg-border">
-            <div
-              className={`h-full transition-all duration-300 ${
-                statusMessage.status === 'loading' ? 'bg-primary' :
-                statusMessage.status === 'ready' ? 'bg-green-500' :
-                'bg-transparent'
-              }`}
-              style={{ width: statusMessage.percent !== null ? `${statusMessage.percent}%` : '0%' }}
-            />
-          </div>
-        </div>
-
-        <div className="bg-card border-t border-border px-8 py-4 text-muted-foreground text-sm flex gap-8">
-          <span>↑ ↓ ← → : Gezin</span>
-          <span>Enter : Seç</span>
-          <span>ESC : Çık</span>
-        </div>
       </div>
-    )
-  }
 
-  if (view === 'add-profile') {
-    return (
-      <FocusScope id="add-profile-form" onBack={() => setView('main')}>
-        <AddProfileForm
-          onSubmit={handleAddProfile}
-          onCancel={() => setView('main')}
-        />
-      </FocusScope>
-    )
-  }
+      <div className="px-8 py-3 border-t border-border/10 text-muted-foreground/50 text-xs flex gap-6">
+        <span>↑ ↓ ← → Gezin</span>
+        <span>Enter Seç</span>
+        <span>ESC Çık</span>
+      </div>
 
-  if (view === 'add-m3u') {
-    return (
-      <FocusScope id="add-m3u-form" onBack={() => setView('main')}>
-        <AddM3UForm
-          onSubmit={handleAddM3U}
-          onCancel={() => setView('main')}
-        />
-      </FocusScope>
-    )
-  }
-
-  if (view === 'confirm-delete' && deleteItem) {
-    return (
-      <FocusScope
-        id="confirm-dialog"
-        onBack={() => {
-          setView('main')
-          setDeleteItem(null)
-        }}
-      >
+      {/* confirm overlay */}
+      {deleteItem && (
         <ConfirmDialog
           title="Silme Onayı"
           message={
             deleteItem.type === 'profile'
-              ? `"${deleteItem.displayName}" profilini ve tüm verilerini kalıcı olarak silmek istediğinizden emin misiniz?`
-              : `"${deleteItem.displayName}" M3U kaynağını bu profilden kaldırmak istediğinizden emin misiniz?`
+              ? `"${deleteItem.displayName}" profilini ve tüm verilerini kalıcı olarak silmek istiyor musunuz?`
+              : `"${deleteItem.displayName}" M3U kaynağını bu profilden kaldırmak istiyor musunuz?`
           }
           onConfirm={handleConfirmDelete}
-          onCancel={() => {
-            setView('main')
-            setDeleteItem(null)
-          }}
+          onCancel={() => setDeleteItem(null)}
         />
-      </FocusScope>
-    )
-  }
-
-  return null
+      )}
+    </div>
+  )
 }

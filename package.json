@@ -49,6 +49,11 @@
 		"pnpm": ">=8.0.0"
 	},
 	"packageManager": "pnpm@10.26.2",
+	"pnpm": {
+		"overrides": {
+			"@navix/core": "file:/home/myniqx/Projects/navix/packages/core"
+		}
+	},
 	"workspaces": [
 		"core/*",
 		"shared/*",

@@ -22,7 +22,8 @@
 		"./stores/player": "./src/stores/player.ts",
 		"./lib/cn": "./src/lib/cn.ts",
 		"./tooltip": "./src/components/ui/tooltip.tsx",
-		"./styles": "./src/styles.css"
+		"./styles": "./src/styles.css",
+		"./lib": "./src/lib/index.ts"
 	},
 	"scripts": {
 		"dev": "vite",

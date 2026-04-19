@@ -1,73 +1,104 @@
 import { useSettingsStore } from '../../stores/settings'
-import { FocusButton } from '../Navigation'
-import { FocusScope } from '../../contexts/FocusScope'
-import { Separator } from '@zenith-tv/ui/separator'
+import { Button, HorizontalList, VerticalList } from '@navix/react'
+import { cn } from '@zenith-tv/ui/lib'
+import { Check } from 'lucide-react'
 
 interface ToggleRowProps {
-  focusId: string
+  fKey: string
   label: string
   description: string
   value: boolean
   onChange: (v: boolean) => void
 }
 
-function ToggleRow({ focusId, label, description, value, onChange }: ToggleRowProps) {
+function ToggleRow({ fKey, label, description, value, onChange }: ToggleRowProps) {
   return (
-    <div className="flex items-center justify-between py-4">
+    <div className="flex items-center justify-between py-5">
       <div>
-        <p className="text-base font-medium text-foreground">{label}</p>
+        <p className="text-base font-semibold text-foreground">{label}</p>
         <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
       </div>
-      <FocusButton
-        focusId={focusId}
+      <Button
+        fKey={fKey}
         onClick={() => onChange(!value)}
-        variant={value ? 'default' : 'secondary'}
-        className="min-w-[80px]"
+        className="cursor-pointer"
       >
-        {value ? 'Açık' : 'Kapalı'}
-      </FocusButton>
+        {({ focused }) => (
+          <div className={cn(
+            'flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold transition-all duration-200',
+            value
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-secondary text-muted-foreground',
+            focused && !value && 'bg-accent text-foreground',
+            focused && 'ring-2 ring-primary/50',
+          )}>
+            {value && <Check className="w-3.5 h-3.5" />}
+            {value ? 'Açık' : 'Kapalı'}
+          </div>
+        )}
+      </Button>
     </div>
   )
 }
 
 interface LanguageRowProps {
-  focusIdClear: string
+  fKeyPrefix: string
   label: string
   value: string | null
   options: string[]
   onChange: (v: string | null) => void
 }
 
-function LanguageRow({ focusIdClear, label, value, options, onChange }: LanguageRowProps) {
+function LanguageRow({ fKeyPrefix, label, value, options, onChange }: LanguageRowProps) {
   return (
-    <div className="py-4">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-base font-medium text-foreground">{label}</p>
+    <div className="py-5">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-base font-semibold text-foreground">{label}</p>
         {value && (
-          <FocusButton
-            focusId={focusIdClear}
+          <Button
+            fKey={`${fKeyPrefix}-clear`}
             onClick={() => onChange(null)}
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
+            className="cursor-pointer"
           >
-            Temizle
-          </FocusButton>
+            {({ focused }) => (
+              <span className={cn(
+                'text-xs font-bold uppercase tracking-widest transition-colors duration-200 px-3 py-1.5 rounded-full',
+                focused ? 'text-foreground bg-accent' : 'text-muted-foreground',
+              )}>
+                Temizle
+              </span>
+            )}
+          </Button>
         )}
       </div>
-      <div className="flex gap-2 flex-wrap">
-        {options.map((lang) => (
-          <FocusButton
-            key={lang}
-            focusId={`${focusIdClear}-${lang}`}
-            onClick={() => onChange(lang)}
-            variant={value === lang ? 'default' : 'secondary'}
-            size="sm"
-          >
-            {lang.toUpperCase()}
-          </FocusButton>
-        ))}
-      </div>
+      <HorizontalList fKey={`${fKeyPrefix}-langs`}>
+        <div className="flex gap-2 flex-wrap">
+          {options.map((lang) => {
+            const isActive = value === lang
+            return (
+              <Button
+                key={lang}
+                fKey={`${fKeyPrefix}-${lang}`}
+                onClick={() => onChange(lang)}
+                className="cursor-pointer"
+              >
+                {({ focused }) => (
+                  <span className={cn(
+                    'inline-block px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200',
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-muted-foreground',
+                    focused && !isActive && 'bg-accent text-foreground',
+                    focused && 'ring-2 ring-primary/50',
+                  )}>
+                    {lang.toUpperCase()}
+                  </span>
+                )}
+              </Button>
+            )
+          })}
+        </div>
+      </HorizontalList>
     </div>
   )
 }
@@ -88,55 +119,62 @@ export function Settings() {
   } = useSettingsStore()
 
   return (
-    <div className="h-full bg-background text-foreground overflow-y-auto">
-      <div className="max-w-3xl mx-auto p-8">
-        <h1 className="text-2xl font-semibold mb-8">Ayarlar</h1>
+    <div className="flex-1 min-h-0 bg-background text-foreground overflow-y-auto">
+      <div className="max-w-3xl mx-auto px-8 py-10">
+        <h1 className="text-3xl font-black tracking-tight text-foreground mb-1">Ayarlar</h1>
+        <p className="text-sm text-muted-foreground mb-10">Uygulama tercihlerinizi yönetin</p>
 
-        <section className="mb-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Oynatma</h2>
-          <FocusScope id="settings-playback">
-            <Separator className="mb-2" />
-            <ToggleRow
-              focusId="settings-auto-resume"
-              label="Kaldığım Yerden Devam Et"
-              description="Videoyu son bıraktığın konumdan başlatır"
-              value={autoResume}
-              onChange={setAutoResume}
-            />
-            <Separator />
-            <ToggleRow
-              focusId="settings-auto-next"
-              label="Sonraki Bölüme Geç"
-              description="Dizi biterken otomatik sonraki bölümü başlatır"
-              value={autoPlayNext}
-              onChange={setAutoPlayNext}
-            />
-            <Separator />
-          </FocusScope>
-        </section>
+        <VerticalList fKey="settings">
+          <section className="mb-10">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">
+              Oynatma
+            </h2>
+            <div className="bg-secondary rounded-xl overflow-hidden">
+              <div className="px-6">
+                <ToggleRow
+                  fKey="settings-auto-resume"
+                  label="Kaldığım Yerden Devam Et"
+                  description="Videoyu son bıraktığın konumdan başlatır"
+                  value={autoResume}
+                  onChange={setAutoResume}
+                />
+                <div className="h-px bg-border/20" />
+                <ToggleRow
+                  fKey="settings-auto-next"
+                  label="Sonraki Bölüme Geç"
+                  description="Dizi biterken otomatik sonraki bölümü başlatır"
+                  value={autoPlayNext}
+                  onChange={setAutoPlayNext}
+                />
+              </div>
+            </div>
+          </section>
 
-        <section className="mb-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Dil Tercihleri</h2>
-          <FocusScope id="settings-language">
-            <Separator className="mb-2" />
-            <LanguageRow
-              focusIdClear="settings-audio-lang-clear"
-              label="Tercih Edilen Ses Dili"
-              value={preferredAudioLanguage}
-              options={AUDIO_LANGUAGES}
-              onChange={setPreferredAudioLanguage}
-            />
-            <Separator />
-            <LanguageRow
-              focusIdClear="settings-sub-lang-clear"
-              label="Tercih Edilen Altyazı Dili"
-              value={preferredSubtitleLanguage}
-              options={SUBTITLE_LANGUAGES}
-              onChange={setPreferredSubtitleLanguage}
-            />
-            <Separator />
-          </FocusScope>
-        </section>
+          <section className="mb-10">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">
+              Dil Tercihleri
+            </h2>
+            <div className="bg-secondary rounded-xl overflow-hidden">
+              <div className="px-6">
+                <LanguageRow
+                  fKeyPrefix="settings-audio-lang"
+                  label="Tercih Edilen Ses Dili"
+                  value={preferredAudioLanguage}
+                  options={AUDIO_LANGUAGES}
+                  onChange={setPreferredAudioLanguage}
+                />
+                <div className="h-px bg-border/20" />
+                <LanguageRow
+                  fKeyPrefix="settings-sub-lang"
+                  label="Tercih Edilen Altyazı Dili"
+                  value={preferredSubtitleLanguage}
+                  options={SUBTITLE_LANGUAGES}
+                  onChange={setPreferredSubtitleLanguage}
+                />
+              </div>
+            </div>
+          </section>
+        </VerticalList>
       </div>
     </div>
   )

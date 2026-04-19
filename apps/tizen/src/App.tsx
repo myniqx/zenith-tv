@@ -1,12 +1,11 @@
-
 import { useState, useEffect } from 'react'
+import { FocusRoot, VerticalList } from '@navix/react'
+import { twMerge } from 'tailwind-merge'
 import { Header, MenuSection } from './components/Header'
 import { Layout } from './components/Layout'
 import { KeyboardHelper } from './components/KeyboardHelper'
 import { ProfileManager } from './components/ProfileManager'
 import { ContentBrowser } from './components/ContentBrowser'
-import { NavigationProvider } from './contexts/NavigationContext'
-import { FocusScope } from './contexts/FocusScope'
 import { useContentStore } from './stores/content'
 import { initDevEnvironment } from './utils/dev-helper'
 import { Toaster } from '@zenith-tv/ui/sonner'
@@ -32,41 +31,36 @@ function App() {
     }
   }, [activeSection])
 
-  const handleBack = () => {
-    if (activeSection !== 'all') {
-      setActiveSection('all')
-    }
-  }
-
   return (
     <>
-      <NavigationProvider initialFocusId="menu-all" onBack={handleBack}>
-        <P2PManager /> {/* Always run P2P Manager in background */}
-        <FocusScope id="app" active={true}>
-          <div className="w-full h-screen bg-background text-foreground flex flex-col overflow-hidden">
+      <FocusRoot mergeClassName={twMerge} inputConfig={{
+        actions: {
+          back:  { keys: ['Backspace', 'Escape', 'XF86Back'] },
+          enter: { keys: ['Enter', 'Space'] },
+          up:    { keys: ['ArrowUp',    'XF86Up'] },
+          down:  { keys: ['ArrowDown',  'XF86Down'] },
+          left:  { keys: ['ArrowLeft',  'XF86Left'] },
+          right: { keys: ['ArrowRight', 'XF86Right'] },
+        }
+      }}>
+        <P2PManager />
+        <div className="w-full h-screen bg-background text-foreground flex flex-col overflow-hidden">
+          <VerticalList fKey="app" className="flex-1 flex flex-col min-h-0">
             <Header activeSection={activeSection} onSectionChange={setActiveSection} />
 
-            {activeSection === 'profile' ? (
-              <div className="flex-1 overflow-hidden">
-                <ProfileManager onDone={() => setActiveSection('all')} />
-              </div>
-            ) : activeSection === 'p2p' ? (
-              <div className="flex-1 overflow-hidden">
-                <P2PView />
-              </div>
-            ) : activeSection === 'settings' ? (
-              <div className="flex-1 overflow-hidden">
-                <Settings />
-              </div>
-            ) : activeSection === 'all' && movieGroup ? (
-              <div className="flex-1 overflow-hidden">
-                <ContentBrowser initialGroup={movieGroup} />
-              </div>
-            ) : activeSection === 'favorites' && favoriteGroup ? (
-              <div className="flex-1 overflow-hidden">
-                <ContentBrowser initialGroup={favoriteGroup} />
-              </div>
-            ) : (
+            {activeSection === 'profile' && (
+              <ProfileManager onDone={() => setActiveSection('all')} />
+            )}
+            {activeSection === 'p2p' && <P2PView />}
+            {activeSection === 'settings' && <Settings />}
+            {activeSection === 'all' && movieGroup && (
+              <ContentBrowser initialGroup={movieGroup} className="flex-1 min-h-0" />
+            )}
+            {activeSection === 'favorites' && favoriteGroup && (
+              <ContentBrowser initialGroup={favoriteGroup} className="flex-1 min-h-0" />
+            )}
+            {activeSection !== 'profile' && activeSection !== 'p2p' && activeSection !== 'settings' &&
+              activeSection !== 'exit' && !movieGroup && !favoriteGroup && (
               <Layout>
                 <div className="flex-1 flex items-center justify-center">
                   <div className="text-center">
@@ -81,11 +75,11 @@ function App() {
                 </div>
               </Layout>
             )}
+          </VerticalList>
 
-            <KeyboardHelper />
-          </div>
-        </FocusScope>
-      </NavigationProvider>
+          <KeyboardHelper />
+        </div>
+      </FocusRoot>
       <Toaster />
     </>
   )

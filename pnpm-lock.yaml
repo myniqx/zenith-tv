@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@navix/core': file:/home/myniqx/Projects/navix/packages/core
+
 importers:
 
   .:
@@ -135,6 +138,12 @@ importers:
 
   apps/tizen:
     dependencies:
+      '@navix/core':
+        specifier: file:/home/myniqx/Projects/navix/packages/core
+        version: file:../navix/packages/core
+      '@navix/react':
+        specifier: file:../../../navix/packages/react
+        version: file:../navix/packages/react(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@zenith-tv/content':
         specifier: workspace:*
         version: link:../../shared/content
@@ -722,6 +731,15 @@ packages:
   '@malept/flatpak-bundler@0.4.0':
     resolution: {integrity: sha512-9QOtNffcOF/c1seMCDnjckb3R9WHcG34tky+FHpNKKCW0wc/scYLwMtO+ptyGUfMW0/b/n4qRiALlaFHc9Oj7Q==}
     engines: {node: '>= 10.0.0'}
+
+  '@navix/core@file:../navix/packages/core':
+    resolution: {directory: ../navix/packages/core, type: directory}
+
+  '@navix/react@file:../navix/packages/react':
+    resolution: {directory: ../navix/packages/react, type: directory}
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -4469,6 +4487,14 @@ snapshots:
       tmp-promise: 3.0.3
     transitivePeerDependencies:
       - supports-color
+
+  '@navix/core@file:../navix/packages/core': {}
+
+  '@navix/react@file:../navix/packages/react(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+    dependencies:
+      '@navix/core': file:../navix/packages/core
+      react: 19.2.0
+      react-dom: 19.2.0(react@19.2.0)
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:

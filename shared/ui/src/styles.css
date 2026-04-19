@@ -160,24 +160,37 @@
   }
 
   .dark {
-    --selected: 350 50% 30%;
-    --nav: 350 50% 40%;
-    --elevated: 0 0% 25%;
+    --selected: 259 100% 70%;
+    --nav: 259 100% 82%;
+    --elevated: 0 0% 15%;
 
-    --background: 50 20% 13%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 350 50% 80%;
-    --primary-foreground: 0 0% 9%;
+    /* surface (#0e0e0e) — OLED void base */
+    --background: 0 0% 5.5%;
+    --foreground: 0 0% 100%;
+
+    /* surface-container-lowest (#000000) — behind posters */
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
+
+    /* surface-container-lowest (#000000) */
+    --popover: 0 0% 0%;
+    --popover-foreground: 0 0% 100%;
+
+    /* primary (#b6a0ff) — electric lavender */
+    --primary: 259 100% 82%;
+    --primary-foreground: 0 0% 0%;
+
+    /* surface-container-highest (#262626) */
     --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* surface-container-low (#131313) */
+    --muted: 0 0% 7.5%;
+    --muted-foreground: 0 0% 67.5%;
+
+    /* secondary-container — muted purple for focus fills */
+    --accent: 259 30% 20%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
@@ -188,9 +201,12 @@
     --warning: 40 68.9% 42%;
     --warning-foreground: 40 60% 12%;
 
-    --border: 0 0% 14.9%;
-    --input: 0 0% 30%;
-    --ring: 0 0% 83.1%;
+    /* outline-variant (#494847) — ghost borders */
+    --border: 20 2% 28%;
+    --input: 20 2% 28%;
+    /* primary-dim (#7e51ff) — active/ring states */
+    --ring: 259 100% 66%;
+
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -203,13 +219,15 @@
     --toast-success: 140 50% 20%;
     --toast-warning: 40 100% 30%;
 
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* surface-container-low (#131313) */
+    --sidebar-background: 0 0% 7.5%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 259 100% 82%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 259 30% 20%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 20 2% 28%;
+    --sidebar-ring: 259 100% 66%;
   }
 
   /* Tailwind CSS v4'teki varsayılan border-color değişikliği için uyumluluk stilleri */
