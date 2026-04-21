@@ -35,8 +35,8 @@ export function WatchableCard({ fKey, watchable }: WatchableCardProps) {
         <div className={cn(
           'relative aspect-2/3 bg-secondary rounded-lg overflow-hidden border transition-all duration-300',
           focused
-            ? 'border-primary/40 scale-105 shadow-lg shadow-primary/15'
-            : 'border-border/10',
+            ? 'border-2 border-primary scale-100 shadow-lg shadow-primary/20 z-10'
+            : 'border-border/10 scale-[0.98]',
         )}>
           {watchable.Logo ? (
             <img
@@ -55,11 +55,16 @@ export function WatchableCard({ fKey, watchable }: WatchableCardProps) {
           {/* gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent opacity-90" />
 
+          {/* focus overlay */}
+          {focused && <div className="absolute inset-0 bg-primary/10 pointer-events-none" />}
+
           {/* category badge — top left */}
           <div className="absolute top-2 left-2">
             <span className={cn(
-              'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest bg-card/80',
-              category.color,
+              'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter',
+              focused
+                ? 'bg-accent text-primary'
+                : `bg-card/80 ${category.color}`,
             )}>
               <CategoryIcon className="w-2.5 h-2.5" />
               {category.label}
@@ -77,24 +82,27 @@ export function WatchableCard({ fKey, watchable }: WatchableCardProps) {
           )}
 
           {/* bottom info */}
-          <div className="absolute bottom-0 p-3 w-full">
-            <h3 className="text-sm font-bold leading-tight text-foreground line-clamp-2">
+          <div className={cn('absolute bottom-0 w-full transition-all duration-300', focused ? 'p-5' : 'p-3')}>
+            <h3 className={cn(
+              'font-headline font-bold leading-tight text-white line-clamp-2 transition-all duration-300',
+              focused ? 'text-xl font-extrabold' : 'text-sm',
+            )}>
               {watchable.Name}
             </h3>
             <div className="flex items-center gap-1.5 mt-1">
               {watchable.Year && (
                 <span className={cn(
                   'text-[11px] font-semibold transition-colors duration-200',
-                  focused ? 'text-primary' : 'text-primary/70',
+                  focused ? 'text-primary font-bold' : 'text-primary/70',
                 )}>
                   {watchable.Year}
                 </span>
               )}
               {watchable.Year && watchable.Group && (
-                <span className="text-[11px] text-muted-foreground">•</span>
+                <span className={cn('text-[11px]', focused ? 'text-primary/60' : 'text-muted-foreground')}>•</span>
               )}
               {watchable.Group && (
-                <span className="text-[11px] text-muted-foreground line-clamp-1">
+                <span className={cn('text-[11px] line-clamp-1', focused ? 'text-primary/80' : 'text-muted-foreground')}>
                   {watchable.Group}
                 </span>
               )}

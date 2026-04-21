@@ -29,7 +29,7 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
         <div className="flex items-center justify-between w-full px-12 py-5">
 
           <div className="flex items-center gap-12">
-            <h1 className="text-2xl font-black italic tracking-tighter text-white">
+            <h1 className="font-headline text-2xl font-black italic tracking-tighter text-white">
               Zenith TV
             </h1>
 
@@ -45,7 +45,7 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
                   >
                     {({ focused }) => (
                       <span className={cn(
-                        'relative px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase transition-all duration-200',
+                        'font-headline relative px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase transition-all duration-200',
                         focused
                           ? 'bg-accent scale-110 text-foreground'
                           : isActive

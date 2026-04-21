@@ -38,7 +38,7 @@ export function ConfirmButton({ fKey, title, message, onConfirm, trigger }: Conf
                     <AlertTriangle className="w-5 h-5 text-destructive" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black tracking-tight text-foreground">{title}</h2>
+                    <h2 className="font-headline text-lg font-black tracking-tight text-foreground">{title}</h2>
                     <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{message}</p>
                   </div>
                 </div>

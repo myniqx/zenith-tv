@@ -21,6 +21,14 @@
   animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+.font-headline {
+  font-family: var(--font-headline);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
 .glass-header {
   background-color: color-mix(in srgb, hsl(var(--secondary)) 70%, transparent);
   backdrop-filter: blur(32px);

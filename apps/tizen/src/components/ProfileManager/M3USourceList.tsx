@@ -86,7 +86,7 @@ export function M3USourceList({ selectedProfile, onPendingSelect }: M3USourceLis
   return (
     <div className="flex-1 flex flex-col overflow-hidden px-8 py-8 relative">
       <div className="mb-6">
-        <h2 className="text-2xl font-black tracking-tight text-foreground">{profile.username}</h2>
+        <h2 className="font-headline text-2xl font-black tracking-tight text-foreground">{profile.username}</h2>
         <p className="text-sm text-muted-foreground mt-0.5">{profile.m3uRefs.length} M3U kaynağı</p>
       </div>
 
@@ -172,7 +172,7 @@ export function M3USourceList({ selectedProfile, onPendingSelect }: M3USourceLis
                 {isExpanded && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
                     <div className="w-full max-w-lg bg-secondary rounded-2xl p-8 border border-border/20 shadow-2xl shadow-black/60">
-                      <h2 className="text-2xl font-black tracking-tight text-foreground mb-1">Yeni M3U Kaynağı</h2>
+                      <h2 className="font-headline text-2xl font-black tracking-tight text-foreground mb-1">Yeni M3U Kaynağı</h2>
                       <p className="text-sm text-muted-foreground mb-6">M3U playlist URL'sini girin</p>
                       <VerticalList fKey="add-m3u-form">
                         <Input

@@ -25,8 +25,8 @@ export function GroupCard({ fKey, group }: GroupCardProps) {
         <div className={cn(
           'relative aspect-2/3 bg-secondary rounded-lg overflow-hidden border transition-all duration-300',
           focused
-            ? 'border-primary/40 scale-105 shadow-lg shadow-primary/15'
-            : 'border-border/10',
+            ? 'border-2 border-primary scale-100 shadow-lg shadow-primary/20 z-10'
+            : 'border-border/10 scale-[0.98]',
         )}>
           {coverImages.length > 0 ? (
             <div className="w-full h-full grid grid-cols-3 grid-rows-3 gap-0.5">
@@ -62,18 +62,27 @@ export function GroupCard({ fKey, group }: GroupCardProps) {
           {/* gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent opacity-90" />
 
+          {/* focus overlay */}
+          {focused && <div className="absolute inset-0 bg-primary/10 pointer-events-none" />}
+
           {/* bottom info */}
-          <div className="absolute bottom-0 p-3 w-full">
+          <div className={cn('absolute bottom-0 w-full transition-all duration-300', focused ? 'p-5' : 'p-3')}>
             <div className="flex items-center gap-1.5 mb-1">
-              <Icon className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+              <Icon className={cn('w-3 h-3 transition-colors duration-200', focused ? 'text-primary' : 'text-muted-foreground')} />
+              <span className={cn(
+                'text-[10px] font-bold uppercase tracking-tighter',
+                focused ? 'bg-accent text-primary px-2 py-0.5 rounded' : 'text-muted-foreground',
+              )}>
                 {group.Groups.length > 0 ? 'Klasör' : 'Grup'}
               </span>
             </div>
-            <h3 className="text-sm font-bold leading-tight text-foreground line-clamp-2">
+            <h3 className={cn(
+              'font-headline font-bold leading-tight text-white line-clamp-2 transition-all duration-300',
+              focused ? 'text-xl font-extrabold' : 'text-sm',
+            )}>
               {group.Name}
             </h3>
-            <p className="text-[11px] text-muted-foreground mt-1">
+            <p className={cn('text-[11px] mt-1 transition-colors duration-200', focused ? 'text-primary font-bold' : 'text-muted-foreground')}>
               <span className={cn('font-semibold', focused ? 'text-primary' : 'text-primary/70')}>
                 {group.TotalCount}
               </span>

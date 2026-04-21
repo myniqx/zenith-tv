@@ -63,6 +63,10 @@
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
+  /* Font families */
+  --font-headline: 'Space Grotesk', sans-serif;
+  --font-body: 'Manrope', sans-serif;
+
   /* Border radius değerleri */
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -247,6 +251,7 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
     /* Bu satırlar @apply ile zaten tanımlandığı için gereksizdi ve kaldırıldı:
     background-color: var(--background);
     color: var(--foreground);

@@ -83,7 +83,7 @@ export function Settings() {
   return (
     <div className="flex-1 min-h-0 bg-background text-foreground overflow-y-auto">
       <div className="max-w-3xl mx-auto px-8 py-10">
-        <h1 className="text-3xl font-black tracking-tight text-foreground mb-1">Ayarlar</h1>
+        <h1 className="font-headline text-3xl font-black tracking-tight text-foreground mb-1">Ayarlar</h1>
         <p className="text-sm text-muted-foreground mb-10">Uygulama tercihlerinizi yönetin</p>
 
         <VerticalList fKey="settings">

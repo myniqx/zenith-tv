@@ -35,7 +35,7 @@ export function AddProfileForm({ onSuccess, onCancel }: AddProfileFormProps) {
   return (
     <div className="w-full max-w-lg bg-secondary rounded-2xl p-8 border border-border/20 shadow-2xl shadow-black/60">
       <div className="mb-6">
-        <h2 className="text-2xl font-black tracking-tight text-foreground">Yeni Profil</h2>
+        <h2 className="font-headline text-2xl font-black tracking-tight text-foreground">Yeni Profil</h2>
         <p className="text-sm text-muted-foreground mt-0.5">Profil adı ve M3U kaynağı girin</p>
       </div>
 
