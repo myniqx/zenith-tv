@@ -22,6 +22,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
+      '@navix/core': resolve(__dirname, '../../..', 'navix/packages/core/src/index.ts'),
+      '@navix/react': resolve(__dirname, '../../..', 'navix/packages/react/src/index.ts'),
     },
   },
   server: {

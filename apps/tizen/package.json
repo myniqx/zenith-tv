@@ -15,8 +15,6 @@
 		"@zenith-tv/parser": "workspace:*",
 		"@zenith-tv/content": "workspace:*",
 		"@zenith-tv/ui": "workspace:*",
-		"@navix/core": "file:../../../navix/packages/core",
-		"@navix/react": "file:../../../navix/packages/react",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",
 		"zustand": "^5.0.8",

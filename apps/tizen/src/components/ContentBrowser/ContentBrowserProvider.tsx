@@ -14,11 +14,6 @@ interface ContentBrowserContextValue {
 
   pushGroup: (group: GroupObject) => void
   popGroup: () => void
-  openWatchable: (item: WatchableObject) => void
-
-  isPlayingVideo: boolean
-  currentWatchable: WatchableObject | null
-  closeVideo: () => void
 }
 
 const ContentBrowserContext = createContext<ContentBrowserContextValue | null>(null)
@@ -48,8 +43,6 @@ export function ContentBrowserProvider({
   }
 
   const [groupStack, setGroupStack] = useState<GroupObject[]>([initialGroup])
-  const [isPlayingVideo, setIsPlayingVideo] = useState(false)
-  const [currentWatchable, setCurrentWatchable] = useState<WatchableObject | null>(null)
 
   const currentGroup = groupStack[groupStack.length - 1]
 
@@ -67,16 +60,6 @@ export function ContentBrowserProvider({
     }
   }
 
-  const openWatchable = (item: WatchableObject) => {
-    setCurrentWatchable(item)
-    setIsPlayingVideo(true)
-  }
-
-  const closeVideo = () => {
-    setIsPlayingVideo(false)
-    setCurrentWatchable(null)
-  }
-
   return (
     <ContentBrowserContext.Provider value={{
       groupStack,
@@ -85,10 +68,6 @@ export function ContentBrowserProvider({
       gridConfig,
       pushGroup,
       popGroup,
-      openWatchable,
-      isPlayingVideo,
-      currentWatchable,
-      closeVideo,
     }}>
       {children}
     </ContentBrowserContext.Provider>
