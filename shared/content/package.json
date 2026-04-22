@@ -10,7 +10,8 @@
 		"./types": "./src/types/index.ts",
 		"./stores/toast": "./src/stores/toast/index.ts",
 		"./stores/fileSync": "./src/stores/tools/fileSync/index.ts",
-		"./stores/content": "./src/stores/content/index.ts"
+		"./stores/content": "./src/stores/content/index.ts",
+		"./stores/profiles": "./src/stores/profiles/index.ts"
 	},
 	"scripts": {
 		"tsc": "tsc --noEmit"

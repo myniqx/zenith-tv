@@ -67,6 +67,7 @@ On Tizen OS, traditional shadows can often look "dirty" or pixelated. We achieve
 *   **The Layering Principle:** Rather than shadows, use the "Surface Stack." A `card` (#000000) placed on a `muted` (#131313) background creates a "sunken" effect. Conversely, a `secondary` (#262626) card on a `background` creates "lift."
 *   **The "Ghost Border" Fallback:** If a component requires a boundary for accessibility (e.g., a focused input field), use a "Ghost Border": `border` (#494847) at **20% opacity**. Never use 100% opaque lines.
 *   **Focus State Glow:** When an element is focused via remote control, apply a subtle outer glow using `primary` (#b6a0ff) at 15% opacity with a 30px spread. This mimics the light bleed of a cinema screen.
+*   **Scale Rule:** Default (unfocused) state is `scale-95`. Focused state is `scale-100`. Never use `scale-105` — containers with `overflow-hidden` will clip the element.
  
 ---
  
@@ -75,7 +76,7 @@ On Tizen OS, traditional shadows can often look "dirty" or pixelated. We achieve
 ### Remote-Optimized Buttons
 *   **Primary:** High-contrast gradient (`primary` to `ring`). Text is `primary-foreground` (Black).
 *   **Secondary:** Ghost style. No fill, `border` token at 30% opacity. On focus, it fills with `accent`.
-*   **Interaction:** On focus, a button should scale by **1.05x**. This kinetic feedback is vital for TV navigation.
+*   **Interaction:** On focus, a button should scale by **1.0x** (from a resting state of **0.95x**). This kinetic feedback is vital for TV navigation.
  
 ### Cinematic Cards
 *   **Rule:** Forbid the use of divider lines.

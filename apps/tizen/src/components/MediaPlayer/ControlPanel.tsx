@@ -2,13 +2,9 @@ import { Play, Pause, SkipBack, SkipForward, Square } from 'lucide-react'
 import { Button, HorizontalList, VerticalList } from '@navix/react'
 import { cn } from '@zenith-tv/ui/lib'
 import type { MultiLayerPanelProps } from '@navix/react'
+import { useTizenPlayerStore } from '../../stores/tizenPlayer'
 
 interface ControlPanelProps extends MultiLayerPanelProps {
-  paused: boolean
-  position: number
-  duration: number
-  onPlayPause: () => void
-  onSeek: (seconds: number) => void
   onStop: () => void
 }
 
@@ -21,13 +17,16 @@ function formatTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-export function ControlPanel({ fKey, paused, position, duration, onPlayPause, onSeek, onStop }: ControlPanelProps) {
-  const progress = duration > 0 ? Math.min((position / duration) * 100, 100) : 0
+export function ControlPanel({ fKey, onStop }: ControlPanelProps) {
+  const { playerState, time, duration, playback } = useTizenPlayerStore()
+
+  const paused = playerState === 'paused' || playerState === 'idle' || playerState === 'stopped'
+  const progress = duration > 0 ? Math.min((time / duration) * 100, 100) : 0
 
   return (
     <div className={cn(
       'absolute inset-x-0 bottom-0 px-16 py-10',
-      'bg-gradient-to-t from-black/90 via-black/60 to-transparent',
+      'bg-linear-to-t from-black/90 via-black/60 to-transparent',
       'backdrop-blur-sm',
     )}>
       <VerticalList fKey={fKey}>
@@ -35,7 +34,7 @@ export function ControlPanel({ fKey, paused, position, duration, onPlayPause, on
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-bold text-foreground tabular-nums">
-              {formatTime(position)}
+              {formatTime(time)}
             </span>
             <span className="text-sm text-muted-foreground tabular-nums">
               {formatTime(duration)}
@@ -52,7 +51,7 @@ export function ControlPanel({ fKey, paused, position, duration, onPlayPause, on
         {/* controls */}
         <HorizontalList fKey={`${fKey}-controls`}>
           <div className="flex items-center justify-center gap-4">
-            <Button fKey={`${fKey}-back10`} onClick={() => onSeek(Math.max(0, position - 10))}>
+            <Button fKey={`${fKey}-back10`} onClick={() => playback({ time: Math.max(0, time - 10) })}>
               {({ focused }) => (
                 <div className={cn(
                   'flex items-center justify-center w-12 h-12 rounded-full transition-all duration-200',
@@ -63,7 +62,7 @@ export function ControlPanel({ fKey, paused, position, duration, onPlayPause, on
               )}
             </Button>
 
-            <Button fKey={`${fKey}-playpause`} onClick={onPlayPause}>
+            <Button fKey={`${fKey}-playpause`} onClick={() => playback({ action: paused ? 'play' : 'pause' })}>
               {({ focused }) => (
                 <div className={cn(
                   'flex items-center justify-center w-16 h-16 rounded-full transition-all duration-200',
@@ -79,7 +78,7 @@ export function ControlPanel({ fKey, paused, position, duration, onPlayPause, on
               )}
             </Button>
 
-            <Button fKey={`${fKey}-forward10`} onClick={() => onSeek(position + 10)}>
+            <Button fKey={`${fKey}-forward10`} onClick={() => playback({ time: time + 10 })}>
               {({ focused }) => (
                 <div className={cn(
                   'flex items-center justify-center w-12 h-12 rounded-full transition-all duration-200',

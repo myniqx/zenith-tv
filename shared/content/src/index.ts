@@ -11,3 +11,4 @@ export * from './utils';
 export * from './stores/toast';
 export * from './stores/tools/fileSync';
 export * from './stores/content';
+export * from './stores/profiles';

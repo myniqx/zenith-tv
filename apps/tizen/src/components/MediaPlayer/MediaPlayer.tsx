@@ -1,6 +1,11 @@
+import { useEffect } from 'react'
 import { MultiLayer } from '@navix/react'
 import { WatchableObject } from '@zenith-tv/content'
-import { VideoPlayerStub } from '../ContentBrowser/VideoPlayerStub'
+import { useTizenPlayerStore } from '../../stores/tizenPlayer'
+import { VideoPlayerAVPlay } from './VideoPlayerAVPlay'
+import { VideoPlayerHTML5 } from './VideoPlayerHTML5'
+
+const HAS_AVPLAY = !!window.webapis?.avplay
 import { ControlPanel } from './ControlPanel'
 import { TrackPanel } from './TrackPanel'
 import { EpisodePanel } from './EpisodePanel'
@@ -15,6 +20,12 @@ interface MediaPlayerProps {
 }
 
 export function MediaPlayer({ watchable, groupItems = [], onClose, onSelectItem }: MediaPlayerProps) {
+  const play = useTizenPlayerStore((s) => s.play)
+
+  useEffect(() => {
+    play(watchable)
+  }, [watchable.Url])
+
   return (
     <div className="fixed inset-0 z-50 bg-black">
       <MultiLayer
@@ -24,7 +35,7 @@ export function MediaPlayer({ watchable, groupItems = [], onClose, onSelectItem 
         onPrev={() => false}
 
         baseLayer={() => (
-          <VideoPlayerStub watchable={watchable} onClose={onClose} />
+          HAS_AVPLAY ? <VideoPlayerAVPlay /> : <VideoPlayerHTML5 />
         )}
 
         zapBanner={() => (
@@ -32,27 +43,11 @@ export function MediaPlayer({ watchable, groupItems = [], onClose, onSelectItem 
         )}
 
         down={(props) => (
-          <ControlPanel
-            {...props}
-            paused={false}
-            position={0}
-            duration={0}
-            onPlayPause={() => {}}
-            onSeek={() => {}}
-            onStop={onClose}
-          />
+          <ControlPanel {...props} onStop={onClose} />
         )}
 
         left={(props) => (
-          <TrackPanel
-            {...props}
-            audioTracks={[]}
-            subtitleTracks={[]}
-            currentAudio={-1}
-            currentSubtitle={-1}
-            onSelectAudio={() => {}}
-            onSelectSubtitle={() => {}}
-          />
+          <TrackPanel {...props} />
         )}
 
         right={groupItems.length > 0 ? (props) => (
@@ -65,13 +60,10 @@ export function MediaPlayer({ watchable, groupItems = [], onClose, onSelectItem 
         ) : undefined}
 
         up={(props) => (
-          <MetaPanel
-            {...props}
-            watchable={watchable}
-          />
+          <MetaPanel {...props} watchable={watchable} />
         )}
 
-        panelTimeout={4000}
+        panelTimeout={400000}
       />
     </div>
   )

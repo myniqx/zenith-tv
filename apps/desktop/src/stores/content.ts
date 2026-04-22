@@ -22,5 +22,8 @@ export const useContentStore = createContentStore({
   setLastProfile: (username, uuid) => useSettingsStore.getState().setLastProfile(username, uuid),
 })
 
+// Make store available globally to avoid circular dependency with profiles store
+;(globalThis as any).__zenith_content_store = useContentStore
+
 // Re-export types for backward compatibility
 export type { ContentState, CategoryType, SortBy, SortOrder, GroupBy, UserData, M3UStats, M3UUpdateData, StatusMessage, StatusKind } from '@zenith-tv/content'

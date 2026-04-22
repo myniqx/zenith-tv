@@ -2,21 +2,8 @@ import { Volume2, Subtitles } from 'lucide-react'
 import { Button, VerticalList, HorizontalList } from '@navix/react'
 import { cn } from '@zenith-tv/ui/lib'
 import type { MultiLayerPanelProps } from '@navix/react'
-
-interface Track {
-  index: number
-  language: string
-  label?: string
-}
-
-interface TrackPanelProps extends MultiLayerPanelProps {
-  audioTracks: Track[]
-  subtitleTracks: Track[]
-  currentAudio: number
-  currentSubtitle: number
-  onSelectAudio: (index: number) => void
-  onSelectSubtitle: (index: number) => void
-}
+import type { VlcTrack } from '@zenith-tv/content'
+import { useTizenPlayerStore } from '../../stores/tizenPlayer'
 
 function TrackList({
   fKey,
@@ -25,9 +12,9 @@ function TrackList({
   onSelect,
 }: {
   fKey: string
-  tracks: Track[]
+  tracks: VlcTrack[]
   current: number
-  onSelect: (index: number) => void
+  onSelect: (id: number) => void
 }) {
   if (tracks.length === 0) {
     return <p className="text-xs text-muted-foreground/50 px-2 py-1">Track bulunamadı</p>
@@ -37,12 +24,12 @@ function TrackList({
     <VerticalList fKey={fKey}>
       <div className="space-y-1">
         {tracks.map((track) => {
-          const isActive = track.index === current
+          const isActive = track.id === current
           return (
             <Button
-              key={track.index}
-              fKey={`${fKey}-${track.index}`}
-              onClick={() => onSelect(track.index)}
+              key={track.id}
+              fKey={`${fKey}-${track.id}`}
+              onClick={() => onSelect(track.id)}
             >
               {({ focused }) => (
                 <div className={cn(
@@ -57,7 +44,7 @@ function TrackList({
                     'text-sm font-semibold transition-colors duration-200',
                     focused ? 'text-foreground' : isActive ? 'text-primary' : 'text-muted-foreground',
                   )}>
-                    {track.label || track.language.toUpperCase()}
+                    {track.name}
                   </span>
                 </div>
               )}
@@ -69,15 +56,10 @@ function TrackList({
   )
 }
 
-export function TrackPanel({
-  fKey,
-  audioTracks,
-  subtitleTracks,
-  currentAudio,
-  currentSubtitle,
-  onSelectAudio,
-  onSelectSubtitle,
-}: TrackPanelProps) {
+export function TrackPanel({ fKey }: MultiLayerPanelProps) {
+  const { audioTracks, subtitleTracks, currentAudioTrack, currentSubtitleTrack, audio, subtitle } =
+    useTizenPlayerStore()
+
   return (
     <div className={cn(
       'absolute inset-y-0 left-0 w-72 flex flex-col',
@@ -100,8 +82,8 @@ export function TrackPanel({
             <TrackList
               fKey={`${fKey}-audio`}
               tracks={audioTracks}
-              current={currentAudio}
-              onSelect={onSelectAudio}
+              current={currentAudioTrack}
+              onSelect={(id) => audio({ track: id })}
             />
           </div>
 
@@ -116,8 +98,8 @@ export function TrackPanel({
             <TrackList
               fKey={`${fKey}-sub`}
               tracks={subtitleTracks}
-              current={currentSubtitle}
-              onSelect={onSelectSubtitle}
+              current={currentSubtitleTrack}
+              onSelect={(id) => subtitle({ track: id })}
             />
           </div>
         </div>

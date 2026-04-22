@@ -123,7 +123,7 @@ export function WatchableCard({ fKey, watchable }: WatchableCardProps) {
                     {({ isExpanded: playerOpen, focused, collapse: collapsePlayer }) => (
                       <>
                         <div className={cn(
-                          'flex items-center gap-2 pl-3 pr-4 py-2 rounded-xl text-xs font-bold transition-all duration-200',
+                          'flex items-center gap-2 pl-3 pr-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer',
                           focused
                             ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/40 scale-105'
                             : 'bg-black/60 backdrop-blur-sm text-white',

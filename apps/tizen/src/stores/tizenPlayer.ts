@@ -12,18 +12,15 @@ import type {
   ShortcutOptions,
   ClientEventData,
 } from '@zenith-tv/content';
-import type { AVPlayTrackInfo, AVPlayState } from '../types/tizen';
 import { WatchableObject } from '@zenith-tv/content';
 import { useContentStore } from './content';
 import { useSettingsStore } from './settings';
+import type { PlayerBackend, PlayerBackendCallbacks } from '../backends/playerBackend';
 
-// Singleton state for event listeners
-let listenersInitialized = false;
 let initializationPromise: Promise<void> | null = null;
 
-// P2P pending event accumulator. AVPlay callbacks write partial data here.
+// P2P pending event accumulator. Backend callbacks write partial data here.
 // The P2PManager interval calls flushPendingEvent() to send and reset it.
-// Kept outside Zustand to avoid type spread issues with ClientEventData.
 let pendingEvent: Partial<ClientEventData> = {};
 
 interface TizenPlayerState {
@@ -71,6 +68,7 @@ interface TizenPlayerState {
   // Actions
   init: () => Promise<void>;
   play: (item: WatchableObject) => Promise<void>;
+  setupBackend: (backend: PlayerBackend) => void;
   setScreenMode: (mode: ScreenMode) => void;
   setStickyElement: (element: HTMLElement | null) => void;
 
@@ -83,35 +81,25 @@ interface TizenPlayerState {
   window: (options: WindowOptions) => Promise<boolean>;
   shortcut: (options: ShortcutOptions) => Promise<void>;
 
-  // P2P: Build a ClientEventData snapshot of the full current state.
-  // Used to answer `state_request` from the server.
+  // P2P
   getFullVlcEvent: () => ClientEventData;
-
-  // P2P: Flush accumulated pending event data. Returns null if nothing changed.
   flushPendingEvent: () => ClientEventData | null;
-
-  // Internal helpers
-  _setupEventListeners: () => void;
-  _setupTizenCore: () => void;
-  _mapAVPlayState: (avplayState: AVPlayState) => VlcState;
-  _mapTracksToVlcFormat: (tracks: AVPlayTrackInfo[]) => {
-    audio: VlcTrack[];
-    subtitle: VlcTrack[];
-    video: VlcTrack[];
-  };
 
   // Helpers
   shouldStickyPanelVisible: () => boolean;
+
+  // Internal
+  _backend: PlayerBackend | null;
+  _buildCallbacks: () => PlayerBackendCallbacks;
 }
 
 export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
-  // Initial state
   isAvailable: false,
   isInitialized: false,
   playerState: 'idle',
   time: 0,
   duration: 0,
-  volume: 100, // STUB: Tizen doesn't provide app-level volume control
+  volume: 100,
   isMuted: false,
   audioTracks: [],
   subtitleTracks: [],
@@ -123,640 +111,268 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
   position: 0,
   buffering: 0,
   rate: 1.0,
-  isSeekable: true, // Most IPTV streams are seekable
+  isSeekable: true,
   aspectRatio: null,
   crop: null,
   scale: 0,
   deinterlace: null,
   audioDelay: 0,
   subtitleDelay: 0,
-  screenMode: 'fullscreen', // Tizen is always fullscreen
+  screenMode: 'fullscreen',
   prevScreenMode: 'fullscreen',
   stickyElement: null,
   lastStickyBounds: undefined,
   wasPlayingBeforeMinimize: false,
   currentItem: null,
   lastSavedTime: 0,
+  _backend: null,
 
-  // Map AVPlay state to VLC state format
-  _mapAVPlayState: (avplayState: AVPlayState): VlcState => {
-    switch (avplayState) {
-      case 'NONE':
-      case 'IDLE':
-        return 'idle';
-      case 'READY':
-        return 'opening';
-      case 'PLAYING':
-        return 'playing';
-      case 'PAUSED':
-        return 'paused';
-      default:
-        return 'unknown';
-    }
+  // Called by VideoPlayerAVPlay or VideoPlayerHTML5 on mount
+  setupBackend: (backend) => {
+    const prev = get()._backend;
+    if (prev) prev.destroy();
+    set({ _backend: backend, isAvailable: true, isInitialized: true });
   },
 
-  // Convert Tizen track format to VLC track format
-  _mapTracksToVlcFormat: (tracks: AVPlayTrackInfo[]) => {
-    const audio: VlcTrack[] = [];
-    const subtitle: VlcTrack[] = [];
-    const video: VlcTrack[] = [];
+  // Build callbacks that backend uses to report events back into the store
+  _buildCallbacks: () => ({
+    onTimeUpdate: (time, duration) => {
+      const state = get();
+      const position = duration > 0 ? time / duration : 0;
 
-    tracks.forEach((track) => {
-      let name = `Track ${track.index}`;
+      set({ time, duration, position });
+      pendingEvent.currentVideo = { ...pendingEvent.currentVideo, time, position };
 
-      // Parse extra_info JSON if available
-      if (track.extra_info) {
-        try {
-          const info = JSON.parse(track.extra_info);
-          if (info.language) {
-            name = `${info.language.toUpperCase()}`;
-            if (info.channels) {
-              name += ` (${info.channels}ch)`;
-            }
-          }
-        } catch {
-          // If parsing fails, use default name
+      // Auto-save progress every 10 seconds
+      if (state.currentItem && duration > 0) {
+        const timeSinceLastSave = Math.abs(time - state.lastSavedTime);
+        if (timeSinceLastSave >= 10) {
+          useContentStore.getState().saveWatchProgress(state.currentItem, time, duration);
+          set({ lastSavedTime: time });
         }
       }
+    },
 
-      const vlcTrack: VlcTrack = {
-        id: track.index,
-        name,
+    onStateChange: (playerState) => {
+      set({ playerState });
+      pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: playerState };
+    },
+
+    onTracksReady: (audio, subtitle) => {
+      set({ audioTracks: audio, subtitleTracks: subtitle });
+      pendingEvent.mediaInfo = {
+        ...pendingEvent.mediaInfo,
+        audioTracks: audio,
+        subtitleTracks: subtitle,
+        videoTracks: [],
+        duration: get().duration,
+        isSeekable: true,
+        url: get().currentItem?.Url ?? null,
       };
 
-      if (track.type === 'AUDIO') {
-        audio.push(vlcTrack);
-      } else if (track.type === 'TEXT') {
-        subtitle.push(vlcTrack);
-      } else if (track.type === 'VIDEO') {
-        video.push(vlcTrack);
+      // Apply saved track preferences
+      const state = get();
+      const savedTracks = state.currentItem?.userData?.tracks;
+
+      if (savedTracks) {
+        if (savedTracks.audio !== undefined && audio.some((t) => t.id === savedTracks.audio)) {
+          state.audio({ track: savedTracks.audio });
+        }
+        if (savedTracks.subtitle !== undefined && subtitle.some((t) => t.id === savedTracks.subtitle)) {
+          state.subtitle({ track: savedTracks.subtitle });
+        }
+      } else {
+        const { preferredAudioLanguage, preferredSubtitleLanguage } = useSettingsStore.getState();
+        const match = (name: string, lang: string) => name.toLowerCase().includes(lang.toLowerCase());
+
+        if (preferredAudioLanguage) {
+          const matched = audio.find((t) => match(t.name, preferredAudioLanguage));
+          if (matched) state.audio({ track: matched.id });
+        }
+        if (preferredSubtitleLanguage) {
+          const matched = subtitle.find((t) => match(t.name, preferredSubtitleLanguage));
+          if (matched) state.subtitle({ track: matched.id });
+        }
       }
-    });
+    },
 
-    return { audio, subtitle, video };
-  },
+    onBuffering: (percent) => {
+      set({ buffering: percent });
+      pendingEvent.currentVideo = { ...pendingEvent.currentVideo, buffering: percent };
+    },
 
-  _setupTizenCore: async () => {
-    // Core setup (volume, rate, etc.)
-    // Note: Tizen doesn't have app-level volume control
-    const state = get();
+    onError: (message) => {
+      set({ playerState: 'error', error: message });
+      pendingEvent.currentVideo = { ...pendingEvent.currentVideo, error: message };
+    },
 
-    // Set playback rate if supported
-    if (state.rate !== 1.0) {
-      try {
-        window.webapis?.avplay?.setSpeed(state.rate);
-      } catch (error) {
-        console.warn('[Tizen] Failed to set playback rate:', error);
+    onEnded: () => {
+      const state = get();
+      set({ playerState: 'ended' });
+      pendingEvent.currentVideo = { ...pendingEvent.currentVideo, endReached: true };
+
+      if (state.currentItem && state.duration > 0) {
+        useContentStore.getState().saveWatchProgress(
+          state.currentItem,
+          state.duration,
+          state.duration
+        );
       }
-    }
-  },
+    },
+  }),
 
-  // Initialize Tizen AVPlay and setup event listeners
   init: async () => {
     const state = get();
-
-    // Already initialized
     if (state.isInitialized) return;
-
-    // Return existing promise if initialization is in progress
-    if (initializationPromise) {
-      return initializationPromise;
-    }
+    if (initializationPromise) return initializationPromise;
 
     initializationPromise = (async () => {
-      try {
-        // Check if Tizen webapis is available
-        const available = !!window.webapis?.avplay;
-        set({ isAvailable: available });
-
-        if (available) {
-          // AVPlay doesn't need explicit init, just check state
-          const currentState = window.webapis.avplay.getState();
-          set({
-            isInitialized: true,
-            playerState: state._mapAVPlayState(currentState),
-          });
-
-          // Setup event listeners once
-          state._setupEventListeners();
-        } else {
-          set({ error: 'Tizen AVPlay API not available' });
-        }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Failed to initialize AVPlay';
-        set({ isAvailable: false, error: errorMsg });
-      } finally {
-        initializationPromise = null;
-      }
+      // isAvailable and isInitialized are set by setupBackend() when a
+      // VideoPlayerAVPlay or VideoPlayerHTML5 component mounts.
+      initializationPromise = null;
     })();
 
     return initializationPromise;
   },
 
-  // Setup AVPlay event listeners (called once during init)
-  _setupEventListeners: () => {
-    if (listenersInitialized) return;
-
-    const avplay = window.webapis?.avplay;
-    if (!avplay) return;
-
-    avplay.setListener({
-      // Playback completed
-      onstreamcompleted: () => {
-        const state = get();
-        set({ playerState: 'ended' });
-        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, endReached: true };
-
-        // Save final progress
-        if (state.currentItem && state.duration > 0) {
-          useContentStore.getState().saveWatchProgress(
-            state.currentItem,
-            state.duration,
-            state.duration
-          );
-        }
-      },
-
-      // Time updates (periodic callback with current position in milliseconds)
-      oncurrentplaytime: (currentTime: number) => {
-        const state = get();
-        const timeInSeconds = Math.floor(currentTime / 1000);
-        const position = state.duration > 0 ? timeInSeconds / state.duration : 0;
-
-        set({
-          time: timeInSeconds,
-          position,
-        });
-
-        pendingEvent.currentVideo = {
-          ...pendingEvent.currentVideo,
-          time: timeInSeconds,
-          position,
-        };
-
-        // Auto-save progress every 10 seconds
-        if (state.currentItem && state.duration > 0) {
-          const timeSinceLastSave = Math.abs(timeInSeconds - state.lastSavedTime);
-          if (timeSinceLastSave >= 10) {
-            useContentStore.getState().saveWatchProgress(
-              state.currentItem,
-              timeInSeconds,
-              state.duration
-            );
-            set({ lastSavedTime: timeInSeconds });
-          }
-        }
-      },
-
-      // Buffering started
-      onbufferingstart: () => {
-        set({ playerState: 'buffering', buffering: 0 });
-        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'buffering', buffering: 0 };
-      },
-
-      // Buffering progress (0-100)
-      onbufferingprogress: (percent: number) => {
-        set({ buffering: percent });
-        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, buffering: percent };
-      },
-
-      // Buffering completed
-      onbufferingcomplete: () => {
-        set({ playerState: 'playing', buffering: 0 });
-        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'playing', buffering: 0 };
-      },
-
-      // Error occurred
-      onerror: (errorType: string) => {
-        console.error('[Tizen] AVPlay error:', errorType);
-        set({
-          error: `AVPlay error: ${errorType}`,
-          playerState: 'error',
-        });
-        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, error: `AVPlay error: ${errorType}` };
-      },
-
-      // Error with message
-      onerrormsg: (errorType: string, errorMsg: string) => {
-        console.error('[Tizen] AVPlay error:', errorType, errorMsg);
-        set({
-          error: `${errorType}: ${errorMsg}`,
-          playerState: 'error',
-        });
-        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, error: `${errorType}: ${errorMsg}` };
-      },
-
-      // Subtitle change
-      onsubtitlechange: (duration, subtitles, type, attributes) => {
-        // Handle subtitle display updates if needed
-        console.log('[Tizen] Subtitle changed:', subtitles);
-      },
-    });
-
-    listenersInitialized = true;
-  },
-
-  // Play item
-  play: async (item: WatchableObject) => {
-    const { open } = get();
+  play: async (item) => {
     set({ currentItem: item });
-    await open(item.Url);
+    await get().open(item.Url);
   },
 
-  // Unified API: Open media
-  open: async (options: OpenOptions | string) => {
-    const { isAvailable, _mapTracksToVlcFormat, _setupTizenCore } = get();
-    if (!isAvailable) return;
+  open: async (options) => {
+    const { _backend, _buildCallbacks, currentItem } = get();
+    if (!_backend) return;
 
-    const avplay = window.webapis?.avplay;
-    if (!avplay) return;
+    const url = typeof options === 'string' ? options : options.file;
 
     try {
-      const url = typeof options === 'string' ? options : options.file;
-
-      // Close previous session if any
-      try {
-        const currentState = avplay.getState();
-        if (currentState !== 'NONE' && currentState !== 'IDLE') {
-          avplay.stop();
-        }
-        if (currentState !== 'NONE') {
-          avplay.close();
-        }
-      } catch {
-        // Ignore errors during cleanup
-      }
-
-      // Open new URL
       set({ playerState: 'opening', error: null });
-      avplay.open(url);
-
-      // Prepare (loads metadata and creates decoder)
-      avplay.prepare();
-
-      // Get duration and track info
-      const duration = Math.floor(avplay.getDuration() / 1000); // Convert ms to seconds
-      const trackInfo = avplay.getTotalTrackInfo();
-      const tracks = _mapTracksToVlcFormat(trackInfo);
-
-      set({
-        duration,
-        audioTracks: tracks.audio,
-        subtitleTracks: tracks.subtitle,
-        videoTracks: tracks.video,
-        playerState: 'paused', // Ready to play
-      });
-
-      pendingEvent.mediaInfo = {
-        duration,
-        isSeekable: true,
-        audioTracks: tracks.audio,
-        subtitleTracks: tracks.subtitle,
-        videoTracks: tracks.video,
-      };
-
-      // Apply user's saved track preferences
-      const state = get();
-      const savedTracks = state.currentItem?.userData?.tracks;
-
-      if (savedTracks) {
-        // Validate and apply saved audio track
-        if (savedTracks.audio !== undefined) {
-          const audioExists = tracks.audio.some((t) => t.id === savedTracks.audio);
-          if (audioExists) {
-            await state.audio({ track: savedTracks.audio });
-          }
-        }
-
-        // Validate and apply saved subtitle track
-        if (savedTracks.subtitle !== undefined) {
-          const subtitleExists = tracks.subtitle.some((t) => t.id === savedTracks.subtitle);
-          if (subtitleExists) {
-            await state.subtitle({ track: savedTracks.subtitle });
-          }
-        }
-      }
-      // Apply preferred language if no saved tracks
-      else {
-        const { preferredAudioLanguage, preferredSubtitleLanguage } = useSettingsStore.getState();
-
-        // Helper to match track name with language
-        const matchTrack = (trackName: string, language: string) => {
-          return trackName.toLowerCase().includes(language.toLowerCase());
-        };
-
-        // Auto-select audio track by language
-        if (preferredAudioLanguage) {
-          const matchedAudio = tracks.audio.find((t) => matchTrack(t.name, preferredAudioLanguage));
-          if (matchedAudio && matchedAudio.id !== -1) {
-            await state.audio({ track: matchedAudio.id });
-          }
-        }
-
-        // Auto-select subtitle track by language
-        if (preferredSubtitleLanguage) {
-          const matchedSubtitle = tracks.subtitle.find((t) =>
-            matchTrack(t.name, preferredSubtitleLanguage)
-          );
-          if (matchedSubtitle && matchedSubtitle.id !== -1) {
-            await state.subtitle({ track: matchedSubtitle.id });
-          }
-        }
-      }
-
-      // Setup core player settings
-      await _setupTizenCore();
-
-      // Auto-play
-      avplay.play();
-      set({ playerState: 'playing' });
-      pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'playing' };
+      await _backend.open(url, _buildCallbacks());
 
       // Resume from saved position if available
-      const savedPosition = state.currentItem?.userData?.position;
+      const savedPosition = currentItem?.userData?.position;
       if (savedPosition && savedPosition > 0) {
-        const seekTime = Math.floor(savedPosition * 1000); // Convert seconds to ms
-        avplay.seekTo(seekTime);
+        _backend.seekTo(savedPosition);
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Failed to open media';
-      console.error('[Tizen] Open error:', error);
-      set({ error: errorMsg, playerState: 'error' });
+      const msg = error instanceof Error ? error.message : 'Failed to open media';
+      console.error('[TizenPlayer] Open error:', error);
+      set({ error: msg, playerState: 'error' });
     }
   },
 
-  // Unified API: Playback control
-  playback: async (options: PlaybackOptions) => {
-    const { isAvailable, currentItem, time, duration } = get();
-    if (!isAvailable) return;
+  playback: async (options) => {
+    const { _backend, time, duration } = get();
+    if (!_backend) return;
 
-    const avplay = window.webapis?.avplay;
-    if (!avplay) return;
-
-    try {
-      // Handle actions
-      if (options.action) {
-        switch (options.action) {
-          case 'play':
-          case 'resume':
-            avplay.play();
-            set({ playerState: 'playing' });
-            pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'playing' };
-            break;
-
-          case 'pause':
-            avplay.pause();
-            set({ playerState: 'paused' });
-            pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'paused' };
-
-            // Save progress on pause
-            if (currentItem && duration > 0) {
-              useContentStore.getState().saveWatchProgress(currentItem, time, duration);
-              set({ lastSavedTime: time });
-            }
-            break;
-
-          case 'stop':
-            avplay.stop();
-            set({ playerState: 'stopped' });
-            pendingEvent.currentVideo = { ...pendingEvent.currentVideo, state: 'stopped' };
-
-            // Save progress on stop
-            if (currentItem && duration > 0) {
-              useContentStore.getState().saveWatchProgress(currentItem, time, duration);
-              set({ lastSavedTime: time });
-            }
-            break;
-        }
-      }
-
-      // Handle seek by time (absolute position in seconds)
-      if (options.time !== undefined) {
-        const seekTime = Math.floor(options.time * 1000); // Convert to milliseconds
-        avplay.seekTo(seekTime);
-      }
-
-      // Handle seek by position (0.0 - 1.0)
-      if (options.position !== undefined) {
-        const seekTime = Math.floor(options.position * duration * 1000);
-        avplay.seekTo(seekTime);
-      }
-
-      // Handle playback rate
-      if (options.rate !== undefined) {
-        // Tizen supports specific rate values: -16, -8, -4, -2, 1, 2, 4, 8, 16
-        const validRates = [-16, -8, -4, -2, 1, 2, 4, 8, 16];
-        const closestRate = validRates.reduce((prev, curr) =>
-          Math.abs(curr - options.rate!) < Math.abs(prev - options.rate!) ? curr : prev
-        );
-        avplay.setSpeed(closestRate);
-        set({ rate: closestRate });
-        pendingEvent.playerInfo = { ...pendingEvent.playerInfo, rate: closestRate };
-      }
-    } catch (error) {
-      console.error('[Tizen] Playback error:', error);
-      set({ error: error instanceof Error ? error.message : 'Playback control failed' });
-    }
-  },
-
-  // Unified API: Audio control
-  audio: async (options: AudioOptions) => {
-    const { isAvailable, currentItem } = get();
-    if (!isAvailable) return;
-
-    const avplay = window.webapis?.avplay;
-    if (!avplay) return;
-
-    try {
-      // STUB: Volume control
-      // Tizen does NOT provide application-level volume control.
-      // System volume is controlled via TV remote only.
-      if (options.volume !== undefined) {
-        console.warn(
-          '[Tizen] Volume control not supported - Tizen uses system-level volume via TV remote'
-        );
-        // Update local state for UI purposes, but it won't affect actual volume
-        set({ volume: options.volume });
-        pendingEvent.playerInfo = { ...pendingEvent.playerInfo, volume: options.volume };
-      }
-
-      // STUB: Mute control
-      // Tizen provides enableAudioStream/disableAudioStream but these are for
-      // enabling/disabling audio output entirely, not for muting.
-      if (options.mute !== undefined) {
-        if (options.mute) {
-          avplay.disableAudioStream();
-        } else {
-          avplay.enableAudioStream();
-        }
-        set({ isMuted: options.mute });
-        pendingEvent.playerInfo = { ...pendingEvent.playerInfo, muted: options.mute };
-      }
-
-      // Track selection
-      if (options.track !== undefined) {
-        if (options.track === -1) {
-          // Disable audio (not typical, but supported)
-          avplay.disableAudioStream();
-          set({ currentAudioTrack: -1 });
-          pendingEvent.currentVideo = { ...pendingEvent.currentVideo, audioTrack: -1 };
-        } else {
-          avplay.setSelectTrack('AUDIO', options.track);
-          set({ currentAudioTrack: options.track });
-          pendingEvent.currentVideo = { ...pendingEvent.currentVideo, audioTrack: options.track };
-
-          // Save track selection
-          if (currentItem) {
+    if (options.action) {
+      switch (options.action) {
+        case 'play':
+        case 'resume':
+          _backend.play();
+          break;
+        case 'pause':
+          _backend.pause();
+          // Save progress on pause
+          {
             const state = get();
-            useContentStore
-              .getState()
-              .saveTrackSelection(currentItem, options.track, state.currentSubtitleTrack);
+            if (state.currentItem && duration > 0) {
+              useContentStore.getState().saveWatchProgress(state.currentItem, state.time, duration);
+              set({ lastSavedTime: state.time });
+            }
           }
-        }
+          break;
+        case 'stop':
+          _backend.stop();
+          {
+            const s = get();
+            if (s.currentItem && duration > 0) {
+              useContentStore.getState().saveWatchProgress(s.currentItem, s.time, duration);
+              set({ lastSavedTime: s.time });
+            }
+          }
+          break;
       }
+    }
 
-      // STUB: Audio delay
-      // Tizen AVPlay does NOT support audio delay adjustment.
-      // Only subtitle delay is supported via setSubtitlePosition.
-      if (options.delay !== undefined) {
-        console.warn(
-          '[Tizen] Audio delay not supported - AVPlay API does not provide audio delay control. Only subtitle delay is available via subtitle() method.'
-        );
-        // Update local state for UI purposes
-        set({ audioDelay: options.delay });
-        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, audioDelay: options.delay };
-      }
-    } catch (error) {
-      console.error('[Tizen] Audio control error:', error);
-      set({ error: error instanceof Error ? error.message : 'Audio control failed' });
+    if (options.time !== undefined) _backend.seekTo(options.time);
+    if (options.position !== undefined) _backend.seekTo(options.position * duration);
+
+    if (options.rate !== undefined) {
+      // Rate control only supported by AVPlay — log for HTML5
+      console.warn('[TizenPlayer] Rate control may not be supported by current backend');
+      set({ rate: options.rate });
+      pendingEvent.playerInfo = { ...pendingEvent.playerInfo, rate: options.rate };
     }
   },
 
-  // Unified API: Video control
-  video: async (options: VideoOptions) => {
-    const { isAvailable } = get();
-    if (!isAvailable) return;
+  audio: async (options) => {
+    const { _backend, currentItem, currentSubtitleTrack } = get();
+    if (!_backend) return;
 
-    // STUB: All video settings
-    // Tizen AVPlay does NOT support these video adjustments:
-    // - aspectRatio: No API for aspect ratio control
-    // - crop: No API for cropping
-    // - scale: No API for scaling
-    // - deinterlace: No API for deinterlace control
-    // - teletext: Not applicable for IPTV streams
+    if (options.volume !== undefined) {
+      console.warn('[TizenPlayer] Volume control not supported on Tizen');
+      set({ volume: options.volume });
+      pendingEvent.playerInfo = { ...pendingEvent.playerInfo, volume: options.volume };
+    }
+
+    if (options.mute !== undefined) {
+      set({ isMuted: options.mute });
+      pendingEvent.playerInfo = { ...pendingEvent.playerInfo, muted: options.mute };
+    }
 
     if (options.track !== undefined) {
-      console.warn(
-        '[Tizen] Video track selection not supported - AVPlay setSelectTrack only works for AUDIO and TEXT types, not VIDEO'
-      );
-      // Update local state for UI consistency
-      set({ currentVideoTrack: options.track });
+      _backend.setAudioTrack(options.track);
+      set({ currentAudioTrack: options.track });
+      pendingEvent.currentVideo = { ...pendingEvent.currentVideo, audioTrack: options.track };
+
+      if (currentItem) {
+        useContentStore.getState().saveTrackSelection(currentItem, options.track, currentSubtitleTrack);
+      }
     }
 
-    if (options.aspectRatio !== undefined) {
-      console.warn(
-        '[Tizen] Aspect ratio control not supported - AVPlay does not provide aspectRatio API. Video displays in native aspect ratio.'
-      );
-      set({ aspectRatio: options.aspectRatio });
-    }
-
-    if (options.crop !== undefined) {
-      console.warn(
-        '[Tizen] Crop control not supported - AVPlay does not provide crop API. Use setDisplayRect for positioning only.'
-      );
-      set({ crop: options.crop });
-    }
-
-    if (options.scale !== undefined) {
-      console.warn(
-        '[Tizen] Scale control not supported - AVPlay does not provide scale API. Video scales automatically to display rect.'
-      );
-      set({ scale: options.scale });
-    }
-
-    if (options.deinterlace !== undefined) {
-      console.warn(
-        '[Tizen] Deinterlace control not supported - AVPlay handles deinterlacing automatically.'
-      );
-      set({ deinterlace: options.deinterlace });
+    if (options.delay !== undefined) {
+      console.warn('[TizenPlayer] Audio delay not supported on Tizen');
+      set({ audioDelay: options.delay });
     }
   },
 
-  // Unified API: Subtitle control
-  subtitle: async (options: SubtitleOptions) => {
-    const { isAvailable, currentItem, currentAudioTrack } = get();
-    if (!isAvailable) return;
+  video: async (options) => {
+    if (options.track !== undefined) set({ currentVideoTrack: options.track });
+    if (options.aspectRatio !== undefined) set({ aspectRatio: options.aspectRatio });
+    if (options.crop !== undefined) set({ crop: options.crop });
+    if (options.scale !== undefined) set({ scale: options.scale });
+    if (options.deinterlace !== undefined) set({ deinterlace: options.deinterlace });
+  },
 
-    const avplay = window.webapis?.avplay;
-    if (!avplay) return;
+  subtitle: async (options) => {
+    const { _backend, currentItem, currentAudioTrack } = get();
+    if (!_backend) return;
 
-    try {
-      // Track selection
-      if (options.track !== undefined) {
-        if (options.track === -1) {
-          // Disable subtitles
-          avplay.setSilentSubtitle(true);
-          set({ currentSubtitleTrack: -1 });
-          pendingEvent.currentVideo = { ...pendingEvent.currentVideo, subtitleTrack: -1 };
-        } else {
-          avplay.setSelectTrack('TEXT', options.track);
-          avplay.setSilentSubtitle(false);
-          set({ currentSubtitleTrack: options.track });
-          pendingEvent.currentVideo = { ...pendingEvent.currentVideo, subtitleTrack: options.track };
+    if (options.track !== undefined) {
+      _backend.setSubtitleTrack(options.track);
+      set({ currentSubtitleTrack: options.track });
+      pendingEvent.currentVideo = { ...pendingEvent.currentVideo, subtitleTrack: options.track };
 
-          // Save track selection
-          if (currentItem) {
-            useContentStore
-              .getState()
-              .saveTrackSelection(currentItem, currentAudioTrack, options.track);
-          }
-        }
+      if (currentItem) {
+        useContentStore.getState().saveTrackSelection(currentItem, currentAudioTrack, options.track);
       }
+    }
 
-      // Subtitle delay (position adjustment in milliseconds)
-      if (options.delay !== undefined) {
-        // Convert microseconds to milliseconds
-        const delayMs = Math.floor(options.delay / 1000);
-        avplay.setSubtitlePosition(delayMs);
-        set({ subtitleDelay: options.delay });
-        pendingEvent.currentVideo = { ...pendingEvent.currentVideo, subtitleDelay: options.delay };
-      }
-    } catch (error) {
-      console.error('[Tizen] Subtitle control error:', error);
-      set({ error: error instanceof Error ? error.message : 'Subtitle control failed' });
+    if (options.delay !== undefined) {
+      console.warn('[TizenPlayer] Subtitle delay limited on Tizen');
+      set({ subtitleDelay: options.delay });
+      pendingEvent.currentVideo = { ...pendingEvent.currentVideo, subtitleDelay: options.delay };
     }
   },
 
-  // Unified API: Window control (STUB)
-  window: async (options: WindowOptions): Promise<boolean> => {
-    const { isAvailable } = get();
-    if (!isAvailable) return false;
-
-    // STUB: Window management
-    // Tizen TV apps are ALWAYS fullscreen. There is no windowed mode.
-    // The only positioning control is setDisplayRect which sets the video
-    // display area within the screen, not window positioning.
-
+  window: async (options): Promise<boolean> => {
     if (options.screenMode !== undefined) {
-      console.warn(
-        '[Tizen] Screen mode control not supported - Tizen TV apps are always fullscreen. setDisplayRect() can position video area within screen, but cannot create floating windows or sticky mode like VLC.'
-      );
-
-      // Update local state for UI consistency
-      // Always report 'fullscreen' as that's the only mode
       set({ screenMode: 'fullscreen' });
-
-      // If user requested fullscreen, consider it successful
       return options.screenMode === 'fullscreen';
     }
-
     if (options.resize !== undefined) {
-      console.warn(
-        '[Tizen] Window resize not supported - Use setDisplayRect() for video positioning only. This controls video display area, not window bounds.'
-      );
-
-      // Could potentially use setDisplayRect here for video positioning
-      // but it's not the same as VLC window positioning
       const { x, y, width, height } = options.resize;
       try {
         window.webapis?.avplay?.setDisplayRect(x, y, width, height);
@@ -765,87 +381,36 @@ export const useTizenPlayerStore = create<TizenPlayerState>((set, get) => ({
         return false;
       }
     }
-
-    if (options.visible !== undefined) {
-      console.warn(
-        '[Tizen] Window visibility control not supported - Tizen apps are always visible when active. No minimize/hide functionality.'
-      );
-      return false;
-    }
-
     return false;
   },
 
-  // Unified API: Keyboard shortcut configuration (STUB)
-  shortcut: async (options: ShortcutOptions): Promise<void> => {
-    // STUB: Keyboard shortcuts
-    // Tizen Smart TVs use D-pad (directional pad) navigation via remote control,
-    // not keyboard input. There is no keyboard shortcut API.
-    // Navigation is handled via React Navigation and focus management.
-
-    console.warn(
-      '[Tizen] Keyboard shortcuts not supported - Tizen TVs use D-pad remote control navigation. Implement navigation using focus management (onKeyDown events for ArrowUp/Down/Left/Right/Enter/Back).'
-    );
-
-    if (options.shortcuts) {
-      console.log(
-        '[Tizen] Shortcuts config ignored:',
-        Object.keys(options.shortcuts).join(', ')
-      );
-    }
+  shortcut: async () => {
+    console.warn('[TizenPlayer] Keyboard shortcuts not supported on Tizen');
   },
 
-  // Set screen mode (STUB)
-  setScreenMode: (mode: ScreenMode) => {
-    // STUB: Screen mode
-    // Tizen is always fullscreen, but we update state for UI consistency
-    console.warn(
-      '[Tizen] setScreenMode called with:',
-      mode,
-      '- Tizen apps are always fullscreen'
-    );
-
+  setScreenMode: (mode) => {
     const currentMode = get().screenMode;
-    set({
-      prevScreenMode: currentMode,
-      screenMode: 'fullscreen', // Always fullscreen on Tizen
-    });
+    set({ prevScreenMode: currentMode, screenMode: 'fullscreen' });
   },
 
-  // Set sticky element (STUB)
-  setStickyElement: (element: HTMLElement | null) => {
-    // STUB: Sticky element
-    // No sticky mode on Tizen (no floating windows)
-    console.warn(
-      '[Tizen] setStickyElement called - Sticky mode not available on Tizen (no window positioning)'
-    );
+  setStickyElement: (element) => {
     set({ stickyElement: element });
   },
 
-  // Helper: Check if sticky panel should be visible (STUB)
-  shouldStickyPanelVisible: () => {
-    // STUB: Always false on Tizen (no sticky mode)
-    return false;
-  },
+  shouldStickyPanelVisible: () => false,
 
   flushPendingEvent: (): ClientEventData | null => {
     if (!pendingEvent.mediaInfo && !pendingEvent.playerInfo && !pendingEvent.currentVideo) {
       return null;
     }
-
-    // Inject currentItem URL into mediaInfo if present
     if (pendingEvent.mediaInfo) {
       pendingEvent.mediaInfo.url = get().currentItem?.Url ?? null;
     }
-
     const flushed = pendingEvent as ClientEventData;
     pendingEvent = {};
     return flushed;
   },
 
-  // Build a ClientEventData snapshot for P2P sync. The URL is injected
-  // from currentItem so the server can resolve its own WatchableObject
-  // via findByUrl — same pattern as the desktop vlcPlayer store.
   getFullVlcEvent: (): ClientEventData => {
     const s = get();
     return {
