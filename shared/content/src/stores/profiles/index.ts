@@ -162,7 +162,7 @@ export const createProfilesStore = (deps: ProfilesStoreDeps, persistKey: string)
             return
           }
 
-          const selectedUUID = uuid ?? profile.m3uRefs[0]
+          const selectedUUID = uuid ?? profile.lastSelectedUUID ?? profile.m3uRefs[0]
           if (!selectedUUID) {
             useToastStore.getState().warning('No M3U sources in this profile')
             return
@@ -170,7 +170,9 @@ export const createProfilesStore = (deps: ProfilesStoreDeps, persistKey: string)
 
           set((state) => ({
             profiles: state.profiles.map((p) =>
-              p.username === username ? { ...p, lastLogin: Date.now() } : p
+              p.username === username
+                ? { ...p, lastLogin: Date.now(), lastSelectedUUID: selectedUUID }
+                : p
             ),
           }))
 

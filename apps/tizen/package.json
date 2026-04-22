@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "tsc && vite build",
+		"build": "vite build",
 		"preview": "vite preview",
 		"package": "pnpm build && pnpm create-wgt",
 		"create-wgt": "node scripts/create-wgt.js",

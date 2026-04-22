@@ -1,6 +1,6 @@
-import { Expandable } from '@navix/react'
-import { Button, HorizontalList } from '@navix/react'
-import { cn } from '@zenith-tv/ui/lib'
+import { Expandable, HorizontalList } from '@navix/react'
+import { NavButton } from '@zenith-tv/ui/nav-button'
+import { getNavButtonStyles } from '@zenith-tv/ui/nav-button-styles'
 import { AlertTriangle, Trash2 } from 'lucide-react'
 
 interface ConfirmButtonProps {
@@ -8,7 +8,6 @@ interface ConfirmButtonProps {
   title: string
   message: string
   onConfirm: () => void
-  /** Trigger button görünümünü özelleştirmek için — varsayılan: çöp kutusu ikonu */
   trigger?: (focused: boolean) => React.ReactNode
 }
 
@@ -17,19 +16,14 @@ export function ConfirmButton({ fKey, title, message, onConfirm, trigger }: Conf
     <Expandable fKey={fKey}>
       {({ isExpanded, directlyFocused, collapse }) => (
         <>
-          {/* trigger */}
           {trigger ? (
             trigger(directlyFocused)
           ) : (
-            <div className={cn(
-              'p-2 rounded-lg transition-colors duration-200 cursor-pointer',
-              directlyFocused ? 'text-destructive bg-destructive/10' : 'text-muted-foreground/40',
-            )}>
-              <Trash2 className="w-3.5 h-3.5" />
-            </div>
+            <span className={getNavButtonStyles('destructive', directlyFocused, 'md')}>
+              <Trash2 className="w-5 h-5" />
+            </span>
           )}
 
-          {/* overlay */}
           {isExpanded && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
               <div className="w-full max-w-lg bg-secondary rounded-2xl p-8 border border-border/20 shadow-2xl shadow-black/60">
@@ -45,36 +39,23 @@ export function ConfirmButton({ fKey, title, message, onConfirm, trigger }: Conf
 
                 <HorizontalList fKey={`${fKey}-actions`}>
                   <div className="flex gap-2">
-                    <Button
+                    <NavButton
                       fKey={`${fKey}-confirm`}
+                      variant="destructive"
+                      size="lg"
                       onClick={() => { onConfirm(); collapse() }}
-                      className="cursor-pointer flex-1"
+                      className="flex-1 justify-center"
                     >
-                      {({ focused }) => (
-                        <div className={cn(
-                          'flex items-center justify-center py-3 rounded-xl text-sm font-bold transition-all duration-200',
-                          'bg-destructive text-destructive-foreground',
-                          focused && 'ring-2 ring-destructive/50 scale-105',
-                        )}>
-                          Sil
-                        </div>
-                      )}
-                    </Button>
-                    <Button
+                      Sil
+                    </NavButton>
+                    <NavButton
                       fKey={`${fKey}-cancel`}
+                      variant="secondary"
+                      size="lg"
                       onClick={collapse}
-                      className="cursor-pointer"
                     >
-                      {({ focused }) => (
-                        <div className={cn(
-                          'px-6 py-3 rounded-xl text-sm font-bold transition-all duration-200',
-                          'bg-muted text-muted-foreground',
-                          focused && 'text-foreground ring-1 ring-border scale-105',
-                        )}>
-                          İptal
-                        </div>
-                      )}
-                    </Button>
+                      İptal
+                    </NavButton>
                   </div>
                 </HorizontalList>
               </div>

@@ -54,13 +54,13 @@ export function GroupCard({ fKey, group }: GroupCardProps) {
               ))}
             </div>
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-card">
+            <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-muted to-card">
               <Icon className="w-16 h-16 text-muted-foreground/40" />
             </div>
           )}
 
           {/* gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent opacity-90" />
+          <div className="absolute inset-0 bg-linear-to-t from-card via-transparent to-transparent opacity-90" />
 
           {/* focus overlay */}
           {focused && <div className="absolute inset-0 bg-primary/10 pointer-events-none" />}

@@ -75,7 +75,9 @@ export function P2PManager() {
         });
         break;
       case 'profile_sync':
-        handleProfileSync(payload as ProfileSyncPayload, sendMessage);
+        handleProfileSync(payload as ProfileSyncPayload, sendMessage).catch((e) =>
+          console.error('[P2P] handleProfileSync failed:', e)
+        );
         break;
     }
   }, [lastReceivedMessage]);

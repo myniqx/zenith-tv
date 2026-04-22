@@ -10,35 +10,49 @@ export class HTTPDiscoveryService {
   private isScanning = false;
   private abortController: AbortController | null = null;
 
-  async getLocalIP(): Promise<string> {
+  async getLocalSubnets(): Promise<string[]> {
     // Electron environment
     // @ts-ignore - Electron types might not be available in shared
     if (typeof window !== 'undefined' && window.electron) {
       // @ts-ignore
-      return window.electron.network.getLocalIP();
+      const ip: string = await window.electron.network.getLocalIP();
+      return [ip.split('.').slice(0, 3).join('.')];
     }
 
     // Web/Tizen environment (WebRTC trick)
     return new Promise((resolve) => {
+      const subnets = new Set<string>();
+      let resolved = false;
+
+      const done = () => {
+        if (resolved) return;
+        resolved = true;
+        pc.close();
+        resolve(subnets.size > 0 ? [...subnets] : ['192.168.1']);
+      };
+
       const pc = new RTCPeerConnection({ iceServers: [] });
       pc.createDataChannel('');
       pc.createOffer().then((offer) => pc.setLocalDescription(offer));
 
       pc.onicecandidate = (ice) => {
-        if (!ice || !ice.candidate) return;
+        if (!ice.candidate) {
+          // null candidate = gathering complete
+          done();
+          return;
+        }
         const ipRegex = /([0-9]{1,3}\.){3}[0-9]{1,3}/;
         const match = ipRegex.exec(ice.candidate.candidate);
         if (match) {
-          resolve(match[0]);
-          pc.close();
+          const ip = match[0];
+          if (!ip.startsWith('127.') && !ip.startsWith('169.254.')) {
+            subnets.add(ip.split('.').slice(0, 3).join('.'));
+          }
         }
       };
 
-      // Fallback timeout
-      setTimeout(() => {
-        pc.close();
-        resolve('127.0.0.1');
-      }, 3000);
+      // Fallback timeout in case gathering never completes
+      setTimeout(done, 3000);
     });
   }
 
@@ -52,21 +66,25 @@ export class HTTPDiscoveryService {
     this.abortController = new AbortController();
 
     try {
-      const localIP = await this.getLocalIP();
-      const subnet = localIP.split('.').slice(0, 3).join('.');
+      const subnets = await this.getLocalSubnets();
 
-      console.log(`[Discovery] Scanning subnet ${subnet}.0/24`);
+      console.log(`[Discovery] Scanning subnets: ${subnets.map(s => `${s}.0/24`).join(', ')}`);
 
       const promises: Promise<DiscoveredController | null>[] = [];
 
-      // Scan 254 IP addresses in parallel
-      for (let i = 1; i <= 254; i++) {
-        const ip = `${subnet}.${i}`;
-        promises.push(this.checkHost(ip, 8080));
+      for (const subnet of subnets) {
+        for (let i = 1; i <= 254; i++) {
+          promises.push(this.checkHost(`${subnet}.${i}`, 8080));
+        }
       }
 
       const results = await Promise.all(promises);
-      const discovered = results.filter((r): r is DiscoveredController => r !== null);
+      const seen = new Set<string>();
+      const discovered = results.filter((r): r is DiscoveredController => {
+        if (r === null || seen.has(r.deviceId)) return false;
+        seen.add(r.deviceId);
+        return true;
+      });
 
       console.log(`[Discovery] Found ${discovered.length} controller(s)`);
       return discovered;

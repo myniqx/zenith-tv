@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useP2PClientStore } from '../../stores/p2pClientStore';
-import { Button, VerticalList, HorizontalList, Input } from '@navix/react';
+import { VerticalList, HorizontalList } from '@navix/react';
+import { NavButton } from '@zenith-tv/ui/nav-button';
+import { NavInput } from '@zenith-tv/ui/nav-input';
 import { RefreshCw, Wifi, WifiOff, X } from 'lucide-react';
 import { cn } from '@zenith-tv/ui/lib';
 
@@ -23,7 +25,6 @@ export function P2PView() {
   const allServers = [
     ...trustedServers,
     ...discoveredServers.filter(d => !trustedServers.find(t => t.deviceId === d.deviceId)),
-    ...Array(3).fill(null).map((_, i) => ({ deviceId: `placeholder-${i}`, deviceName: 'Cihaz Adı', ip: '192.168.1.X', port: 8080, version: '1.0' }))
   ];
 
   const isConnected = connectionStatus === 'connected';
@@ -33,7 +34,6 @@ export function P2PView() {
     <div className="flex-1 min-h-0 bg-background text-foreground overflow-y-auto">
       <div className="max-w-5xl mx-auto px-12 py-10">
 
-        {/* Page Header */}
         <h1 className="font-headline text-3xl font-black tracking-tight text-foreground mb-1">
           P2P Uzaktan Kontrol
         </h1>
@@ -66,9 +66,7 @@ export function P2PView() {
                   )}>
                     {isConnected && currentServer
                       ? currentServer.deviceName
-                      : isConnecting
-                        ? 'Bağlanıyor...'
-                        : 'Bağlı Değil'}
+                      : isConnecting ? 'Bağlanıyor...' : 'Bağlı Değil'}
                   </p>
                   {isConnected && currentServer && (
                     <p className="text-sm text-muted-foreground">{currentServer.ip}:{currentServer.port}</p>
@@ -77,18 +75,9 @@ export function P2PView() {
               </div>
 
               {isConnected && (
-                <Button fKey="disconnect-btn" onClick={disconnect}>
-                  {({ focused }) => (
-                    <span className={cn(
-                      'flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold transition-all duration-200',
-                      focused
-                        ? 'bg-destructive text-destructive-foreground scale-100'
-                        : 'bg-muted text-muted-foreground scale-95',
-                    )}>
-                      Bağlantıyı Kes
-                    </span>
-                  )}
-                </Button>
+                <NavButton fKey="disconnect-btn" variant="destructive" onClick={disconnect}>
+                  Bağlantıyı Kes
+                </NavButton>
               )}
             </div>
           </section>
@@ -106,28 +95,22 @@ export function P2PView() {
                     <label className="block text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
                       IP Adresi
                     </label>
-                    <Input
+                    <NavInput
+                      fKey="manual-ip-input"
                       value={manualIp}
-                      onChange={(e) => setManualIp(e)}
+                      onChange={setManualIp}
                       placeholder="192.168.1.X"
-                      className="w-full px-4 py-3 rounded-lg bg-muted text-foreground text-sm placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-primary/50"
                     />
                   </div>
-                  <Button
+                  <NavButton
                     fKey="manual-connect-btn"
+                    variant="primary"
+                    size="lg"
                     onClick={() => connect({ ip: manualIp, port: 8080, deviceId: 'manual', deviceName: 'Manual Server', version: '1.0' })}
+                    className="w-full justify-center"
                   >
-                    {({ focused }) => (
-                      <span className={cn(
-                        'block w-full text-center px-4 py-3 rounded-lg text-sm font-bold transition-all duration-200',
-                        focused
-                          ? 'bg-primary text-primary-foreground scale-100'
-                          : 'bg-primary/80 text-primary-foreground scale-95',
-                      )}>
-                        Bağlan
-                      </span>
-                    )}
-                  </Button>
+                    Bağlan
+                  </NavButton>
                 </div>
               </div>
             </VerticalList>
@@ -138,26 +121,21 @@ export function P2PView() {
                 <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                   Bulunan Cihazlar
                 </h2>
-                <Button fKey="scan-btn" onClick={() => scan()}>
-                  {({ focused }) => (
-                    <span className={cn(
-                      'flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200',
-                      focused ? 'bg-accent text-foreground scale-100' : 'text-muted-foreground scale-95',
-                    )}>
-                      <RefreshCw className={cn('w-3.5 h-3.5', isScanning && 'animate-spin')} />
-                      {isScanning ? 'Aranıyor...' : 'Tekrar Tara'}
-                    </span>
-                  )}
-                </Button>
+                <NavButton
+                  fKey="scan-btn"
+                  variant="ghost"
+                  icon={<RefreshCw className={cn('w-4 h-4', isScanning && 'animate-spin')} />}
+                  onClick={() => scan()}
+                >
+                  {isScanning ? 'Aranıyor...' : 'Tekrar Tara'}
+                </NavButton>
               </div>
 
               <div className="bg-secondary rounded-xl overflow-hidden">
                 {allServers.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 px-8">
                     <WifiOff size={32} className="text-muted-foreground/40 mb-4" />
-                    <p className="text-sm text-muted-foreground text-center">
-                      Hiçbir cihaz bulunamadı.
-                    </p>
+                    <p className="text-sm text-muted-foreground text-center">Hiçbir cihaz bulunamadı.</p>
                     <p className="text-xs text-muted-foreground/60 text-center mt-1">
                       Desktop uygulamasının açık olduğundan emin olun.
                     </p>
@@ -195,53 +173,30 @@ export function P2PView() {
                             <HorizontalList fKey={`server-actions-${server.deviceId}`}>
                               <div className="flex items-center gap-2 shrink-0">
                                 {isTrusted && (
-                                  <Button
+                                  <NavButton
                                     fKey={`autoconnect-${server.deviceId}`}
+                                    variant="secondary"
+                                    size="sm"
+                                    active={trustedData?.autoConnect}
                                     onClick={() => updateTrustedServer(server.deviceId, { autoConnect: !trustedData?.autoConnect })}
                                   >
-                                    {({ focused }) => (
-                                      <span className={cn(
-                                        'px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200',
-                                        trustedData?.autoConnect
-                                          ? focused ? 'bg-primary text-primary-foreground scale-100' : 'bg-primary/80 text-primary-foreground scale-95'
-                                          : focused ? 'bg-accent text-foreground scale-100' : 'bg-muted text-muted-foreground scale-95',
-                                      )}>
-                                        Otomatik: {trustedData?.autoConnect ? 'Açık' : 'Kapalı'}
-                                      </span>
-                                    )}
-                                  </Button>
+                                    Otomatik: {trustedData?.autoConnect ? 'Açık' : 'Kapalı'}
+                                  </NavButton>
                                 )}
-                                <Button
+                                <NavButton
                                   fKey={`connect-${server.deviceId}`}
+                                  variant="primary"
                                   onClick={() => connect(server)}
                                 >
-                                  {({ focused }) => (
-                                    <span className={cn(
-                                      'px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200',
-                                      focused
-                                        ? 'bg-primary text-primary-foreground scale-100'
-                                        : 'bg-secondary text-muted-foreground ring-1 ring-border/30 scale-95',
-                                    )}>
-                                      Bağlan
-                                    </span>
-                                  )}
-                                </Button>
+                                  Bağlan
+                                </NavButton>
                                 {isTrusted && (
-                                  <Button
+                                  <NavButton
                                     fKey={`forget-${server.deviceId}`}
+                                    variant="destructive"
+                                    icon={<X size={18} />}
                                     onClick={() => removeTrustedServer(server.deviceId)}
-                                  >
-                                    {({ focused }) => (
-                                      <span className={cn(
-                                        'flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200',
-                                        focused
-                                          ? 'bg-destructive/20 text-destructive scale-100'
-                                          : 'text-muted-foreground/50 scale-95',
-                                      )}>
-                                        <X size={14} />
-                                      </span>
-                                    )}
-                                  </Button>
+                                  />
                                 )}
                               </div>
                             </HorizontalList>

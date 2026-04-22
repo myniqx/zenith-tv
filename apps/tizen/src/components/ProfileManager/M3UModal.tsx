@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib'
-import { Button, HorizontalList, Input, VerticalList } from '@navix/react'
+import { HorizontalList, VerticalList } from '@navix/react'
+import { NavButton } from '@zenith-tv/ui/nav-button'
+import { NavInput } from '@zenith-tv/ui/nav-input'
+
 import { useProfilesStore } from '@/stores/profiles'
 import { useContentStore } from '@/stores/content'
 import { ConfirmButton } from './ConfirmDialog'
@@ -10,14 +13,16 @@ import type { Profile } from '@/stores/profiles'
 interface M3UModalProps {
   profile: Profile
   onClose: () => void
-  onPendingSelect: () => void
+  onLoad: (uuid: string) => void
 }
 
-export function M3UModal({ profile, onClose, onPendingSelect }: M3UModalProps) {
+export function M3UModal({ profile, onClose, onLoad }: M3UModalProps) {
   const { getUrlFromUUID, addM3UToProfile, removeM3UFromProfile, selectProfile } = useProfilesStore()
   const { currentUUID, update } = useContentStore()
   const currentUsername = useProfilesStore(s => s.getCurrentUsername())
 
+  const defaultUUID = profile.lastSelectedUUID ?? profile.m3uRefs[0] ?? null
+  const [selectedUUID, setSelectedUUID] = useState<string | null>(defaultUUID)
   const [syncingUUID, setSyncingUUID] = useState<string | null>(null)
   const [addUrl, setAddUrl] = useState('')
 
@@ -34,12 +39,6 @@ export function M3UModal({ profile, onClose, onPendingSelect }: M3UModalProps) {
     } catch {
       return url.slice(0, 30) + (url.length > 30 ? '...' : '')
     }
-  }
-
-  const handleSelect = async (uuid: string) => {
-    if (currentUUID === uuid && currentUsername === profile.username) return
-    onPendingSelect()
-    await selectProfile(profile.username, uuid)
   }
 
   const handleSync = async (uuid: string) => {
@@ -61,12 +60,15 @@ export function M3UModal({ profile, onClose, onPendingSelect }: M3UModalProps) {
     try {
       const newUuid = addM3UToProfile(profile.username, addUrl.trim())
       setAddUrl('')
-      onPendingSelect()
-      await selectProfile(profile.username, newUuid)
-      update()
+      setSelectedUUID(newUuid)
     } catch (error) {
       console.error('Failed to add M3U:', error)
     }
+  }
+
+  const handleLoad = () => {
+    if (!selectedUUID) return
+    onLoad(selectedUUID)
   }
 
   return (
@@ -87,7 +89,8 @@ export function M3UModal({ profile, onClose, onPendingSelect }: M3UModalProps) {
           {profile.m3uRefs.length > 0 && (
             <div className="px-6 pb-2">
               {profile.m3uRefs.map((uuid, index) => {
-                const isCurrentM3U = currentUUID === uuid && currentUsername === profile.username
+                const isSelected = selectedUUID === uuid
+                const isLoaded = currentUUID === uuid && currentUsername === profile.username
 
                 return (
                   <div key={uuid}>
@@ -97,44 +100,42 @@ export function M3UModal({ profile, onClose, onPendingSelect }: M3UModalProps) {
                       {/* Name + indicator */}
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <div className={cn(
-                          'w-1.5 h-1.5 rounded-full shrink-0',
-                          isCurrentM3U ? 'bg-primary' : 'bg-muted-foreground/30',
+                          'w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-200',
+                          isLoaded ? 'bg-primary' : isSelected ? 'bg-primary/40' : 'bg-muted-foreground/30',
                         )} />
                         <p className={cn(
-                          'text-sm truncate',
-                          isCurrentM3U ? 'text-foreground font-semibold' : 'text-muted-foreground',
+                          'text-sm truncate transition-colors duration-200',
+                          isSelected ? 'text-foreground font-semibold' : 'text-muted-foreground',
                         )}>
                           {getM3UDisplayName(uuid)}
                         </p>
+                        {isLoaded && (
+                          <span className="shrink-0 px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-bold uppercase tracking-widest">
+                            Yüklü
+                          </span>
+                        )}
                       </div>
 
                       {/* Actions */}
                       <HorizontalList fKey={`modal-m3u-actions-${uuid}`}>
                         <div className="flex items-center gap-1 shrink-0">
-                          <Button fKey={`modal-select-${uuid}`} onClick={() => handleSelect(uuid)}>
-                            {({ focused }) => (
-                              <span className={cn(
-                                'px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200',
-                                isCurrentM3U
-                                  ? focused ? 'bg-primary text-primary-foreground scale-100' : 'bg-primary/80 text-primary-foreground scale-95'
-                                  : focused ? 'bg-accent text-foreground scale-100' : 'bg-muted text-muted-foreground scale-95',
-                              )}>
-                                Seç
-                              </span>
-                            )}
-                          </Button>
+                          <NavButton
+                            fKey={`modal-select-${uuid}`}
+                            variant="secondary"
+                            active={isSelected}
+                            onClick={() => setSelectedUUID(uuid)}
+                          >
+                            Seç
+                          </NavButton>
 
-                          <Button fKey={`modal-sync-${uuid}`} onClick={() => handleSync(uuid)}>
-                            {({ focused }) => (
-                              <span className={cn(
-                                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200',
-                                focused ? 'bg-accent text-foreground scale-100' : 'text-muted-foreground scale-95',
-                              )}>
-                                <RefreshCw className={cn('w-3 h-3', syncingUUID === uuid && 'animate-spin')} />
-                                Güncelle
-                              </span>
-                            )}
-                          </Button>
+                          <NavButton
+                            fKey={`modal-sync-${uuid}`}
+                            variant="ghost"
+                            icon={<RefreshCw className={cn('w-4 h-4', syncingUUID === uuid && 'animate-spin')} />}
+                            onClick={() => handleSync(uuid)}
+                          >
+                            Güncelle
+                          </NavButton>
 
                           <ConfirmButton
                             fKey={`modal-delete-m3u-${uuid}`}
@@ -143,6 +144,9 @@ export function M3UModal({ profile, onClose, onPendingSelect }: M3UModalProps) {
                             onConfirm={async () => {
                               try {
                                 await removeM3UFromProfile(profile.username, uuid)
+                                if (selectedUUID === uuid) {
+                                  setSelectedUUID(profile.m3uRefs.find(r => r !== uuid) ?? null)
+                                }
                               } catch (error) {
                                 console.error('Failed to delete M3U:', error)
                               }
@@ -165,50 +169,34 @@ export function M3UModal({ profile, onClose, onPendingSelect }: M3UModalProps) {
             <label className="block text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
               Yeni M3U URL
             </label>
-            <Input
+            <NavInput
               fKey={`modal-input-m3u-${profile.username}`}
               value={addUrl}
               onChange={setAddUrl}
-            >
-              {({ value, focused, editing, inputRef }) => (
-                <input
-                  ref={inputRef}
-                  value={value}
-                  onChange={(e) => setAddUrl(e.target.value)}
-                  placeholder="https://example.com/playlist.m3u"
-                  className={cn(
-                    'w-full px-4 py-3 rounded-xl bg-background text-foreground text-sm font-mono placeholder:text-muted-foreground/40 outline-none border',
-                    editing ? 'border-primary/50' : focused ? 'border-border/50' : 'border-border/20',
-                  )}
-                />
-              )}
-            </Input>
+              placeholder="https://example.com/playlist.m3u"
+              mono
+            />
           </div>
 
           {/* Bottom Actions */}
           <div className="px-6 pb-6">
             <HorizontalList fKey={`m3u-modal-actions-${profile.username}`}>
               <div className="flex gap-2 justify-end">
-                <Button fKey={`modal-close-${profile.username}`} onClick={onClose}>
-                  {({ focused }) => (
-                    <span className={cn(
-                      'px-6 py-3 rounded-xl text-sm font-bold transition-all duration-200 bg-muted text-muted-foreground',
-                      focused ? 'text-foreground scale-100' : 'scale-95',
-                    )}>
-                      Kapat
-                    </span>
-                  )}
-                </Button>
-                <Button fKey={`modal-add-${profile.username}`} onClick={handleAdd}>
-                  {({ focused }) => (
-                    <span className={cn(
-                      'px-6 py-3 rounded-xl text-sm font-bold transition-all duration-200 bg-primary text-primary-foreground',
-                      focused ? 'scale-100' : 'scale-95',
-                    )}>
-                      Ekle
-                    </span>
-                  )}
-                </Button>
+                <NavButton fKey={`modal-close-${profile.username}`} variant="secondary" size="lg" onClick={onClose}>
+                  Kapat
+                </NavButton>
+                <NavButton fKey={`modal-add-${profile.username}`} variant="secondary" size="lg" onClick={handleAdd}>
+                  Ekle
+                </NavButton>
+                <NavButton
+                  fKey={`modal-load-${profile.username}`}
+                  variant="primary"
+                  size="lg"
+                  onClick={handleLoad}
+                  disabled={!selectedUUID}
+                >
+                  Yükle
+                </NavButton>
               </div>
             </HorizontalList>
           </div>

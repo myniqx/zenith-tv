@@ -29,7 +29,7 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
         <div className="flex items-center justify-between w-full px-12 py-5">
 
           <div className="flex items-center gap-12">
-            <h1 className="font-headline text-2xl font-black italic tracking-tighter text-white">
+            <h1 className="font-headline text-3xl font-black italic tracking-tighter text-white">
               Zenith TV
             </h1>
 
@@ -41,21 +41,20 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
                     key={section}
                     fKey={`menu-${section}`}
                     onClick={() => onSectionChange(section)}
-                    className="relative"
                   >
                     {({ focused }) => (
                       <span className={cn(
-                        'font-headline relative px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase transition-all duration-200',
+                        'font-headline relative px-5 py-2 rounded-full text-base font-bold tracking-widest uppercase transition-all duration-200 cursor-pointer select-none',
                         focused
-                          ? 'bg-accent scale-110 text-foreground'
+                          ? 'bg-accent scale-100 text-foreground'
                           : isActive
-                          ? 'text-primary'
-                          : 'text-muted-foreground',
+                          ? 'text-primary scale-95'
+                          : 'text-muted-foreground scale-95',
                       )}>
                         {MENU_LABELS[section]}
                         {isActive && (
                           <span className={cn(
-                            'absolute -bottom-2 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full',
+                            'absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full',
                             focused ? 'bg-foreground' : 'bg-primary',
                           )} />
                         )}
@@ -68,18 +67,18 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
           </div>
 
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/60 border border-border/20">
-              <Search size={14} className="text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Ara...</span>
+            <div className="flex items-center gap-3 px-5 py-2.5 rounded-full bg-secondary/60 border border-border/20">
+              <Search size={18} className="text-muted-foreground" />
+              <span className="text-base text-muted-foreground">Ara...</span>
             </div>
 
             <Button fKey="menu-profile" onClick={() => onSectionChange('profile')}>
               {({ focused }) => (
                 <span className={cn(
-                  'flex items-center justify-center p-2 rounded-full transition-all duration-200',
-                  focused ? 'bg-accent scale-110' : '',
+                  'flex items-center justify-center p-2.5 rounded-full transition-all duration-200 cursor-pointer select-none',
+                  focused ? 'bg-accent scale-100' : 'scale-95',
                 )}>
-                  <UserCircle size={22} className={cn(
+                  <UserCircle size={28} className={cn(
                     'transition-colors duration-200',
                     focused ? 'text-foreground' : activeSection === 'profile' ? 'text-primary' : 'text-foreground/60',
                   )} />
@@ -90,10 +89,10 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
             <Button fKey="menu-settings" onClick={() => onSectionChange('settings')}>
               {({ focused }) => (
                 <span className={cn(
-                  'flex items-center justify-center p-2 rounded-full transition-all duration-200',
-                  focused ? 'bg-accent scale-110' : '',
+                  'flex items-center justify-center p-2.5 rounded-full transition-all duration-200 cursor-pointer select-none',
+                  focused ? 'bg-accent scale-100' : 'scale-95',
                 )}>
-                  <Settings size={22} className={cn(
+                  <Settings size={28} className={cn(
                     'transition-colors duration-200',
                     focused ? 'text-foreground' : activeSection === 'settings' ? 'text-primary' : 'text-foreground/60',
                   )} />

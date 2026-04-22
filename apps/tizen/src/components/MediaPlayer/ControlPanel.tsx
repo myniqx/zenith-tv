@@ -55,7 +55,7 @@ export function ControlPanel({ fKey, onStop }: ControlPanelProps) {
               {({ focused }) => (
                 <div className={cn(
                   'flex items-center justify-center w-12 h-12 rounded-full transition-all duration-200',
-                  focused ? 'bg-accent text-primary scale-110' : 'text-muted-foreground',
+                  focused ? 'bg-accent text-primary scale-100' : 'text-muted-foreground scale-95',
                 )}>
                   <SkipBack className="w-5 h-5" />
                 </div>
@@ -67,8 +67,8 @@ export function ControlPanel({ fKey, onStop }: ControlPanelProps) {
                 <div className={cn(
                   'flex items-center justify-center w-16 h-16 rounded-full transition-all duration-200',
                   focused
-                    ? 'bg-primary text-primary-foreground scale-110 shadow-lg shadow-primary/30'
-                    : 'bg-secondary text-foreground',
+                    ? 'bg-primary text-primary-foreground scale-100 shadow-lg shadow-primary/30'
+                    : 'bg-secondary text-foreground scale-95',
                 )}>
                   {paused
                     ? <Play className="w-7 h-7 translate-x-0.5" />
@@ -82,7 +82,7 @@ export function ControlPanel({ fKey, onStop }: ControlPanelProps) {
               {({ focused }) => (
                 <div className={cn(
                   'flex items-center justify-center w-12 h-12 rounded-full transition-all duration-200',
-                  focused ? 'bg-accent text-primary scale-110' : 'text-muted-foreground',
+                  focused ? 'bg-accent text-primary scale-100' : 'text-muted-foreground scale-95',
                 )}>
                   <SkipForward className="w-5 h-5" />
                 </div>
@@ -93,7 +93,7 @@ export function ControlPanel({ fKey, onStop }: ControlPanelProps) {
               {({ focused }) => (
                 <div className={cn(
                   'flex items-center justify-center w-12 h-12 rounded-full transition-all duration-200',
-                  focused ? 'bg-destructive/20 text-destructive scale-110' : 'text-muted-foreground/50',
+                  focused ? 'bg-destructive/20 text-destructive scale-100' : 'text-muted-foreground/50 scale-95',
                 )}>
                   <Square className="w-4 h-4" />
                 </div>

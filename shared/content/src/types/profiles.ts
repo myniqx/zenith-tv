@@ -3,6 +3,7 @@ export interface Profile {
   createdAt: number
   m3uRefs: string[]
   lastLogin?: number
+  lastSelectedUUID?: string
 }
 
 export type M3UMap = Record<string, string>

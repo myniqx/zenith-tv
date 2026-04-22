@@ -1,6 +1,9 @@
-import { ListVideo, User } from 'lucide-react'
+import { ListVideo, User, Play, RefreshCw, Trash2 } from 'lucide-react'
 import { cn } from '@zenith-tv/ui/lib'
-import { Button, HorizontalList, Expandable } from '@navix/react'
+import { NavButton } from '@zenith-tv/ui/nav-button'
+import { getNavButtonStyles } from '@zenith-tv/ui/nav-button-styles'
+import { HorizontalList, Expandable } from '@navix/react'
+import { useState } from 'react'
 import { useProfilesStore } from '@/stores/profiles'
 import { useContentStore } from '@/stores/content'
 import { M3UStatsPlaceholder } from './M3UStatsPlaceholder'
@@ -15,15 +18,39 @@ interface ProfileCardProps {
   onDeleted: () => void
 }
 
+
 export function ProfileCard({ profile, isActive, onPendingSelect, onDeleted }: ProfileCardProps) {
-  const { deleteProfile } = useProfilesStore()
-  const { currentUUID } = useContentStore()
+  const { deleteProfile, selectProfile } = useProfilesStore()
+  const { currentUUID, update } = useContentStore()
   const currentUsername = useProfilesStore(s => s.getCurrentUsername())
+
+  const [isSyncing, setIsSyncing] = useState(false)
 
   const hasM3U = profile.m3uRefs.length > 0
   const activeUUID = hasM3U
     ? profile.m3uRefs.find(uuid => currentUUID === uuid && currentUsername === profile.username) ?? profile.m3uRefs[0]
     : null
+
+  const handleLoad = async (uuid?: string) => {
+    onPendingSelect()
+    await selectProfile(profile.username, uuid)
+  }
+
+  const handleUpdate = async () => {
+    if (isSyncing) return
+    setIsSyncing(true)
+    try {
+      const targetUUID = profile.lastSelectedUUID ?? profile.m3uRefs[0]
+      if (currentUUID !== targetUUID || currentUsername !== profile.username) {
+        await selectProfile(profile.username, targetUUID)
+      }
+      await update()
+    } catch (error) {
+      console.error('Failed to update M3U:', error)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   return (
     <div className="bg-secondary rounded-xl overflow-hidden transition-colors duration-200">
@@ -66,34 +93,54 @@ export function ProfileCard({ profile, isActive, onPendingSelect, onDeleted }: P
 
       {/* Bottom action row */}
       <HorizontalList fKey={`profile-actions-${profile.username}`}>
-        <div className="flex items-center justify-end px-6 pb-5 pt-2">
+        <div className="flex items-center justify-end gap-2 px-6 pb-5 pt-2">
 
-          {/* M3U Edit Modal trigger */}
-          <Expandable fKey={`m3u-modal-${profile.username}`}>
-            {({ isExpanded, directlyFocused, collapse }) => (
-              <>
-                <div className={cn(
-                  'flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all duration-200 cursor-pointer',
-                  directlyFocused
-                    ? 'bg-accent text-foreground scale-100'
-                    : 'bg-muted text-muted-foreground scale-95',
-                )}>
-                  <ListVideo className="w-3.5 h-3.5" />
-                  M3U Düzenle
-                </div>
+          {hasM3U && (
+            <NavButton
+              fKey={`load-profile-${profile.username}`}
+              variant="primary"
+              icon={<Play className="w-4 h-4" />}
+              onClick={handleLoad}
+            >
+              Yükle
+            </NavButton>
+          )}
 
-                {isExpanded && (
-                  <M3UModal
-                    profile={profile}
-                    onClose={collapse}
-                    onPendingSelect={onPendingSelect}
-                  />
-                )}
-              </>
-            )}
-          </Expandable>
+          {hasM3U && (
+            <NavButton
+              fKey={`update-profile-${profile.username}`}
+              variant="ghost"
+              icon={<RefreshCw className={cn('w-4 h-4', isSyncing && 'animate-spin')} />}
+              onClick={handleUpdate}
+              disabled={isSyncing}
+            >
+              Güncelle
+            </NavButton>
+          )}
 
-          {/* Delete Profile */}
+          {/* M3U modal — Expandable manages its own focus, trigger uses directlyFocused */}
+          {hasM3U && (
+            <Expandable fKey={`m3u-modal-${profile.username}`}>
+              {({ isExpanded, directlyFocused, collapse }) => (
+                <>
+                  <span className={getNavButtonStyles('secondary', directlyFocused, 'md')}>
+                    <ListVideo className="w-5 h-5" />
+                    M3U
+                  </span>
+
+                  {isExpanded && (
+                    <M3UModal
+                      profile={profile}
+                      onClose={collapse}
+                      onLoad={(uuid) => { collapse(); handleLoad(uuid) }}
+                    />
+                  )}
+                </>
+              )}
+            </Expandable>
+          )}
+
+          {/* Delete — ConfirmButton manages its own focus via Expandable */}
           <ConfirmButton
             fKey={`delete-profile-${profile.username}`}
             title="Profili Sil"
@@ -106,6 +153,11 @@ export function ProfileCard({ profile, isActive, onPendingSelect, onDeleted }: P
                 console.error('Failed to delete profile:', error)
               }
             }}
+            trigger={(focused) => (
+              <span className={getNavButtonStyles('destructive', focused, 'md')}>
+                <Trash2 className="w-5 h-5" />
+              </span>
+            )}
           />
         </div>
       </HorizontalList>

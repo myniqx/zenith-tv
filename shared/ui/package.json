@@ -23,7 +23,10 @@
 		"./lib/cn": "./src/lib/cn.ts",
 		"./tooltip": "./src/components/ui/tooltip.tsx",
 		"./styles": "./src/styles.css",
-		"./lib": "./src/lib/index.ts"
+		"./lib": "./src/lib/index.ts",
+		"./nav-button": "./src/components/shared/NavButton.tsx",
+		"./nav-button-styles": "./src/components/shared/navButtonStyles.ts",
+		"./nav-input": "./src/components/shared/NavInput.tsx"
 	},
 	"scripts": {
 		"dev": "vite",
