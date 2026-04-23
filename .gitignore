@@ -85,3 +85,12 @@ core/vlc-player/lib/win32-arm64/sdk/*
 core/vlc-player/lib/win32-arm64/sdk/lib/*
 !core/vlc-player/lib/win32-arm64/sdk/lib/*.lib
 !core/vlc-player/lib/win32-arm64/sdk/lib/*.def
+apps/tizen/author-signature.xml
+apps/tizen/certs/**
+apps/tizen/signature1.xml
+apps/tizen/workspace/**
+workspace/.metadata/.log
+apps/tizen/Debug/**
+apps/tizen/.project
+apps/tizen/.tproject
+apps/tizen/tizen_web_project.yaml
