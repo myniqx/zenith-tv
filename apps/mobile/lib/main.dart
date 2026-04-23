@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:media_kit/media_kit.dart';
 import 'core/device_type.dart';
+import 'core/app_theme.dart';
 import 'p2p/client/p2p_client_store.dart';
 import 'p2p/server/p2p_server_store.dart';
 import 'p2p/p2p_manager.dart';
@@ -65,14 +66,7 @@ class ZenithApp extends StatelessWidget {
         return MaterialApp(
           title: 'Zenith TV',
           debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            colorScheme: ColorScheme.dark(
-              primary: const Color(0xFFEF4444),
-              surface: const Color(0xFF0F172A),
-            ),
-            scaffoldBackgroundColor: const Color(0xFF0F172A),
-            useMaterial3: true,
-          ),
+          theme: buildAppTheme(),
           home: const _AppInitializer(),
         );
       }),
@@ -236,9 +230,9 @@ class _AppInitializerState extends State<_AppInitializer> {
   Widget build(BuildContext context) {
     if (!_initialized) {
       return const Scaffold(
-        backgroundColor: Color(0xFF0F172A),
+        backgroundColor: ZColors.background,
         body: Center(
-          child: CircularProgressIndicator(color: Color(0xFFEF4444)),
+          child: CircularProgressIndicator(),
         ),
       );
     }

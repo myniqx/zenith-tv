@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../core/app_theme.dart';
+import '../../core/tv_focus.dart';
 import '../../core/device_type.dart';
-import '../../p2p/client/p2p_client_store.dart';
-import '../../p2p/server/p2p_server_store.dart';
 import '../../stores/content_store.dart';
 import '../p2p/p2p_screen.dart';
 import '../profile/profile_screen.dart';
@@ -10,7 +11,6 @@ import '../content/content_screen.dart';
 
 enum AppSection { content, favorites, p2p, profile, settings }
 
-/// Root app shell — picks Phone / Tablet / TV layout based on DeviceType.
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -25,25 +25,18 @@ class _AppShellState extends State<AppShell> {
 
   Widget _buildContent() {
     switch (_section) {
-      case AppSection.content:
-        return const ContentScreen();
-      case AppSection.favorites:
-        return const _Placeholder(label: 'Favorites');
-      case AppSection.p2p:
-        return const P2PScreen();
-      case AppSection.profile:
-        return const ProfileScreen();
-      case AppSection.settings:
-        return const _Placeholder(label: 'Settings');
+      case AppSection.content:   return const ContentScreen();
+      case AppSection.favorites: return const _Placeholder(label: 'Favorites');
+      case AppSection.p2p:       return const P2PScreen();
+      case AppSection.profile:   return const ProfileScreen();
+      case AppSection.settings:  return const _Placeholder(label: 'Settings');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final contentStore = context.watch<ContentStore>();
-    final isReady = contentStore.isReady;
 
-    // Jump to content browser only after a user-triggered load completes
     if (contentStore.justLoaded) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -56,44 +49,36 @@ class _AppShellState extends State<AppShell> {
     final loadingBanner = contentStore.isLoading
         ? LinearProgressIndicator(
             value: contentStore.loadProgress > 0 ? contentStore.loadProgress : null,
-            backgroundColor: const Color(0xFF1E293B),
-            valueColor: const AlwaysStoppedAnimation(Color(0xFFEF4444)),
-            minHeight: 3,
+            backgroundColor: ZColors.secondary,
+            valueColor: const AlwaysStoppedAnimation(ZColors.primary),
+            minHeight: 2,
           )
         : const SizedBox.shrink();
 
     switch (DeviceTypeDetector.current) {
       case DeviceType.phone:
         return _PhoneShell(
-          section: _section,
-          onNavigate: _navigate,
-          isReady: isReady,
-          loadingBanner: loadingBanner,
-          content: _buildContent(),
+          section: _section, onNavigate: _navigate,
+          isReady: contentStore.isReady,
+          loadingBanner: loadingBanner, content: _buildContent(),
         );
       case DeviceType.tablet:
         return _TabletShell(
-          section: _section,
-          onNavigate: _navigate,
-          isReady: isReady,
-          loadingBanner: loadingBanner,
-          content: _buildContent(),
+          section: _section, onNavigate: _navigate,
+          isReady: contentStore.isReady,
+          loadingBanner: loadingBanner, content: _buildContent(),
         );
       case DeviceType.tv:
         return _TVShell(
-          section: _section,
-          onNavigate: _navigate,
-          isReady: isReady,
-          loadingBanner: loadingBanner,
-          content: _buildContent(),
+          section: _section, onNavigate: _navigate,
+          isReady: contentStore.isReady,
+          loadingBanner: loadingBanner, content: _buildContent(),
         );
     }
   }
 }
 
-// ---------------------------------------------------------------------------
-// Phone shell — bottom nav, 5 tabs, server (controller) mode only
-// ---------------------------------------------------------------------------
+// ── Phone shell ───────────────────────────────────────────────────────────────
 
 class _PhoneShell extends StatelessWidget {
   final AppSection section;
@@ -103,20 +88,13 @@ class _PhoneShell extends StatelessWidget {
   final Widget loadingBanner;
 
   const _PhoneShell({
-    required this.section,
-    required this.onNavigate,
-    required this.isReady,
-    required this.content,
-    required this.loadingBanner,
+    required this.section, required this.onNavigate,
+    required this.isReady, required this.content, required this.loadingBanner,
   });
 
-  // Phone is server-only — acts as remote control, no local video playback
   static const _tabs = [
-    AppSection.content,
-    AppSection.favorites,
-    AppSection.p2p,
-    AppSection.profile,
-    AppSection.settings,
+    AppSection.content, AppSection.favorites,
+    AppSection.p2p, AppSection.profile, AppSection.settings,
   ];
 
   int get _index => _tabs.indexOf(section).clamp(0, _tabs.length - 1);
@@ -124,61 +102,52 @@ class _PhoneShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: Column(
-        children: [
-          loadingBanner,
-          Expanded(child: content),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index,
-        onTap: (i) {
-          final target = _tabs[i];
-          // Content and Favorites require a loaded profile
-          if (!isReady &&
-              (target == AppSection.content ||
-                  target == AppSection.favorites)) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Select a profile first'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-            return;
-          }
-          onNavigate(target);
-        },
-        backgroundColor: const Color(0xFF1E293B),
-        selectedItemColor: const Color(0xFFEF4444),
-        unselectedItemColor: const Color(0xFF64748B),
-        type: BottomNavigationBarType.fixed,
-        items: [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.tv,
-                color: !isReady ? const Color(0xFF334155) : null),
-            label: 'Content',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.star,
-                color: !isReady ? const Color(0xFF334155) : null),
-            label: 'Favorites',
-          ),
-          const BottomNavigationBarItem(
-              icon: Icon(Icons.wifi), label: 'P2P'),
-          const BottomNavigationBarItem(
-              icon: Icon(Icons.person), label: 'Profile'),
-          const BottomNavigationBarItem(
-              icon: Icon(Icons.settings), label: 'Settings'),
-        ],
+      backgroundColor: ZColors.background,
+      body: Column(children: [loadingBanner, Expanded(child: content)]),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: ZColors.muted,
+          border: Border(top: BorderSide(color: ZColors.border.withValues(alpha: 0.1))),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _index,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          onTap: (i) {
+            final target = _tabs[i];
+            if (!isReady && (target == AppSection.content || target == AppSection.favorites)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Select a profile first'), duration: Duration(seconds: 2)),
+              );
+              return;
+            }
+            onNavigate(target);
+          },
+          selectedItemColor: ZColors.primary,
+          unselectedItemColor: ZColors.mutedForeground,
+          type: BottomNavigationBarType.fixed,
+          selectedLabelStyle: ZText.body(11, weight: FontWeight.w700),
+          unselectedLabelStyle: ZText.body(11),
+          items: [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.tv, color: !isReady ? ZColors.border : null),
+              label: 'Content',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.star, color: !isReady ? ZColors.border : null),
+              label: 'Favorites',
+            ),
+            const BottomNavigationBarItem(icon: Icon(Icons.cell_tower_rounded), label: 'P2P'),
+            const BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
+            const BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Settings'),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tablet shell — top header (desktop style), client + server P2P
-// ---------------------------------------------------------------------------
+// ── Tablet shell ──────────────────────────────────────────────────────────────
 
 class _TabletShell extends StatelessWidget {
   final AppSection section;
@@ -188,51 +157,37 @@ class _TabletShell extends StatelessWidget {
   final Widget loadingBanner;
 
   const _TabletShell({
-    required this.section,
-    required this.onNavigate,
-    required this.isReady,
-    required this.content,
-    required this.loadingBanner,
+    required this.section, required this.onNavigate,
+    required this.isReady, required this.content, required this.loadingBanner,
   });
 
   @override
   Widget build(BuildContext context) {
     if (!isReady) {
       return Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
-        body: Column(
-          children: [
-            loadingBanner,
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(child: content),
-                  const VerticalDivider(color: Color(0xFF334155), width: 1),
-                  const Expanded(child: P2PScreen()),
-                ],
-              ),
-            ),
-          ],
-        ),
+        backgroundColor: ZColors.background,
+        body: Column(children: [
+          loadingBanner,
+          Expanded(child: Row(children: [
+            const Expanded(child: ProfileScreen()),
+            const _VerticalDivider(),
+            const Expanded(child: P2PScreen()),
+          ])),
+        ]),
       );
     }
-
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: Column(
-        children: [
-          _TopHeader(section: section, onNavigate: onNavigate, showP2PBadge: true),
-          loadingBanner,
-          Expanded(child: content),
-        ],
-      ),
+      backgroundColor: ZColors.background,
+      body: Column(children: [
+        _TopHeader(section: section, onNavigate: onNavigate),
+        loadingBanner,
+        Expanded(child: content),
+      ]),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// TV shell — top header (Tizen style), client (player) mode only, D-pad focus
-// ---------------------------------------------------------------------------
+// ── TV shell ──────────────────────────────────────────────────────────────────
 
 class _TVShell extends StatelessWidget {
   final AppSection section;
@@ -242,137 +197,164 @@ class _TVShell extends StatelessWidget {
   final Widget loadingBanner;
 
   const _TVShell({
-    required this.section,
-    required this.onNavigate,
-    required this.isReady,
-    required this.content,
-    required this.loadingBanner,
+    required this.section, required this.onNavigate,
+    required this.isReady, required this.content, required this.loadingBanner,
   });
 
   @override
   Widget build(BuildContext context) {
     if (!isReady) {
       return Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
-        body: Column(
-          children: [
-            loadingBanner,
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(child: content),
-                  const VerticalDivider(color: Color(0xFF334155), width: 1),
-                  const Expanded(child: P2PScreen()),
-                ],
-              ),
-            ),
-          ],
-        ),
+        backgroundColor: ZColors.background,
+        body: Column(children: [
+          loadingBanner,
+          Expanded(child: Row(children: [
+            const Expanded(child: ProfileScreen()),
+            const _VerticalDivider(),
+            const Expanded(child: P2PScreen()),
+          ])),
+        ]),
       );
     }
-
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: Column(
-        children: [
-          _TopHeader(section: section, onNavigate: onNavigate, showP2PBadge: true, isTV: true),
+    return TvFocusScope(
+      child: Scaffold(
+        backgroundColor: ZColors.background,
+        body: Column(children: [
+          _TopHeader(section: section, onNavigate: onNavigate, isTV: true),
           loadingBanner,
           Expanded(child: content),
-        ],
+        ]),
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Top header — shared by tablet and TV
-// ---------------------------------------------------------------------------
+// ── Top header — glass effect, Tizen style ────────────────────────────────────
 
 class _TopHeader extends StatelessWidget {
   final AppSection section;
   final void Function(AppSection) onNavigate;
-  final bool showP2PBadge;
   final bool isTV;
 
   const _TopHeader({
     required this.section,
     required this.onNavigate,
-    this.showP2PBadge = false,
     this.isTV = false,
   });
 
-  static const _sections = [
-    (AppSection.content, 'Content'),
+  static const _navSections = [
+    (AppSection.content,   'Content'),
     (AppSection.favorites, 'Favorites'),
-    (AppSection.p2p, 'P2P'),
-    (AppSection.profile, 'Profile'),
-    (AppSection.settings, 'Settings'),
+    (AppSection.p2p,       'P2P'),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final px = isTV ? 48.0 : 24.0;
+    final height = isTV ? 72.0 : 60.0;
+
     return Container(
-      height: isTV ? 64 : 56,
-      color: const Color(0xFF1E293B),
-      padding: EdgeInsets.symmetric(horizontal: isTV ? 32 : 16),
+      height: height,
+      decoration: BoxDecoration(
+        color: ZColors.secondary.withValues(alpha: 0.7),
+        border: Border(bottom: BorderSide(color: ZColors.border.withValues(alpha: 0.04))),
+      ),
+      padding: EdgeInsets.symmetric(horizontal: px),
       child: Row(
         children: [
+          // Zenith TV — italic headline, same as Tizen
           Text(
             'Zenith TV',
-            style: TextStyle(
-              color: const Color(0xFFEF4444),
-              fontSize: isTV ? 22 : 18,
-              fontWeight: FontWeight.bold,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: isTV ? 24 : 20,
+              fontWeight: FontWeight.w900,
+              fontStyle: FontStyle.italic,
+              letterSpacing: -0.5,
+              color: ZColors.foreground,
             ),
           ),
-          SizedBox(width: isTV ? 40 : 24),
-          ..._sections.map((s) => _Tab(
-                label: s.$2,
-                isActive: section == s.$1,
-                isTV: isTV,
-                onTap: () => onNavigate(s.$1),
-              )),
+          SizedBox(width: isTV ? 48.0 : 32.0),
+
+          // Nav tabs
+          Row(
+            children: _navSections.map((s) => _NavTab(
+              label: s.$2,
+              isActive: section == s.$1,
+              isTV: isTV,
+              onTap: () => onNavigate(s.$1),
+            )).toList(),
+          ),
+
           const Spacer(),
-          if (showP2PBadge) const _P2PBadge(),
+
+          // Right capsule — profile + settings
+          _HeaderCapsule(
+            section: section,
+            onNavigate: onNavigate,
+            isTV: isTV,
+          ),
         ],
       ),
     );
   }
 }
 
-class _Tab extends StatelessWidget {
+class _NavTab extends StatelessWidget {
   final String label;
   final bool isActive;
   final bool isTV;
   final VoidCallback onTap;
 
-  const _Tab({
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-    this.isTV = false,
+  const _NavTab({
+    required this.label, required this.isActive,
+    required this.onTap, this.isTV = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (isTV) {
+      return TvFocusable(
+        onSelect: onTap,
+        builder: (context, focused) => Container(
+          margin: const EdgeInsets.only(right: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          decoration: BoxDecoration(
+            color: focused
+                ? ZColors.accent
+                : isActive
+                    ? ZColors.primary.withValues(alpha: 0.12)
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            label.toUpperCase(),
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: focused || isActive ? ZColors.primary : ZColors.mutedForeground,
+            ),
+          ),
+        ),
+      );
+    }
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(right: 4),
-        padding: EdgeInsets.symmetric(
-          horizontal: isTV ? 20 : 14,
-          vertical: isTV ? 8 : 6,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive ? const Color(0xFFEF4444) : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          color: isActive ? ZColors.accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.white : const Color(0xFF94A3B8),
-            fontSize: isTV ? 16 : 14,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          label.toUpperCase(),
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+            color: isActive ? ZColors.primary : ZColors.mutedForeground,
           ),
         ),
       ),
@@ -380,63 +362,130 @@ class _Tab extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// P2P connection badge — shown in header for tablet/TV
-// ---------------------------------------------------------------------------
+class _HeaderCapsule extends StatelessWidget {
+  final AppSection section;
+  final void Function(AppSection) onNavigate;
+  final bool isTV;
 
-class _P2PBadge extends StatelessWidget {
-  const _P2PBadge();
+  const _HeaderCapsule({
+    required this.section, required this.onNavigate, required this.isTV,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<P2PClientStore>(
-      builder: (context, clientStore, _) {
-        return Consumer<P2PServerStore>(
-          builder: (context, serverStore, _) {
-            final clientConnected = clientStore.isConnected;
-            final serverConnections = serverStore.connectionCount;
-
-            if (clientConnected) {
-              return _badge(
-                Colors.green,
-                clientStore.currentServer?.deviceName ?? 'Connected',
-              );
-            }
-
-            if (serverConnections > 0) {
-              return _badge(
-                Colors.blue,
-                '$serverConnections device${serverConnections > 1 ? 's' : ''} connected',
-              );
-            }
-
-            return _badge(Colors.grey.shade700, 'P2P off');
-          },
-        );
-      },
-    );
-  }
-
-  Widget _badge(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    return Container(
+      decoration: BoxDecoration(
+        color: ZColors.secondary.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: ZColors.border.withValues(alpha: 0.2)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CapsuleButton(
+              icon: Icons.cell_tower_rounded,
+              label: 'P2P',
+              isActive: section == AppSection.p2p,
+              onTap: () => onNavigate(AppSection.p2p),
+              isTV: isTV,
+            ),
+            _CapsuleDivider(),
+            _CapsuleButton(
+              icon: Icons.settings_outlined,
+              label: 'Settings',
+              isActive: section == AppSection.settings,
+              onTap: () => onNavigate(AppSection.settings),
+              isTV: isTV,
+            ),
+            _CapsuleDivider(),
+            _CapsuleButton(
+              icon: Icons.person_outline,
+              label: 'Profile',
+              isActive: section == AppSection.profile,
+              onTap: () => onNavigate(AppSection.profile),
+              isTV: isTV,
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Text(label,
-            style: TextStyle(color: color, fontSize: 13)),
-      ],
+      ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Placeholder
-// ---------------------------------------------------------------------------
+class _CapsuleButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+  final bool isTV;
+
+  const _CapsuleButton({
+    required this.icon, required this.label,
+    required this.isActive, required this.onTap,
+    this.isTV = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isTV) {
+      return TvFocusable(
+        onSelect: onTap,
+        builder: (context, focused) => Container(
+          color: focused || isActive ? Colors.white.withValues(alpha: 0.1) : Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18,
+                  color: focused || isActive ? ZColors.primary : ZColors.mutedForeground),
+              const SizedBox(width: 6),
+              Text(label, style: ZText.body(13, weight: FontWeight.w600,
+                  color: focused || isActive ? ZColors.primary : ZColors.mutedForeground)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        color: isActive ? Colors.white.withValues(alpha: 0.1) : Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16,
+                color: isActive ? ZColors.primary : ZColors.mutedForeground),
+            const SizedBox(width: 6),
+            Text(label, style: ZText.body(12, weight: FontWeight.w600,
+                color: isActive ? ZColors.primary : ZColors.mutedForeground)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CapsuleDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(width: 1, height: 20, color: ZColors.border.withValues(alpha: 0.4));
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+class _VerticalDivider extends StatelessWidget {
+  const _VerticalDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(width: 1, color: ZColors.border.withValues(alpha: 0.2));
+  }
+}
 
 class _Placeholder extends StatelessWidget {
   final String label;
@@ -445,10 +494,8 @@ class _Placeholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(
-        '$label — coming soon',
-        style: const TextStyle(color: Colors.white54, fontSize: 18),
-      ),
+      child: Text('$label — coming soon',
+          style: ZText.body(18, color: ZColors.mutedForeground)),
     );
   }
 }
