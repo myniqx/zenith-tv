@@ -91,6 +91,3 @@ apps/tizen/signature1.xml
 apps/tizen/workspace/**
 workspace/.metadata/.log
 apps/tizen/Debug/**
-apps/tizen/.project
-apps/tizen/.tproject
-apps/tizen/tizen_web_project.yaml
