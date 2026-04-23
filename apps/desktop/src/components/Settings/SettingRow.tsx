@@ -1,13 +1,12 @@
-import { Label } from '@zenith-tv/ui/label';
 import type { SettingRowProps } from './types';
 
 export function SettingRow({ label, description, children }: SettingRowProps) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between py-4">
       <div className="space-y-0.5">
-        <Label className="text-sm font-medium">{label}</Label>
+        <p className="text-sm font-semibold text-foreground/80">{label}</p>
         {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p className="text-sm text-muted-foreground">{description}</p>
         )}
       </div>
       {children}

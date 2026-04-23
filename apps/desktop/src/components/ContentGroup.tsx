@@ -78,9 +78,9 @@ export const ContentGroup = memo(function ContentGroup({ title, items, type }: C
   }, []);
 
   return (
-    <section className="flex flex-col border-1 border-gray-700 rounded-md">
+    <section className="flex flex-col rounded-md">
       {/* Sticky Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border px-4 py-3 flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm px-4 py-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold">{title}</h2>
 
         <div className="flex items-center gap-3">

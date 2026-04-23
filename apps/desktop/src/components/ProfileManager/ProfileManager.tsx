@@ -89,8 +89,13 @@ export function ProfileManager({ initialOpen = false }: ProfileManagerProps) {
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!isLocked) setOpen(v); }}>
         <DialogTrigger asChild>
-          <Button variant="secondary" aria-label="Manage profiles">
-            <User className="w-4 h-4 mr-2" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-muted-foreground hover:text-foreground hover:bg-white/10 rounded-none h-full px-4"
+            aria-label="Manage profiles"
+          >
+            <User className="w-4 h-4" />
             Profiles
           </Button>
         </DialogTrigger>

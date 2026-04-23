@@ -99,14 +99,14 @@ export const ContentCard = memo(function ContentCard({ item, isSelected }: Conte
           aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         >
           <Star
-            className={`w-4 h-4 ${isFavorite ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`}
+            className={`w-4 h-4 ${isFavorite ? 'text-primary fill-primary' : 'text-muted-foreground'}`}
           />
         </Button>
 
         {/* Watched badge */}
         {isWatched && (
-          <div className="absolute bottom-2 right-2 h-6 w-6 rounded-full bg-green-500 flex items-center justify-center">
-            <Check className="w-4 h-4 text-white" />
+          <div className="absolute bottom-2 right-2 h-6 w-6 rounded-full bg-success flex items-center justify-center">
+            <Check className="w-4 h-4 text-success-foreground" />
           </div>
         )}
 

@@ -46,7 +46,7 @@ export function AddProfileForm({ onDone }: AddProfileFormProps) {
   };
 
   return (
-    <Card>
+    <Card className="flex-1 overflow-auto">
       <CardContent className="p-4">
         <h3 className="font-medium mb-4">Add New Profile</h3>
         <form onSubmit={handleSubmit} className="space-y-4">

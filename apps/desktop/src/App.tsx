@@ -167,7 +167,7 @@ function App() {
               {/* Top Section: Toolbar + Category Browser + Content Grid */}
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Toolbar */}
-                <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-border gap-4" role="toolbar" aria-label="Content controls">
+                <div className="flex items-center justify-between px-4 py-2 bg-muted gap-4" role="toolbar" aria-label="Content controls">
                   <div className="flex-1 max-w-md relative" role="search">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -194,7 +194,7 @@ function App() {
 
                   <div className="flex items-center gap-2">
                     <Select value={groupBy} onValueChange={(value) => setGroupBy(value as GroupBy)}>
-                      <SelectTrigger className="w-[140px]" aria-label="Group content by">
+                      <SelectTrigger className="w-40" aria-label="Group content by">
                         <Layers className="w-4 h-4 mr-2" />
                         <SelectValue placeholder="Group by..." />
                       </SelectTrigger>
@@ -207,7 +207,7 @@ function App() {
                     </Select>
 
                     <Select value={sortBy} onValueChange={(value) => setSortBy(value as 'name' | 'date' | 'recent')}>
-                      <SelectTrigger className="w-[150px]" aria-label="Sort content by">
+                      <SelectTrigger className="w-40" aria-label="Sort content by">
                         <SelectValue placeholder="Sort by..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -273,7 +273,9 @@ function App() {
                         }));
                       }}
                     >
-                      <div className="h-full overflow-hidden">
+                      <div className="h-full overflow-hidden relative">
+                        <div className="absolute top-0 left-0 right-0 h-[614px] bg-linear-to-b from-primary/5 to-transparent  pointer-events-none"></div>
+
                         <ContentGrid />
                       </div>
                     </Panel>

@@ -24,7 +24,7 @@ const NAV_SECTIONS: MenuSection[] = ['favorites', 'all', 'p2p']
 
 export function Header({ activeSection, onSectionChange }: HeaderProps) {
   return (
-    <header className="glass-header shrink-0 w-full shadow-2xl shadow-black/50">
+    <header className="glass-header shrink-0 w-full shadow-2xl shadow-black/50 z-1">
       <HorizontalList fKey="menu">
         <div className="flex items-center justify-between w-full px-12 py-5">
 
@@ -48,8 +48,8 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
                         focused
                           ? 'bg-accent scale-100 text-foreground'
                           : isActive
-                          ? 'text-primary scale-95'
-                          : 'text-muted-foreground scale-95',
+                            ? 'text-primary scale-95'
+                            : 'text-muted-foreground scale-95',
                       )}>
                         {MENU_LABELS[section]}
                         {isActive && (

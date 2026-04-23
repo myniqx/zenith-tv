@@ -160,7 +160,7 @@ export function CategoryBrowser({ isCollapsed = false }: CategoryBrowserProps) {
       )}>
         {/* Header - Hidden when collapsed */}
         {!isCollapsed && (
-          <div className="p-4 border-b border-border">
+          <div className="p-4">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
               Categories
             </h2>

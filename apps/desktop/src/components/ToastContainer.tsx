@@ -45,11 +45,11 @@ function Toast({ type, message, onClose }: ToastProps) {
   const getStyles = (): ToastStyle => {
     switch (type) {
       case 'success':
-        return { bg: 'bg-green-600', icon: CheckCircle };
+        return { bg: 'bg-success', icon: CheckCircle };
       case 'error':
         return { bg: 'bg-destructive', icon: XCircle };
       case 'warning':
-        return { bg: 'bg-yellow-600', icon: AlertTriangle };
+        return { bg: 'bg-warning', icon: AlertTriangle };
       case 'info':
       default:
         return { bg: 'bg-primary', icon: Info };

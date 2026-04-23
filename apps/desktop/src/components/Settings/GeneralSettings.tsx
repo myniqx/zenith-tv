@@ -10,7 +10,6 @@ import {
 import { Button } from '@zenith-tv/ui/button';
 import { Label } from '@zenith-tv/ui/label';
 import { Switch } from '@zenith-tv/ui/switch';
-import { Separator } from '@zenith-tv/ui/separator';
 import { Palette, Power } from 'lucide-react';
 import { SettingsSection } from './SettingsSection';
 import { SettingRow } from './SettingRow';
@@ -37,13 +36,13 @@ export function GeneralSettings() {
   };
 
   return (
-    <div className="space-y-8">
+    <div>
       {/* Appearance */}
       <SettingsSection
         title="Appearance"
         icon={<Palette className="w-5 h-5" />}
       >
-        <div className="space-y-2">
+        <div className="space-y-2 py-4">
           <Label htmlFor="theme">Theme</Label>
           <Select value={theme} onValueChange={(value) => setTheme(value as Theme)}>
             <SelectTrigger id="theme">
@@ -55,13 +54,11 @@ export function GeneralSettings() {
               <SelectItem value="system">System</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             System follows your OS preference
           </p>
         </div>
       </SettingsSection>
-
-      <Separator />
 
       {/* Startup */}
       <SettingsSection
@@ -89,9 +86,7 @@ export function GeneralSettings() {
         </SettingRow>
       </SettingsSection>
 
-      <Separator className="my-4" />
-
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pb-4">
         <Button variant="outline" onClick={handleReset}>
           Reset to Defaults
         </Button>

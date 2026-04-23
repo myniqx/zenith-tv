@@ -21,6 +21,7 @@ function createWindow() {
     show: false,
     autoHideMenuBar: false,
     backgroundColor: '#1a1a1a',
+    icon: path.join(__dirname, '../../resources/icons/512x512.png'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       sandbox: false,

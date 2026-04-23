@@ -22,11 +22,12 @@ export function Settings() {
       <DialogTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
-          title="Settings"
+          size="sm"
+          className="gap-2 text-muted-foreground hover:text-foreground hover:bg-white/10 rounded-none h-full px-4"
           aria-label="Open settings"
         >
-          <SettingsIcon className="w-5 h-5" />
+          <SettingsIcon className="w-4 h-4" />
+          Settings
         </Button>
       </DialogTrigger>
       <DialogContent
@@ -39,15 +40,15 @@ export function Settings() {
 
         <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="general" className="flex items-center gap-2">
+            <TabsTrigger value="general" className="flex items-center gap-2 py-2">
               <SettingsIcon className="w-4 h-4" />
               General
             </TabsTrigger>
-            <TabsTrigger value="video" className="flex items-center gap-2">
+            <TabsTrigger value="video" className="flex items-center gap-2 py-2">
               <Play className="w-4 h-4" />
               Video
             </TabsTrigger>
-            <TabsTrigger value="shortcuts" className="flex items-center gap-2">
+            <TabsTrigger value="shortcuts" className="flex items-center gap-2 py-2">
               <Keyboard className="w-4 h-4" />
               Shortcuts
             </TabsTrigger>

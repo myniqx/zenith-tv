@@ -9,7 +9,6 @@ import { Slider } from '@zenith-tv/ui/slider';
 import { Label } from '@zenith-tv/ui/label';
 import { Input } from '@zenith-tv/ui/input';
 import { Switch } from '@zenith-tv/ui/switch';
-import { Separator } from '@zenith-tv/ui/separator';
 import { MonitorPlay, Type, Timer, Volume2, Play } from 'lucide-react';
 import { useVlcPlayerStore } from '../../stores/vlcPlayer';
 import { useSettingsStore } from '../../stores/settings';
@@ -43,10 +42,10 @@ export function VideoSettings() {
   };
 
   return (
-    <div className="space-y-6 p-1">
+    <div>
       {/* Volume */}
       <SettingsSection title="Volume" icon={<Volume2 className="w-5 h-5" />}>
-        <div className="space-y-3">
+        <div className="space-y-3 py-4">
           <Label>Default Volume: {Math.round(defaultVolume * 100)}%</Label>
           <Slider
             value={[defaultVolume * 100]}
@@ -56,17 +55,15 @@ export function VideoSettings() {
             step={1}
             className="w-full"
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Volume level when starting new videos
           </p>
         </div>
       </SettingsSection>
 
-      <Separator />
-
       {/* Playback Control */}
       <SettingsSection title="Playback" icon={<MonitorPlay className="w-5 h-5" />}>
-        <div className="space-y-2">
+        <div className="space-y-2 py-4">
           <Label>Playback Speed</Label>
           <Select defaultValue="1.0" onValueChange={handleRateChange}>
             <SelectTrigger>
@@ -94,8 +91,6 @@ export function VideoSettings() {
         </SettingRow>
       </SettingsSection>
 
-      <Separator />
-
       {/* Episode Control */}
       <SettingsSection title="Episodes" icon={<Play className="w-5 h-5" />}>
         <SettingRow
@@ -109,11 +104,9 @@ export function VideoSettings() {
         </SettingRow>
       </SettingsSection>
 
-      <Separator />
-
       {/* Preferred Languages */}
       <SettingsSection title="Preferred Languages" icon={<Type className="w-5 h-5" />}>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 py-4">
           <div className="space-y-2">
             <Label>Audio Language</Label>
             <Select
@@ -166,11 +159,9 @@ export function VideoSettings() {
         </div>
       </SettingsSection>
 
-      <Separator />
-
       {/* Subtitle Timing */}
       <SettingsSection title="Subtitle Timing" icon={<Timer className="w-5 h-5" />}>
-        <div className="space-y-2">
+        <div className="space-y-2 py-4">
           <Label>Subtitle Delay (ms)</Label>
           <div className="flex items-center gap-2">
             <Input
@@ -187,11 +178,9 @@ export function VideoSettings() {
         </div>
       </SettingsSection>
 
-      <Separator />
-
       {/* Subtitle Appearance */}
       <SettingsSection title="Subtitle Appearance" icon={<Type className="w-5 h-5" />}>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 py-4">
           <div className="space-y-2">
             <Label>Size</Label>
             <Select defaultValue="normal">

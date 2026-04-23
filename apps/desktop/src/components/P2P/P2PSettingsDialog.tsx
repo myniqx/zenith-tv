@@ -229,10 +229,10 @@ export function P2PSettingsDialog({ open, onOpenChange }: P2PSettingsDialogProps
                     onChange={(e) => handleServerPortChange(e.target.value)}
                     placeholder="8080"
                     disabled={connectionStatus === 'connected'}
-                    className={!isServerPortValid && serverPort ? 'border-red-500' : ''}
+                    className={!isServerPortValid && serverPort ? 'border-destructive' : ''}
                   />
                   {!isServerPortValid && serverPort && (
-                    <p className="text-xs text-red-500">Port must be between 1 and 65535</p>
+                    <p className="text-xs text-destructive">Port must be between 1 and 65535</p>
                   )}
                 </div>
 
@@ -272,8 +272,8 @@ export function P2PSettingsDialog({ open, onOpenChange }: P2PSettingsDialogProps
 
                 {/* Connected Server Info */}
                 {connectionStatus === 'connected' && serverUrl && (
-                  <div className="p-3 border rounded-md bg-blue-500/10 border-blue-500/20">
-                    <div className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                  <div className="p-3 rounded-md bg-success/10 border border-success/20">
+                    <div className="text-sm font-medium text-success">
                       Connected to Controller
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
