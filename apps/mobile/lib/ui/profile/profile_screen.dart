@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import '../../core/app_theme.dart';
+import '../../components/profile_manager/profile_manager.dart';
 import '../../core/device_type.dart';
-import '../../stores/profile_store.dart';
-import '../../stores/content_store.dart';
-import 'phone/profile_screen_phone.dart';
+import 'package:provider/provider.dart';
 import 'tv/profile_screen_tv.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -11,16 +10,16 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<ProfileStore, ContentStore>(
-      builder: (context, profileStore, contentStore, _) {
-        if (DeviceTypeDetector.isTV) {
-          return const ProfileScreenTv();
-        }
-        return ProfileScreenPhone(
-          profileStore: profileStore,
-          contentStore: contentStore,
-        );
-      },
+    final detector = context.watch<DeviceTypeDetector>();
+
+    if (detector.isTV) {
+      return const ProfileScreenTv();
+    }
+
+    return Scaffold(
+      backgroundColor: ZColors.background,
+      appBar: AppBar(title: const Text('Profiles')),
+      body: const ProfileManager(),
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 import 'view_object.dart';
 import 'watchable.dart';
 import 'm3u_object.dart';
@@ -23,6 +25,9 @@ class GroupObject extends ViewObject {
   GroupObject([String groupName = 'Group']) {
     name = groupName;
   }
+
+  /// Mirrors: GroupObject.GetListIcon in desktop
+  IconData get listIcon => Icons.folder_outlined;
 
   void clear() {
     watchables = [];
@@ -239,6 +244,9 @@ class TvShowGroupObject extends GroupObject {
   @override
   String get title => 'Tv Shows';
 
+  @override
+  IconData get listIcon => Icons.tv;
+
   int get episodeCount => groups.fold(
         watchables.length,
         (sum, g) =>
@@ -275,6 +283,9 @@ class TvShowGroupObject extends GroupObject {
 /// Mirrors: shared/content/src/models/group.ts → TvShowSeasonGroupObject
 class TvShowSeasonGroupObject extends GroupObject {
   int season = 0;
+
+  @override
+  IconData get listIcon => Icons.calendar_view_week_outlined;
 
   int get episodeCount => watchables.length;
 

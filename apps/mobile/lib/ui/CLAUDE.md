@@ -20,7 +20,9 @@ A single layout cannot serve all three. A phone UI with a bottom nav bar looks w
 
 ## Folder Structure
 
-Every screen follows this pattern:
+### Screens (`ui/`)
+
+Full-page views. Every screen follows this pattern:
 
 ```
 ui/
@@ -39,12 +41,46 @@ ui/
       <child_widget>.dart       ← TV-specific child widgets (must use TvFocusable).
 ```
 
+### Components (`components/`)
+
+Reusable UI widgets used by multiple screens. Components also follow the same platform pattern:
+
+```
+components/
+  <component>/
+    <component>.dart             ← Router only. Switches on DeviceTypeDetector.
+    shared/
+      <shared_widget>.dart       ← Widgets shared across platform variants.
+    phone/
+      <component>_phone.dart
+    tablet/
+      <component>_tablet.dart
+    tv/
+      <component>_tv.dart
+```
+
+**Examples:** `category_browser`, `toolbar`, `content_grid`, `video_controller`
+
+### Shell (`ui/shell/`)
+
+Layout skeletons — navigation structure, panel arrangement, header. Not a "screen" but follows the same platform split:
+
+```
+ui/shell/
+  app_shell.dart                 ← Router only (DeviceType switch, no UI)
+  app_section.dart               ← AppSection enum (shared across all shells)
+  phone/app_shell_phone.dart
+  tablet/app_shell_tablet.dart
+  tv/app_shell_tv.dart
+```
+
 **Rules:**
-- The router file (`<screen>_screen.dart`) contains **no UI code** — only a `Consumer` and a switch on `DeviceTypeDetector`.
+- The router file (`<screen>_screen.dart` or `<component>.dart`) contains **no UI code** — only a switch on `DeviceTypeDetector`.
 - Each layout variant is a self-contained widget in its own file.
 - Child widgets that are **only used in one layout** live in that layout's folder.
 - Child widgets **shared across layouts** live in `shared/`.
 - Never put all widgets for a screen into a single file. One logical component = one file.
+- `AppSection` enum lives in `ui/shell/app_section.dart` — import from there, never re-declare.
 
 ---
 

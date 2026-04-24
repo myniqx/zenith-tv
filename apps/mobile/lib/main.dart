@@ -8,6 +8,7 @@ import 'p2p/client/p2p_client_store.dart';
 import 'p2p/server/p2p_server_store.dart';
 import 'p2p/p2p_manager.dart';
 import 'stores/profile_store.dart';
+import 'stores/settings_store.dart';
 import 'stores/content_store.dart';
 import 'stores/media_player_store.dart';
 import 'stores/remote_player_store.dart';
@@ -36,6 +37,8 @@ class ZenithApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider<DeviceTypeDetector>.value(value: DeviceTypeDetector.instance),
+        ChangeNotifierProvider(create: (_) => SettingsStore()),
         ChangeNotifierProvider(create: (_) => ProfileStore()),
         ChangeNotifierProxyProvider<ProfileStore, ContentStore>(
           create: (ctx) => ContentStore(
@@ -61,7 +64,7 @@ class ZenithApp extends StatelessWidget {
       child: Builder(builder: (context) {
         // Detect device type once layout is available
         final shortestSide = MediaQuery.of(context).size.shortestSide;
-        DeviceTypeDetector.detect(shortestSide);
+        DeviceTypeDetector.instance.detect(shortestSide);
 
         return MaterialApp(
           title: 'Zenith TV',
@@ -93,6 +96,7 @@ class _AppInitializerState extends State<_AppInitializer> {
   }
 
   Future<void> _init() async {
+    final settingsStore = context.read<SettingsStore>();
     final profileStore = context.read<ProfileStore>();
     final contentStore = context.read<ContentStore>();
     final clientStore = context.read<P2PClientStore>();
@@ -100,13 +104,14 @@ class _AppInitializerState extends State<_AppInitializer> {
     final playerStore = context.read<MediaPlayerStore>();
     final universalPlayer = context.read<UniversalPlayerStore>();
 
+    await settingsStore.init();
     await profileStore.init();
     await playerStore.init();
     await clientStore.init();
 
     _p2pManager = P2PManager(
-      clientStore: DeviceTypeDetector.canBeClient ? clientStore : null,
-      serverStore: DeviceTypeDetector.canBeServer ? serverStore : null,
+      clientStore: DeviceTypeDetector.instance.canBeClient ? clientStore : null,
+      serverStore: DeviceTypeDetector.instance.canBeServer ? serverStore : null,
 
       // Client mode: incoming commands → local player
       onPlayerCommand: (type, payload) {

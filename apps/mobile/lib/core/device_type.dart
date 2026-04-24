@@ -1,48 +1,52 @@
+import 'package:flutter/foundation.dart';
+import 'dart:io';
+
 enum DeviceType { tv, tablet, phone }
 
-/// Detects device type at startup.
+/// Detects device type at startup and notifies listeners when overridden.
 /// TV detection uses Android UiModeManager via platform check.
 /// Tablet/phone distinction is based on shortest side >= 600dp.
+/// Linux/Windows always resolves to tablet (desktop = full layout).
 ///
 /// P2P role capabilities per form factor:
 ///   phone  — server only  (acts as remote control; no local video playback)
 ///   tablet — server + client  (full desktop-equivalent; both roles)
 ///   tv     — client only  (plays video; cannot act as remote control)
-///
-/// Mirrors: apps/tizen/src/App.tsx (TV check) + desktop mode switching logic
-class DeviceTypeDetector {
-  static DeviceType? _cached;
+class DeviceTypeDetector extends ChangeNotifier {
+  static DeviceTypeDetector? _instance;
+  static DeviceTypeDetector get instance => _instance ??= DeviceTypeDetector._();
 
-  static DeviceType get current => _cached ?? DeviceType.phone;
+  DeviceTypeDetector._();
 
-  static void detect(double shortestSide) {
-    if (_cached != null) return;
+  DeviceType? _detected;
+  DeviceType? _override;
 
-    // On Android we can't call UiModeManager from pure Dart without a plugin.
-    // We approximate: if running on Android and screen is TV-sized (landscape,
-    // large), treat as tablet/phone. Real TV detection requires a MethodChannel
-    // (Step 2 native plugin — deferred). For now, use screen size heuristic.
-    if (shortestSide >= 600) {
-      _cached = DeviceType.tablet;
+  DeviceType get current => _override ?? _detected ?? DeviceType.phone;
+
+  void detect(double shortestSide) {
+    if (_detected != null) return;
+
+    if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
+      _detected = DeviceType.tablet;
+    } else if (shortestSide >= 600) {
+      _detected = DeviceType.tablet;
     } else {
-      _cached = DeviceType.phone;
+      _detected = DeviceType.phone;
     }
   }
 
-  /// Override for testing or when native channel result arrives.
-  static void forceType(DeviceType type) {
-    _cached = type;
+  void setOverride(DeviceType? type) {
+    _override = type;
+    notifyListeners();
   }
 
-  static bool get isTV => current == DeviceType.tv;
-  static bool get isTablet => current == DeviceType.tablet;
-  static bool get isPhone => current == DeviceType.phone;
+  DeviceType get detected => _detected ?? DeviceType.phone;
+  bool get hasOverride => _override != null;
 
-  /// Can act as P2P server (remote control — sends commands, mirrors player state).
-  /// Phone and tablet only; TV has no keyboard/mouse so server mode is disabled.
-  static bool get canBeServer => current == DeviceType.phone || current == DeviceType.tablet;
+  bool get isTV => current == DeviceType.tv;
+  bool get isTablet => current == DeviceType.tablet;
+  bool get isPhone => current == DeviceType.phone;
 
-  /// Can act as P2P client (player — receives commands, plays video locally).
-  /// Tablet and TV only; phone screen is too small for a primary video player.
-  static bool get canBeClient => current == DeviceType.tablet || current == DeviceType.tv;
+  bool get canBeServer => current == DeviceType.phone || current == DeviceType.tablet;
+  bool get canBeClient => current == DeviceType.tablet || current == DeviceType.tv;
 }
