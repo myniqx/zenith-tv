@@ -557,10 +557,12 @@ class ContentStore extends ChangeNotifier {
       final userItem = _userData.watchables[item.url];
       if (userItem != null) {
         watchable.userData = userItem;
-        if (userItem.favorite?.value == true)
+        if (userItem.favorite?.value == true) {
           favoriteGroup.addWatchable(watchable);
-        if (userItem.watchProgress?.watched != null)
+        }
+        if (userItem.watchProgress?.watched != null) {
           watchedGroup.addWatchable(watchable);
+        }
       }
     }
 

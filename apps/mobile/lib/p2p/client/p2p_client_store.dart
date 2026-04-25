@@ -201,11 +201,16 @@ class P2PClientStore extends ChangeNotifier {
   // --- Internal ---
 
   void _addOrUpdateTrustedServer(DiscoveredController discovered) {
-    final index =
-        _trustedServers.indexWhere((t) => t.deviceId == discovered.deviceId);
+    // Match by deviceId first, then fall back to ip (covers manual entries)
+    var index = _trustedServers.indexWhere((t) => t.deviceId == discovered.deviceId);
+    if (index < 0) {
+      index = _trustedServers.indexWhere((t) => t.ip == discovered.ip);
+    }
 
     if (index >= 0) {
       _trustedServers[index] = _trustedServers[index].copyWith(
+        deviceId: discovered.deviceId,
+        deviceName: discovered.deviceName,
         ip: discovered.ip,
         lastConnectedAt: DateTime.now().millisecondsSinceEpoch,
       );

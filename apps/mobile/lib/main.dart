@@ -13,6 +13,7 @@ import 'stores/content_store.dart';
 import 'stores/media_player_store.dart';
 import 'stores/remote_player_store.dart';
 import 'stores/universal_player_store.dart';
+import 'stores/zenith_store.dart';
 import 'p2p/models/index.dart';
 import 'ui/shell/app_shell.dart';
 
@@ -39,6 +40,7 @@ class ZenithApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider<DeviceTypeDetector>.value(value: DeviceTypeDetector.instance),
         ChangeNotifierProvider(create: (_) => SettingsStore()),
+        ChangeNotifierProvider(create: (_) => ZenithStore()),
         ChangeNotifierProvider(create: (_) => ProfileStore()),
         ChangeNotifierProxyProvider<ProfileStore, ContentStore>(
           create: (ctx) => ContentStore(
@@ -99,15 +101,26 @@ class _AppInitializerState extends State<_AppInitializer> {
     final settingsStore = context.read<SettingsStore>();
     final profileStore = context.read<ProfileStore>();
     final contentStore = context.read<ContentStore>();
-    final clientStore = context.read<P2PClientStore>();
-    final serverStore = context.read<P2PServerStore>();
-    final playerStore = context.read<MediaPlayerStore>();
+    final clientStore  = context.read<P2PClientStore>();
+    final serverStore  = context.read<P2PServerStore>();
+    final playerStore  = context.read<MediaPlayerStore>();
     final universalPlayer = context.read<UniversalPlayerStore>();
 
     await settingsStore.init();
     await profileStore.init();
     await playerStore.init();
     await clientStore.init();
+    await serverStore.loadTrustedClients();
+
+    // Wire preferred language auto-selection when tracks load
+    playerStore.onTracksReady = (audioTracks, subtitleTracks) {
+      _applyPreferredTracks(
+        playerStore: playerStore,
+        settingsStore: settingsStore,
+        audioTracks: audioTracks,
+        subtitleTracks: subtitleTracks,
+      );
+    };
 
     _p2pManager = P2PManager(
       clientStore: DeviceTypeDetector.instance.canBeClient ? clientStore : null,
@@ -118,7 +131,10 @@ class _AppInitializerState extends State<_AppInitializer> {
         switch (type) {
           case 'open':
             final url = payload?['file'] as String?;
-            if (url != null) playerStore.open(url);
+            if (url != null) {
+              final item = contentStore.findByUrl(url);
+              playerStore.open(url, item: item);
+            }
           case 'playback':
             playerStore.playback(
               action: payload?['action'] as String?,
@@ -166,7 +182,71 @@ class _AppInitializerState extends State<_AppInitializer> {
 
     _p2pManager!.init();
 
+    // When a device is trusted via UI, send the welcome profile_sync
+    serverStore.onTrusted = (connectionId) {
+      _p2pManager!.sendWelcomeToConnection(connectionId);
+    };
+
+    // Wire server-mode P2P command dispatch into UniversalPlayerStore.
+    // When mode==server, play/playback/audio/subtitle calls route here
+    // instead of driving the local media_kit player.
+    universalPlayer.sendP2PCommand = (type, payload) {
+      serverStore.broadcast(P2PMessage(type: type, payload: payload));
+    };
+
     if (mounted) setState(() => _initialized = true);
+  }
+
+  void _applyPreferredTracks({
+    required MediaPlayerStore playerStore,
+    required SettingsStore settingsStore,
+    required List audioTracks,
+    required List subtitleTracks,
+  }) {
+    bool matchTrack(String trackName, String language) =>
+        trackName.toLowerCase().contains(language.toLowerCase());
+
+    // Audio — try each preferred language in order, fall back to first track
+    final audioPref = settingsStore.preferredAudioLanguages;
+    if (audioPref.isNotEmpty && audioTracks.isNotEmpty) {
+      int? selectedId;
+      for (final lang in audioPref) {
+        final match = audioTracks.firstWhere(
+          (t) => matchTrack(t.name as String, lang),
+          orElse: () => null,
+        );
+        if (match != null) {
+          selectedId = match.id as int;
+          break;
+        }
+      }
+      // Fall back to first track if no preferred language matched
+      selectedId ??= audioTracks.first.id as int;
+      playerStore.audio(track: selectedId);
+    } else if (audioTracks.isNotEmpty) {
+      // No preference — select first track so audio plays
+      playerStore.audio(track: audioTracks.first.id as int);
+    }
+
+    // Subtitle — only select if there's a preference match, otherwise disable
+    final subPref = settingsStore.preferredSubtitleLanguages;
+    if (subPref.isNotEmpty && subtitleTracks.isNotEmpty) {
+      for (final lang in subPref) {
+        final match = subtitleTracks.firstWhere(
+          (t) => matchTrack(t.name as String, lang),
+          orElse: () => null,
+        );
+        if (match != null) {
+          playerStore.subtitle(track: match.id as int);
+          return;
+        }
+      }
+      // No match — disable subtitles
+      playerStore.subtitle(track: -1);
+    } else {
+      // No preference — disable subtitles
+      playerStore.subtitle(track: -1);
+    }
   }
 
   Future<void> _handleProfileSync({

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
+import '../core/app_logger.dart';
+import '../models/watchable.dart';
 import '../p2p/models/client_event.dart' as p2p;
 
 // Player state strings — mirrors shared/content/src/types/player.ts → VlcState
@@ -22,6 +24,14 @@ abstract final class PlayerState {
 class MediaPlayerStore extends ChangeNotifier {
   final Player _player = Player();
 
+  /// Exposed so VideoController can be created against this player instance.
+  Player get player => _player;
+
+  /// Called when tracks are loaded — use to apply preferred language selection.
+  /// Args: audioTracks, subtitleTracks
+  void Function(List<p2p.VlcTrack> audio, List<p2p.VlcTrack> subtitle)?
+      onTracksReady;
+
   // --- State ---
   bool _isInitialized = false;
   String _playerState = PlayerState.idle;
@@ -36,6 +46,8 @@ class MediaPlayerStore extends ChangeNotifier {
   bool _isSeekable = false;
   String? _error;
   String? _currentUrl;
+  WatchableObject? _currentItem;
+  bool _isFullscreen = false;
 
   List<p2p.VlcTrack> _audioTracks = [];
   List<p2p.VlcTrack> _subtitleTracks = [];
@@ -57,6 +69,8 @@ class MediaPlayerStore extends ChangeNotifier {
   bool get isSeekable => _isSeekable;
   String? get error => _error;
   String? get currentUrl => _currentUrl;
+  WatchableObject? get currentItem => _currentItem;
+  bool get isFullscreen => _isFullscreen;
   List<p2p.VlcTrack> get audioTracks => List.unmodifiable(_audioTracks);
   List<p2p.VlcTrack> get subtitleTracks => List.unmodifiable(_subtitleTracks);
   int get currentAudioTrack => _currentAudioTrack;
@@ -101,18 +115,24 @@ class MediaPlayerStore extends ChangeNotifier {
       }),
       _player.stream.tracks.listen((tracks) {
         _audioTracks = tracks.audio
+            .where((t) => t.id != 'no' && t.id != 'auto')
             .map((t) => p2p.VlcTrack(
                   id: int.tryParse(t.id) ?? -1,
                   name: t.title ?? t.language ?? 'Track ${t.id}',
                 ))
+            .where((t) => t.id >= 0)
             .toList();
         _subtitleTracks = tracks.subtitle
+            .where((t) => t.id != 'no' && t.id != 'auto')
             .map((t) => p2p.VlcTrack(
                   id: int.tryParse(t.id) ?? -1,
                   name: t.title ?? t.language ?? 'Sub ${t.id}',
                 ))
+            .where((t) => t.id >= 0)
             .toList();
         notifyListeners();
+        // Notify caller so preferred language selection can be applied
+        onTracksReady?.call(_audioTracks, _subtitleTracks);
       }),
       _player.stream.track.listen((track) {
         _currentAudioTrack = int.tryParse(track.audio.id) ?? -1;
@@ -144,13 +164,40 @@ class MediaPlayerStore extends ChangeNotifier {
   // Commands — mirrors vlcPlayerStore unified API
   // ---------------------------------------------------------------------------
 
-  Future<void> open(String url) async {
+  Future<void> open(String url, {WatchableObject? item}) async {
+    AppLogger.app('MediaPlayerStore.open: $url');
     _error = null;
     _currentUrl = url;
+    _currentItem = item;
     _playerState = PlayerState.opening;
     notifyListeners();
 
-    await _player.open(Media(url));
+    try {
+      await _player.open(Media(url));
+      AppLogger.app('MediaPlayerStore: media opened ok');
+    } catch (e) {
+      _error = e.toString();
+      _playerState = PlayerState.error;
+      AppLogger.app('MediaPlayerStore.open error: $e', error: true);
+      notifyListeners();
+    }
+  }
+
+  /// Stop playback and clear current item — closes the player panel.
+  Future<void> close() async {
+    AppLogger.app('MediaPlayerStore.close');
+    await _player.stop();
+    _playerState = PlayerState.stopped;
+    _currentItem = null;
+    _currentUrl = null;
+    _isFullscreen = false;
+    notifyListeners();
+  }
+
+  void setFullscreen(bool value) {
+    if (_isFullscreen == value) return;
+    _isFullscreen = value;
+    notifyListeners();
   }
 
   Future<void> playback({

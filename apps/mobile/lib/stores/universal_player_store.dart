@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
+import '../core/app_logger.dart';
+import '../models/watchable.dart';
 import '../p2p/models/client_event.dart';
+import '../p2p/models/p2p_message.dart';
 import 'media_player_store.dart';
 import 'remote_player_store.dart';
 
@@ -8,14 +11,19 @@ enum P2PMode { off, client, server }
 
 /// Facade store that delegates to the active player source based on P2P mode:
 ///
-///   off / client → MediaPlayerStore (local ExoPlayer, source of truth)
+///   off / client → MediaPlayerStore (local media_kit, source of truth)
 ///   server       → RemotePlayerStore (mirror fed by client_event packets)
 ///
+/// Commands in server mode are forwarded over P2P via [sendP2PCommand].
 /// Components read from this store regardless of which backend is active.
 /// Mirrors: apps/desktop/src/stores/universalPlayerStore.ts
 class UniversalPlayerStore extends ChangeNotifier {
   final MediaPlayerStore localPlayer;
   final RemotePlayerStore remotePlayer;
+
+  /// Injected by the app shell — routes commands to the connected P2P client.
+  /// Called only when mode == server.
+  void Function(String type, Map<String, dynamic> payload)? sendP2PCommand;
 
   P2PMode _mode = P2PMode.off;
   P2PMode get mode => _mode;
@@ -79,6 +87,10 @@ class UniversalPlayerStore extends ChangeNotifier {
   String? get currentUrl =>
       _isServerMode ? remotePlayer.currentUrl : localPlayer.currentUrl;
 
+  // currentItem and isFullscreen are local-only concerns
+  WatchableObject? get currentItem => localPlayer.currentItem;
+  bool get isFullscreen => localPlayer.isFullscreen;
+
   List<VlcTrack> get audioTracks =>
       _isServerMode ? remotePlayer.audioTracks : localPlayer.audioTracks;
 
@@ -92,31 +104,85 @@ class UniversalPlayerStore extends ChangeNotifier {
       _isServerMode ? remotePlayer.currentSubtitleTrack : localPlayer.currentSubtitleTrack;
 
   // ---------------------------------------------------------------------------
-  // Commands — always forwarded to local player.
-  // In server mode these are sent over P2P by P2PManager; local player
-  // is not called directly (phone has no local video, tablet/TV in server
-  // mode are acting as remote control).
+  // Commands
+  //
+  //   local / client mode → MediaPlayerStore (drives media_kit directly)
+  //   server mode         → sendP2PCommand (relays to connected player device)
   // ---------------------------------------------------------------------------
 
-  Future<void> open(String url) => localPlayer.open(url);
+  /// Play a watchable item. In server mode: sets currentItem locally (for UI)
+  /// and sends open command to the connected client over P2P.
+  Future<void> play(WatchableObject item) async {
+    AppLogger.app('play: ${item.name} [${item.url}] mode=$_mode');
+    await localPlayer.open(item.url, item: item);
+    if (_isServerMode) {
+      _send(P2PMessageType.open, {'file': item.url});
+    }
+  }
+
+  /// Stop playback and clear currentItem — closes the player panel.
+  Future<void> close() async {
+    AppLogger.app('close: mode=$_mode');
+    await localPlayer.close();
+    if (_isServerMode) {
+      _send(P2PMessageType.playback, {'action': 'stop'});
+    }
+  }
+
+  Future<void> open(String url, {WatchableObject? item}) async {
+    if (_isServerMode) {
+      _send(P2PMessageType.open, {'file': url});
+    } else {
+      await localPlayer.open(url, item: item);
+    }
+  }
 
   Future<void> playback({
     String? action,
     double? time,
     double? position,
     double? rate,
-  }) =>
-      localPlayer.playback(
+  }) async {
+    if (_isServerMode) {
+      _send(P2PMessageType.playback, {
+        'action': action, 'time': time, 'position': position, 'rate': rate,
+      });
+    } else {
+      await localPlayer.playback(
         action: action,
         time: time,
         position: position,
         rate: rate,
       );
+    }
+  }
 
-  Future<void> audio({double? volume, bool? mute, int? track}) =>
-      localPlayer.audio(volume: volume, mute: mute, track: track);
+  Future<void> audio({double? volume, bool? mute, int? track}) async {
+    if (_isServerMode) {
+      _send(P2PMessageType.audio, {'volume': volume, 'mute': mute, 'track': track});
+    } else {
+      await localPlayer.audio(volume: volume, mute: mute, track: track);
+    }
+  }
 
-  Future<void> subtitle({int? track}) => localPlayer.subtitle(track: track);
+  Future<void> subtitle({int? track}) async {
+    if (_isServerMode) {
+      _send(P2PMessageType.subtitle, {'track': track});
+    } else {
+      await localPlayer.subtitle(track: track);
+    }
+  }
+
+  void setFullscreen(bool value) => localPlayer.setFullscreen(value);
+
+  void _send(String type, Map<String, dynamic> payload) {
+    final filtered = {
+      for (final e in payload.entries)
+        if (e.value != null) e.key: e.value,
+    };
+    AppLogger.p2p('→ $type $filtered');
+    sendP2PCommand?.call(type, filtered);
+  }
 
   // ---------------------------------------------------------------------------
   // P2P helpers

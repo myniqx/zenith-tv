@@ -14,14 +14,18 @@ typedef DisconnectionCallback = void Function(String connectionId);
 
 /// HTTP + WebSocket server on a single port.
 /// Exposes /api/discover for HTTP discovery and accepts WebSocket connections.
-/// Mirrors: apps/desktop/electron/ipc/p2pServer.ts → P2PServer
+/// On each new connection sends a handshake_request; if no handshake_response
+/// arrives within [_handshakeTimeout] the connection is forcibly closed.
 class P2PServer {
+  static const Duration _handshakeTimeout = Duration(seconds: 15);
+
   final String deviceId;
   final String deviceName;
   final int port;
 
   HttpServer? _httpServer;
   final Map<String, WebSocketChannel> _clients = {};
+  final Map<String, Timer> _handshakeTimers = {};
 
   ConnectionCallback? onConnection;
   MessageCallback? onMessage;
@@ -49,9 +53,9 @@ class P2PServer {
   }
 
   Future<void> stop() async {
-    for (final channel in _clients.values) {
-      await channel.sink.close();
-    }
+    for (final t in _handshakeTimers.values) { t.cancel(); }
+    _handshakeTimers.clear();
+    for (final channel in _clients.values) { await channel.sink.close(); }
     _clients.clear();
     await _httpServer?.close(force: true);
     _httpServer = null;
@@ -59,7 +63,6 @@ class P2PServer {
 
   // --- Messaging ---
 
-  /// Send a message to a specific client.
   bool send(String connectionId, P2PMessage message) {
     final channel = _clients[connectionId];
     if (channel == null) return false;
@@ -67,7 +70,6 @@ class P2PServer {
     return true;
   }
 
-  /// Broadcast a message to all connected clients.
   void broadcast(P2PMessage message) {
     final encoded = jsonEncode(message.toJson());
     for (final channel in _clients.values) {
@@ -75,15 +77,27 @@ class P2PServer {
     }
   }
 
+  /// Called by P2PManager when handshake_response is validated —
+  /// cancels the timeout timer for this connection.
+  void handshakeCompleted(String connectionId) {
+    _handshakeTimers.remove(connectionId)?.cancel();
+  }
+
+  /// Forcibly close a connection (e.g. handshake timeout or trust denied).
+  Future<void> closeConnection(String connectionId) async {
+    _handshakeTimers.remove(connectionId)?.cancel();
+    final channel = _clients.remove(connectionId);
+    await channel?.sink.close();
+    onDisconnection?.call(connectionId);
+  }
+
   // ---------------------------------------------------------------------------
 
   Handler get _router => (Request request) async {
-        // WebSocket upgrade — shelf_web_socket returns 404 for non-WS requests
         final wsHandler = webSocketHandler(_handleWebSocket);
         final wsResponse = await wsHandler(request);
         if (wsResponse.statusCode != 404) return wsResponse;
 
-        // HTTP routes
         if (request.method == 'GET' && request.url.path == 'api/discover') {
           return _discoverResponse();
         }
@@ -99,34 +113,40 @@ class P2PServer {
       'version': '1.0.0',
       'role': 'controller',
     });
-    return Response.ok(
-      body,
-      headers: {'Content-Type': 'application/json'},
-    );
+    return Response.ok(body, headers: {'Content-Type': 'application/json'});
   }
 
   void _handleWebSocket(WebSocketChannel channel, String? protocol) {
     final connectionId = _randomId();
     _clients[connectionId] = channel;
 
-    // Get remote IP if possible — shelf doesn't expose it directly,
-    // so we pass 'unknown' and let callers enrich it if needed
     onConnection?.call(connectionId, 'unknown');
+
+    // Send handshake request immediately
+    channel.sink.add(jsonEncode(
+      P2PMessage(type: P2PMessageType.handshakeRequest).toJson(),
+    ));
+
+    // Start 15s timeout — close if no handshake_response arrives
+    _handshakeTimers[connectionId] = Timer(_handshakeTimeout, () {
+      _handshakeTimers.remove(connectionId);
+      closeConnection(connectionId);
+    });
 
     channel.stream.listen(
       (data) {
         try {
           final message = jsonDecode(data as String) as Map<String, dynamic>;
           onMessage?.call(connectionId, message);
-        } catch (_) {
-          // Ignore malformed messages
-        }
+        } catch (_) {}
       },
       onDone: () {
+        _handshakeTimers.remove(connectionId)?.cancel();
         _clients.remove(connectionId);
         onDisconnection?.call(connectionId);
       },
       onError: (_) {
+        _handshakeTimers.remove(connectionId)?.cancel();
         _clients.remove(connectionId);
         onDisconnection?.call(connectionId);
       },

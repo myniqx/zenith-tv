@@ -4,6 +4,7 @@ import '../../../core/app_theme.dart';
 import '../../../models/watchable.dart';
 import '../../../models/m3u_object.dart';
 import '../../../stores/content_store.dart';
+import '../../../stores/universal_player_store.dart';
 
 class ContentCardBase extends StatelessWidget {
   final WatchableObject item;
@@ -20,9 +21,7 @@ class ContentCardBase extends StatelessWidget {
     final isWatched = progress?.watched != null;
 
     return GestureDetector(
-      onTap: () {
-        // TODO: wire to universal player
-      },
+      onTap: () => context.read<UniversalPlayerStore>().play(item),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -40,24 +39,18 @@ class ContentCardBase extends StatelessWidget {
                               _Fallback(category: item.category))
                       : _Fallback(category: item.category),
 
-                  // Hover-like play overlay — on tap hold
+                  // Gradient overlay
                   Positioned.fill(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () {},
-                        child: Container(
+                    child: Container(
                           alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.transparent,
-                                Colors.black.withValues(alpha: 0.4),
-                              ],
-                            ),
-                          ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.4),
+                          ],
                         ),
                       ),
                     ),

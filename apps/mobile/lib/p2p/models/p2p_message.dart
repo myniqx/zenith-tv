@@ -45,4 +45,8 @@ abstract final class P2PMessageType {
 
   // Bidirectional
   static const String profileSync = 'profile_sync';
+
+  // Handshake (server→client then client→server)
+  static const String handshakeRequest  = 'handshake_request';
+  static const String handshakeResponse = 'handshake_response';
 }

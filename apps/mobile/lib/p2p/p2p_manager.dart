@@ -65,7 +65,6 @@ class P2PManager {
     _clientMessageSub?.cancel();
     _serverMessageSub?.cancel();
     _broadcastTimer?.cancel();
-    serverStore?.removeConnectionListener(_onClientConnected);
   }
 
   // --- Client mode ---
@@ -97,6 +96,18 @@ class P2PManager {
     final payload = raw['payload'] as Map<String, dynamic>?;
 
     switch (type) {
+      case P2PMessageType.handshakeRequest:
+        // Server is asking who we are — respond with our identity
+        clientStore?.sendMessage(P2PMessage(
+          type: P2PMessageType.handshakeResponse,
+          payload: {
+            'deviceId': clientStore?.trustedServers.firstOrNull?.deviceId ?? 'unknown',
+            'deviceName': 'Zenith TV Mobile',
+            'appVersion': '1.0.0',
+          },
+        ));
+        break;
+
       case P2PMessageType.open:
       case P2PMessageType.playback:
       case P2PMessageType.audio:
@@ -108,7 +119,6 @@ class P2PManager {
         break;
 
       case P2PMessageType.stateRequest:
-        // Server wants a full snapshot right now — respond with a client_event.
         final state = getPlayerState?.call();
         if (state != null) {
           clientStore?.sendMessage(P2PMessage(
@@ -158,18 +168,6 @@ class P2PManager {
     _serverMessageSub = server.messageStream.listen((event) {
       _handleServerMessage(event.connectionId, event.message);
     });
-
-    server.addConnectionListener(_onClientConnected);
-  }
-
-  void _onClientConnected(String connectionId) {
-    final welcome = onClientConnected?.call(connectionId);
-    if (welcome == null) return;
-
-    serverStore?.sendTo(
-      connectionId,
-      P2PMessage(type: P2PMessageType.profileSync, payload: welcome.toJson()),
-    );
   }
 
   void _handleServerMessage(String connectionId, Map<String, dynamic> raw) {
@@ -179,21 +177,46 @@ class P2PManager {
     final payload = raw['payload'] as Map<String, dynamic>?;
 
     switch (type) {
-      case P2PMessageType.clientEvent:
-        if (payload != null) {
-          onRemoteStateUpdate?.call(payload);
+      case P2PMessageType.handshakeResponse:
+        if (payload == null) return;
+        final deviceId   = payload['deviceId']   as String? ?? 'unknown';
+        final deviceName = payload['deviceName'] as String? ?? 'Unknown Device';
+
+        serverStore?.updateHandshake(connectionId,
+            deviceId: deviceId, deviceName: deviceName);
+
+        // If already trusted → proceed with profile_sync immediately
+        if (serverStore?.isTrusted(deviceId) ?? false) {
+          _sendWelcome(connectionId);
         }
+        // Otherwise UI shows Trust button — profile_sync waits for user action
+        break;
+
+      case P2PMessageType.clientEvent:
+        if (payload != null) onRemoteStateUpdate?.call(payload);
         break;
 
       case P2PMessageType.profileSync:
         if (payload != null) {
           _handleProfileSyncAsServer(
-            connectionId,
-            ProfileSyncPayload.fromJson(payload),
-          );
+              connectionId, ProfileSyncPayload.fromJson(payload));
         }
         break;
     }
+  }
+
+  /// Send the welcome profile_sync to a newly trusted/verified client.
+  void sendWelcomeToConnection(String connectionId) {
+    _sendWelcome(connectionId);
+  }
+
+  void _sendWelcome(String connectionId) {
+    final welcome = onClientConnected?.call(connectionId);
+    if (welcome == null) return;
+    serverStore?.sendTo(
+      connectionId,
+      P2PMessage(type: P2PMessageType.profileSync, payload: welcome.toJson()),
+    );
   }
 
   void _handleProfileSyncAsServer(

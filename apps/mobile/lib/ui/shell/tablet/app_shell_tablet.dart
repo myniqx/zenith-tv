@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_resizable_container/flutter_resizable_container.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../stores/content_store.dart';
+import '../../../stores/media_player_store.dart';
+import '../../../stores/universal_player_store.dart';
 import '../../../components/category_browser/category_browser.dart';
 import '../../../components/content_grid/content_grid.dart';
 import '../../../components/p2p/p2p_panel.dart';
 import '../../../components/profile_manager/profile_manager.dart';
 import '../../../components/settings/shared/settings_panel.dart';
 import '../../../components/toolbar/toolbar.dart';
+import '../../../components/video_player/tablet/video_player_tablet.dart';
 
 class AppShellTablet extends StatefulWidget {
   const AppShellTablet({super.key});
@@ -18,18 +23,44 @@ class AppShellTablet extends StatefulWidget {
 }
 
 class _AppShellTabletState extends State<AppShellTablet> {
-  double _categoryWidth = 200;
   bool _categoryCollapsed = false;
+  VideoController? _videoController;
+  late final ResizableController _resizableCtrl;
 
-  static const _minCategoryWidth = 140.0;
-  static const _maxCategoryWidth = 480.0;
+  @override
+  void initState() {
+    super.initState();
+    _resizableCtrl = ResizableController();
+  }
 
-  void _toggleCategory() =>
-      setState(() => _categoryCollapsed = !_categoryCollapsed);
+  @override
+  void dispose() {
+    _resizableCtrl.dispose();
+    super.dispose();
+  }
+
+  VideoController _getOrCreateController(MediaPlayerStore store) {
+    return _videoController ??= VideoController(
+      store.player,
+      configuration: const VideoControllerConfiguration(
+        enableHardwareAcceleration: true,
+      ),
+    );
+  }
+
+  void _toggleCategory() {
+    setState(() => _categoryCollapsed = !_categoryCollapsed);
+  }
+
+  void _closePlayer() => context.read<UniversalPlayerStore>().close();
 
   @override
   Widget build(BuildContext context) {
     final contentStore = context.watch<ContentStore>();
+    final playerStore = context.watch<UniversalPlayerStore>();
+    final mediaStore = context.read<MediaPlayerStore>();
+    final controller = _getOrCreateController(mediaStore);
+    final hasPlayer = playerStore.currentItem != null;
 
     return Scaffold(
       backgroundColor: ZColors.background,
@@ -50,93 +81,54 @@ class _AppShellTabletState extends State<AppShellTablet> {
             ),
           const Toolbar(),
           Expanded(
-            child: _ContentLayout(
-              categoryWidth: _categoryCollapsed ? 0 : _categoryWidth,
-              onCategoryResize: (w) => setState(() => _categoryWidth = w),
-              minCategoryWidth: _minCategoryWidth,
-              maxCategoryWidth: _maxCategoryWidth,
+            child: ResizableContainer(
+              controller: _resizableCtrl,
+              direction: Axis.horizontal,
+              children: [
+                // Category panel
+                ResizableChild(
+                  size: ResizableSize.pixels(
+                    _categoryCollapsed ? 0 : 200,
+                    min: 0,
+                    max: 480,
+                  ),
+                  divider: ResizableDivider(
+                    thickness: 1,
+                    color: ZColors.border.withValues(alpha: 0.25),
+                    cursor: SystemMouseCursors.resizeColumn,
+                  ),
+                  child: const CategoryBrowser(),
+                ),
+
+                // Content grid
+                const ResizableChild(
+                  size: ResizableSize.expand(),
+                  child: ContentGrid(),
+                ),
+
+                // Video panel — always in tree, 0px when no player
+                ResizableChild(
+                  size: ResizableSize.pixels(
+                    hasPlayer ? 360 : 0,
+                    min: 0,
+                    max: 600,
+                  ),
+                  divider: ResizableDivider(
+                    thickness: 1,
+                    color: ZColors.border.withValues(alpha: 0.25),
+                    cursor: SystemMouseCursors.resizeColumn,
+                  ),
+                  child: VideoPlayerTablet(
+                    player: mediaStore.player,
+                    controller: controller,
+                    onClose: _closePlayer,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-// ── Content layout ────────────────────────────────────────────────────────────
-
-class _ContentLayout extends StatefulWidget {
-  final double categoryWidth;
-  final ValueChanged<double> onCategoryResize;
-  final double minCategoryWidth;
-  final double maxCategoryWidth;
-
-  const _ContentLayout({
-    required this.categoryWidth,
-    required this.onCategoryResize,
-    required this.minCategoryWidth,
-    required this.maxCategoryWidth,
-  });
-
-  @override
-  State<_ContentLayout> createState() => _ContentLayoutState();
-}
-
-class _ContentLayoutState extends State<_ContentLayout> {
-  bool _dragging = false;
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final showHandle = _dragging || _hovered;
-
-    return Row(
-      children: [
-        if (widget.categoryWidth > 0) ...[
-          // Animate only when NOT dragging (e.g. collapse toggle)
-          _dragging
-              ? SizedBox(
-                  width: widget.categoryWidth,
-                  child: const CategoryBrowser(),
-                )
-              : AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  width: widget.categoryWidth,
-                  child: const CategoryBrowser(),
-                ),
-
-          // Resize handle
-          MouseRegion(
-            cursor: SystemMouseCursors.resizeColumn,
-            onEnter: (_) => setState(() => _hovered = true),
-            onExit: (_) => setState(() => _hovered = false),
-            child: GestureDetector(
-              onHorizontalDragStart: (_) => setState(() => _dragging = true),
-              onHorizontalDragUpdate: (details) {
-                final newWidth = (widget.categoryWidth + details.delta.dx)
-                    .clamp(widget.minCategoryWidth, widget.maxCategoryWidth);
-                widget.onCategoryResize(newWidth);
-              },
-              onHorizontalDragEnd: (_) => setState(() => _dragging = false),
-              child: SizedBox(
-                width: 8,
-                child: Center(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 120),
-                    width: showHandle ? 3 : 1,
-                    color: showHandle
-                        ? ZColors.border.withValues(alpha: 0.6)
-                        : ZColors.border.withValues(alpha: 0.2),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-
-        const Expanded(child: ContentGrid()),
-      ],
     );
   }
 }

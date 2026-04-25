@@ -112,8 +112,9 @@ class _DiscoveredServersCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final allServers = [
       ...store.trustedServers,
-      ...store.discoveredServers.where(
-          (d) => !store.trustedServers.any((t) => t.deviceId == d.deviceId)),
+      ...store.discoveredServers.where((d) =>
+          !store.trustedServers.any(
+              (t) => t.deviceId == d.deviceId || t.ip == d.ip)),
     ];
 
     return Container(

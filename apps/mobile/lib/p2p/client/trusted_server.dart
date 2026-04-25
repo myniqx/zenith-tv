@@ -56,10 +56,16 @@ class TrustedServer {
         'lastConnectedAt': lastConnectedAt,
       };
 
-  TrustedServer copyWith({String? ip, bool? autoConnect, int? lastConnectedAt}) {
+  TrustedServer copyWith({
+    String? deviceId,
+    String? deviceName,
+    String? ip,
+    bool? autoConnect,
+    int? lastConnectedAt,
+  }) {
     return TrustedServer(
-      deviceId: deviceId,
-      deviceName: deviceName,
+      deviceId: deviceId ?? this.deviceId,
+      deviceName: deviceName ?? this.deviceName,
       ip: ip ?? this.ip,
       port: port,
       version: version,
