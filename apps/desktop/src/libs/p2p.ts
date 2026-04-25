@@ -12,11 +12,18 @@ export const p2p = {
 
   getDeviceInfo: () => window.electron.p2p.getDeviceInfo(),
 
+  handshakeCompleted: (connectionId: string) =>
+    window.electron.p2p.handshakeCompleted?.(connectionId),
+
+  closeConnection: (connectionId: string) =>
+    window.electron.p2p.closeConnection?.(connectionId),
+
   onConnection: (callback: (connection: P2PConnection) => void) => {
     window.electron.p2p.onConnection((data) => {
       callback({
         id: data.connectionId,
-        ip: data.ip
+        ip: data.ip,
+        handshake: 'pending',
       });
     });
   },

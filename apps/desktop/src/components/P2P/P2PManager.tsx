@@ -9,19 +9,19 @@ import { mergeUserData } from '../../utils/profileSync';
 import { fileSystem } from '../../libs/fileSystem';
 
 export function P2PManager() {
-  const { mode, connectionStatus, lastReceivedMessage, lastProfileSync, sendToPlayer, sendToRemote, lastConnection } = useP2PStore();
+  const { mode, lastReceivedMessage, lastProfileSync, sendToPlayer, sendToRemote, lastConnection, isTrustedClient } = useP2PStore();
   const vlcStore = useVlcPlayerStore();
   const contentStore = useContentStore();
   const profilesStore = useProfilesStore();
 
+  // Send welcome profile_sync when a trusted client completes handshake
   useEffect(() => {
-    if (connectionStatus === 'connected' && lastConnection?.id) {
-      console.log('[P2PManager] Sending welcome payload');
-      sendToPlayer({
-        type: 'profile_sync',
-        payload: contentStore.getWellComePayload()
-      }, [lastConnection.id]);
-    }
+    if (!lastConnection || lastConnection.handshake !== 'completed') return;
+    if (!lastConnection.deviceId || !isTrustedClient(lastConnection.deviceId)) return;
+
+    console.log('[P2PManager] Trusted client handshake complete, sending welcome');
+    sendToPlayer({ type: 'profile_sync', payload: contentStore.getWellComePayload() }, [lastConnection.id]);
+    sendToPlayer({ type: 'state_request' }, [lastConnection.id]);
   }, [lastConnection]);
 
 
@@ -32,8 +32,18 @@ export function P2PManager() {
     const { message } = lastReceivedMessage;
     const { type, payload } = message;
 
-    // Map P2P messages to VLC store actions
     switch (type) {
+      case 'handshake_request':
+        // Server is asking who we are
+        sendToRemote({
+          type: 'handshake_response',
+          payload: {
+            deviceId: 'desktop-client',
+            deviceName: 'Zenith TV Desktop',
+            appVersion: '1.0.0',
+          }
+        });
+        return;
       case 'playback':
         vlcStore.playback(payload as PlaybackOptions);
         break;

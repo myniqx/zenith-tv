@@ -14,6 +14,14 @@ interface PendingPairingRequest extends PairingRequestPayload {
 // setClientMessageHandler doc comment in the store interface.
 let clientMessageHandler: ((message: P2PMessage) => void) | null = null;
 
+export type HandshakeStatus = 'pending' | 'completed' | 'timedOut';
+
+export interface TrustedClient {
+  deviceId: string;
+  deviceName: string;
+  trustedAt: number;
+}
+
 // Trusted server for pairing and auto-connect
 export interface TrustedServer {
   deviceId: string;
@@ -44,6 +52,7 @@ interface P2PStoreState {
   lastConnection: P2PConnection | null;
   selectedDeviceId: string | null;
   pairingRequest: PendingPairingRequest | null;
+  trustedClients: TrustedClient[];
   lastReceivedMessage: { connectionId: string; message: P2PMessage; timestamp: number } | null;
   lastProfileSync: { connectionId: string; payload: ProfileSyncPayload; timestamp: number } | null;
 
@@ -80,6 +89,11 @@ interface P2PStoreState {
   addTrustedServer: (server: TrustedServer) => void;
   removeTrustedServer: (deviceId: string) => void;
   updateTrustedServer: (deviceId: string, updates: Partial<TrustedServer>) => void;
+  trustClient: (connectionId: string) => void;
+  removeTrustedClient: (deviceId: string) => void;
+  isTrustedClient: (deviceId: string) => boolean;
+  updateConnectionHandshake: (connectionId: string, deviceId: string, deviceName: string) => void;
+  closeConnection: (connectionId: string) => Promise<void>;
 
   // Internal
   handlePlayerConnection: (connection: P2PConnection) => void;
@@ -111,6 +125,7 @@ export const useP2PStore = create<P2PStoreState>()(
       lastConnection: null,
       selectedDeviceId: null,
       pairingRequest: null,
+      trustedClients: [],
       lastReceivedMessage: null,
       lastProfileSync: null,
 
@@ -304,19 +319,12 @@ export const useP2PStore = create<P2PStoreState>()(
       },
 
       handlePlayerConnection: async (connection) => {
+        const conn: P2PConnection = { ...connection, handshake: 'pending' };
         set((state) => ({
-          connections: [...state.connections, connection],
-          lastConnection: connection,
-          // Auto-select the first connecting device
-          selectedDeviceId: state.selectedDeviceId ?? connection.id,
+          connections: [...state.connections, conn],
+          lastConnection: conn,
+          selectedDeviceId: state.selectedDeviceId ?? conn.id,
         }));
-
-        // Server mode: as soon as a client connects, ask it for a full
-        // snapshot of its VLC state so our UI can render immediately
-        // instead of waiting for incremental events.
-        if (get().mode === 'server') {
-          await p2p.send(connection.id, { type: 'state_request' });
-        }
       },
 
       handlePlayerDisconnection: (connectionId) => {
@@ -333,6 +341,12 @@ export const useP2PStore = create<P2PStoreState>()(
 
         // Update lastReceivedMessage for subscribers
         set({ lastReceivedMessage: { connectionId, message, timestamp: Date.now() } });
+
+        if (type === 'handshake_response') {
+          const { deviceId, deviceName } = payload as { deviceId: string; deviceName: string };
+          get().updateConnectionHandshake(connectionId, deviceId, deviceName);
+          return;
+        }
 
         if (type === 'pair_request') {
           const pairingPayload = payload as PairingRequestPayload;
@@ -436,15 +450,67 @@ export const useP2PStore = create<P2PStoreState>()(
             s.deviceId === deviceId ? { ...s, ...updates } : s
           ),
         })),
+
+      isTrustedClient: (deviceId) =>
+        get().trustedClients.some((c) => c.deviceId === deviceId),
+
+      trustClient: (connectionId) => {
+        const conn = get().connections.find((c) => c.id === connectionId);
+        if (!conn?.deviceId) return;
+        const { deviceId, deviceName = 'Unknown Device' } = conn;
+        if (!get().isTrustedClient(deviceId)) {
+          set((state) => ({
+            trustedClients: [...state.trustedClients, {
+              deviceId,
+              deviceName,
+              trustedAt: Date.now(),
+            }],
+          }));
+        }
+        // Cancel handshake timer and mark completed
+        p2p.handshakeCompleted(connectionId);
+        set((state) => ({
+          connections: state.connections.map((c) =>
+            c.id === connectionId ? { ...c, handshake: 'completed' as const } : c
+          ),
+        }));
+      },
+
+      removeTrustedClient: (deviceId) =>
+        set((state) => ({
+          trustedClients: state.trustedClients.filter((c) => c.deviceId !== deviceId),
+        })),
+
+      updateConnectionHandshake: (connectionId, deviceId, deviceName) => {
+        p2p.handshakeCompleted(connectionId);
+        set((state) => ({
+          connections: state.connections.map((c) =>
+            c.id === connectionId
+              ? { ...c, deviceId, deviceName, handshake: 'completed' as const }
+              : c
+          ),
+        }));
+        // If already trusted → state_request + welcome handled by P2PManager via lastConnection update
+        const isTrusted = get().isTrustedClient(deviceId);
+        const conn = get().connections.find((c) => c.id === connectionId);
+        if (isTrusted && conn) {
+          set({ lastConnection: { ...conn, deviceId, deviceName, handshake: 'completed' } });
+          p2p.send(connectionId, { type: 'state_request' });
+        }
+      },
+
+      closeConnection: async (connectionId) => {
+        await p2p.closeConnection(connectionId);
+      },
     }),
     {
       name: 'zenith-p2p',
       partialize: (state) => ({
-        // Only persist user preferences
         deviceName: state.deviceName,
         serverPort: state.serverPort,
         autoConnect: state.autoConnect,
         trustedServers: state.trustedServers,
+        trustedClients: state.trustedClients,
       }),
     }
   )

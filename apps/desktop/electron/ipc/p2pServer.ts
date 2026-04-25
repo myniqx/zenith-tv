@@ -9,6 +9,8 @@ export interface P2PEventHandlers {
   onDisconnection?: (connectionId: string) => void
 }
 
+const HANDSHAKE_TIMEOUT_MS = 15_000
+
 export class P2PServer {
   private wss: WebSocketServer | null = null
   private httpServer: http.Server | null = null
@@ -16,6 +18,7 @@ export class P2PServer {
   private deviceId: string
   private deviceName: string = 'Zenith TV Desktop'
   private clients: Map<string, WebSocket> = new Map()
+  private handshakeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
   private eventHandlers: P2PEventHandlers = {}
 
   constructor() {
@@ -79,9 +82,6 @@ export class P2PServer {
       const ip = req.socket.remoteAddress || 'unknown'
       console.log('[P2P] New connection from:', ip)
 
-      // Wait for initial handshake or assign temporary ID
-      // For now, we'll assign a temporary ID until the client identifies itself
-      // In a real scenario, we might want to wait for a "hello" message with the client's UUID
       const connectionId = randomBytes(8).toString('hex')
       this.clients.set(connectionId, ws)
 
@@ -89,16 +89,19 @@ export class P2PServer {
         this.eventHandlers.onConnection(connectionId, ip)
       }
 
+      // Send handshake request immediately
+      ws.send(JSON.stringify({ type: 'handshake_request' }))
+
+      // 15s timeout — close if no handshake_response
+      const timer = setTimeout(() => {
+        console.log('[P2P] Handshake timeout, closing connection:', connectionId)
+        this.closeConnection(connectionId)
+      }, HANDSHAKE_TIMEOUT_MS)
+      this.handshakeTimers.set(connectionId, timer)
+
       ws.on('message', (data: Buffer) => {
         try {
           const message = JSON.parse(data.toString())
-
-          // Check if this is a handshake/identity message to update connectionId
-          // For simplicity in this phase, we assume the client sends its ID in the first message
-          // or we just use the server-assigned ID.
-          // Let's stick to the server-assigned ID for now to keep it simple, 
-          // or if the message contains 'deviceId', we could map it.
-
           if (this.eventHandlers.onMessage) {
             this.eventHandlers.onMessage(connectionId, message)
           }
@@ -109,6 +112,8 @@ export class P2PServer {
       })
 
       ws.on('close', () => {
+        this.handshakeTimers.get(connectionId) && clearTimeout(this.handshakeTimers.get(connectionId)!)
+        this.handshakeTimers.delete(connectionId)
         this.clients.delete(connectionId)
         console.log('[P2P] Client disconnected:', connectionId)
         if (this.eventHandlers.onDisconnection) {
@@ -127,6 +132,25 @@ export class P2PServer {
       console.log(`[P2P] Device: ${this.deviceName} (${this.deviceId})`)
       console.log(`[P2P] Discovery endpoint: http://localhost:${this.port}/api/discover`)
     })
+  }
+
+  handshakeCompleted(connectionId: string): void {
+    const timer = this.handshakeTimers.get(connectionId)
+    if (timer) {
+      clearTimeout(timer)
+      this.handshakeTimers.delete(connectionId)
+    }
+  }
+
+  closeConnection(connectionId: string): void {
+    this.handshakeTimers.get(connectionId) && clearTimeout(this.handshakeTimers.get(connectionId)!)
+    this.handshakeTimers.delete(connectionId)
+    const ws = this.clients.get(connectionId)
+    if (ws) {
+      ws.terminate()
+      this.clients.delete(connectionId)
+      this.eventHandlers.onDisconnection?.(connectionId)
+    }
   }
 
   send(connectionId: string, message: unknown): boolean {
@@ -165,6 +189,8 @@ export class P2PServer {
   }
 
   stop(): void {
+    for (const timer of this.handshakeTimers.values()) clearTimeout(timer)
+    this.handshakeTimers.clear()
     for (const [id, ws] of this.clients) {
       ws.terminate()
       console.log('[P2P] Terminated client:', id)

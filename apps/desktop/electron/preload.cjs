@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('electron', {
     broadcast: (message) => ipcRenderer.invoke('p2p:broadcast', message),
     getDeviceInfo: () => ipcRenderer.invoke('p2p:getDeviceInfo'),
 
+    handshakeCompleted: (connectionId) => ipcRenderer.invoke('p2p:handshakeCompleted', connectionId),
+    closeConnection: (connectionId) => ipcRenderer.invoke('p2p:closeConnection', connectionId),
+
     // Event listeners
     onConnection: (callback) => ipcRenderer.on('p2p:connection', (_, data) => callback(data)),
     onMessage: (callback) => ipcRenderer.on('p2p:message', (_, data) => callback(data)),

@@ -53,6 +53,14 @@ export function registerP2PHandlers(mainWindow: BrowserWindow): void {
     if (!p2pServer) return null
     return p2pServer.getDeviceInfo()
   })
+
+  ipcMain.handle('p2p:handshakeCompleted', async (_event: IpcMainInvokeEvent, connectionId: string) => {
+    p2pServer?.handshakeCompleted(connectionId)
+  })
+
+  ipcMain.handle('p2p:closeConnection', async (_event: IpcMainInvokeEvent, connectionId: string) => {
+    p2pServer?.closeConnection(connectionId)
+  })
 }
 
 export function cleanupP2P(): void {

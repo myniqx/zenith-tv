@@ -1,10 +1,14 @@
 import { M3UStats, M3UUpdateData, UserData } from "../stores/content";
 
 
+export type HandshakeStatus = 'pending' | 'completed' | 'timedOut';
+
 export interface P2PConnection {
   id: string;
   ip: string;
-  deviceName?: string; // Optional, if provided during handshake
+  deviceId?: string;
+  deviceName?: string;
+  handshake: HandshakeStatus;
 }
 
 export interface P2PMessage<T = unknown> {
