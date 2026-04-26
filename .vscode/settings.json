@@ -4,5 +4,6 @@
     "focusables",
     "tizen",
     "Tizen"
-  ]
+  ],
+  "cmake.sourceDirectory": "/home/myniqx/react-projects/zenith-tv/apps/mobile/linux"
 }

@@ -644,6 +644,14 @@ class ContentStore extends ChangeNotifier {
         break;
 
       case GroupBy.year:
+        final yearGroups = getGroups();
+        if (yearGroups.isNotEmpty) {
+          result.add(ContentGroupData(
+            title: 'Groups',
+            items: sortItems(yearGroups, sortBy, sortOrder),
+            isGroups: true,
+          ));
+        }
         final byYear = <String, List<WatchableObject>>{};
         for (final w in getWatchables()) {
           final key = w.year?.toString() ?? 'Unknown Year';
@@ -670,6 +678,14 @@ class ContentStore extends ChangeNotifier {
         break;
 
       case GroupBy.alphabetic:
+        final alphaGroups = getGroups();
+        if (alphaGroups.isNotEmpty) {
+          result.add(ContentGroupData(
+            title: 'Groups',
+            items: sortItems(alphaGroups, sortBy, sortOrder),
+            isGroups: true,
+          ));
+        }
         final byLetter = <String, List<WatchableObject>>{};
         for (final w in getWatchables()) {
           final letter = getFirstLetter(w.name);

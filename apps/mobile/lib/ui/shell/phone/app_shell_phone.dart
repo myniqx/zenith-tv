@@ -78,7 +78,7 @@ class _AppShellPhoneState extends State<AppShellPhone> {
 
     return Scaffold(
       backgroundColor: ZColors.background,
-      body: _buildSection(contentStore, controller),
+      body: SafeArea(child: _buildSection(contentStore, controller)),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: ZColors.muted,

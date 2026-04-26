@@ -71,6 +71,7 @@ class ContentGrid extends StatelessWidget {
                 : _autoColumns(constraints.maxWidth);
 
             return ListView.builder(
+              key: ValueKey(store.currentGroup?.name),
               itemCount: store.groupedContent.length,
               itemBuilder: (context, i) => ContentGroup(
                 data: store.groupedContent[i],

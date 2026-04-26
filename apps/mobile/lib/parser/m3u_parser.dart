@@ -34,6 +34,7 @@ class _M3UParser {
   final StringBuffer _attrsBuf = StringBuffer();
   final StringBuffer _titleBuf = StringBuffer();
   final StringBuffer _urlBuf   = StringBuffer();
+  bool _inQuote = false;
 
   List<M3UObject> parse() {
     final results = <M3UObject>[];
@@ -79,10 +80,14 @@ class _M3UParser {
           }
 
         case _State.attrs:
-          if (c == 0x2C) { // ','
+          if (c == 0x22) { // '"' — toggle inside-quote flag
+            _inQuote = !_inQuote;
+            _attrsBuf.writeCharCode(c);
+          } else if (c == 0x2C && !_inQuote) { // ',' outside quotes → end of attrs
             state = _State.title;
           } else if (c == 0x0A) {
             // Newline inside attrs — malformed, reset
+            _inQuote = false;
             _resetBuffers();
             state = _State.idle;
           } else {
@@ -171,6 +176,7 @@ class _M3UParser {
     _attrsBuf.clear();
     _titleBuf.clear();
     _urlBuf.clear();
+    _inQuote = false;
   }
 
   // -------------------------------------------------------------------------

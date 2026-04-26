@@ -63,10 +63,13 @@ class _CoverCollage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
+    return ScrollConfiguration(
+      behavior: const ScrollBehavior().copyWith(scrollbars: false),
+      child: GridView.builder(
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3, crossAxisSpacing: 1, mainAxisSpacing: 1,
+        childAspectRatio: 2 / 3,
       ),
       itemCount: 9,
       itemBuilder: (_, i) {
@@ -77,6 +80,7 @@ class _CoverCollage extends StatelessWidget {
         }
         return const _CollageCell();
       },
+    ),
     );
   }
 }
