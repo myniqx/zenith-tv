@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/device_type.dart';
 import '../../../stores/settings_store.dart';
 import 'setting_row.dart';
 import 'settings_section.dart';
@@ -23,6 +24,7 @@ class VideoSettings extends StatelessWidget {
         SettingsSection(
           title: 'Volume',
           icon: Icons.volume_up_outlined,
+          hidePlatforms: const [DeviceType.tv],
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),

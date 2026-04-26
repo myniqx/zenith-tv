@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/device_type.dart';
 import '../../../stores/settings_store.dart';
 import 'setting_row.dart';
 import 'settings_section.dart';
@@ -30,6 +31,7 @@ class GeneralSettings extends StatelessWidget {
             SettingRow(
               label: 'Remember Layout',
               description: 'Restore last category, sort, and grouping settings',
+              hidePlatforms: const [DeviceType.phone, DeviceType.tv],
               control: Switch(
                 value: store.rememberLayout,
                 onChanged: store.setRememberLayout,

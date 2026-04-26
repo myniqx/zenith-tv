@@ -54,11 +54,9 @@ dependencies:
 
   # Utils
   uuid: ^4.5.1
-  ffi: ^2.1.0
 
   # Fonts
   google_fonts: ^8.0.2
-  flutter_resizable_container: ^4.2.0
 
 dev_dependencies:
   flutter_test:

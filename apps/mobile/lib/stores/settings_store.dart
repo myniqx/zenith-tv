@@ -68,6 +68,15 @@ class SettingsStore extends ChangeNotifier {
   String? lastProfileUsername;
   String? lastProfileUUID;
 
+  // Layout (only persisted when rememberLayout is true)
+  double categoryWidth = 200;
+  double videoWidth = 360;
+
+  static const double defaultCategoryWidth = 200;
+  static const double defaultVideoWidth    = 360;
+  static const double _defaultCategoryWidth = defaultCategoryWidth;
+  static const double _defaultVideoWidth    = defaultVideoWidth;
+
   // Keyboard shortcuts (desktop only)
   Map<ShortcutAction, List<String>> keyboardShortcuts =
       Map.from(defaultKeyboardShortcuts);
@@ -94,6 +103,10 @@ class SettingsStore extends ChangeNotifier {
       rememberLayout            = json['rememberLayout'] as bool? ?? rememberLayout;
       lastProfileUsername       = json['lastProfileUsername'] as String?;
       lastProfileUUID           = json['lastProfileUUID'] as String?;
+      if (rememberLayout) {
+        categoryWidth = (json['categoryWidth'] as num?)?.toDouble() ?? _defaultCategoryWidth;
+        videoWidth    = (json['videoWidth']    as num?)?.toDouble() ?? _defaultVideoWidth;
+      }
 
       final shortcuts = json['keyboardShortcuts'] as Map<String, dynamic>?;
       if (shortcuts != null) {
@@ -126,6 +139,8 @@ class SettingsStore extends ChangeNotifier {
       'rememberLayout':            rememberLayout,
       'lastProfileUsername':       lastProfileUsername,
       'lastProfileUUID':           lastProfileUUID,
+      'categoryWidth':             categoryWidth,
+      'videoWidth':                videoWidth,
       'keyboardShortcuts':         shortcuts,
     }));
   }
@@ -182,6 +197,23 @@ class SettingsStore extends ChangeNotifier {
   }
   void setAutoLoadLastProfile(bool v)           { autoLoadLastProfile = v; _notify(); }
   void setRememberLayout(bool v)                { rememberLayout = v; _notify(); }
+
+  void setLayoutWidths({double? category, double? video, bool forceWrite = false}) {
+    if (!rememberLayout && !forceWrite) return;
+    if (category != null) categoryWidth = category.clamp(0, 480);
+    if (video != null)    videoWidth    = video.clamp(0, 600);
+    if (rememberLayout) {
+      _notify(); // persist
+    } else {
+      notifyListeners(); // update UI only, no persist
+    }
+  }
+
+  void resetLayout() {
+    categoryWidth = _defaultCategoryWidth;
+    videoWidth    = _defaultVideoWidth;
+    notifyListeners(); // no _save — don't persist the reset
+  }
 
   void setLastProfile(String username, String uuid) {
     lastProfileUsername = username;

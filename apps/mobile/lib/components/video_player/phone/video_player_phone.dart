@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import '../shared/controls_overlay.dart';
-import '../shared/multi_layer_player.dart';
+import '../shared/video_controls.dart';
 
-/// Phone video player:
-///   portrait  → compact video box (16:9) + content below
-///   landscape → fullscreen MultiLayerPlayer
-class VideoPlayerPhone extends StatefulWidget {
+/// Phone video player — same architecture as tablet.
+/// Portrait: 16:9 box above content. Landscape: media_kit native fullscreen.
+class VideoPlayerPhone extends StatelessWidget {
   final VideoController controller;
   final VoidCallback onClose;
 
@@ -17,37 +15,12 @@ class VideoPlayerPhone extends StatefulWidget {
   });
 
   @override
-  State<VideoPlayerPhone> createState() => _VideoPlayerPhoneState();
-}
-
-class _VideoPlayerPhoneState extends State<VideoPlayerPhone> {
-  bool _showControls = false;
-
-  @override
   Widget build(BuildContext context) {
-    final orientation = MediaQuery.of(context).orientation;
-
-    if (orientation == Orientation.landscape) {
-      return MultiLayerPlayer(
-        controller: widget.controller,
-        onClose: widget.onClose,
-      );
-    }
-
-    // Portrait — compact top video box
-    return GestureDetector(
-      onTap: () => setState(() => _showControls = !_showControls),
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Stack(
-          children: [
-            Video(controller: widget.controller, controls: NoVideoControls),
-            if (_showControls)
-              Positioned.fill(
-                child: ControlsOverlay(onClose: widget.onClose),
-              ),
-          ],
-        ),
+    return AspectRatio(
+      aspectRatio: 16 / 9,
+      child: Video(
+        controller: controller,
+        controls: (state) => VideoControls(state: state, onClose: onClose),
       ),
     );
   }

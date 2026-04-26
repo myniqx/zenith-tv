@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/device_type.dart';
 import 'tablet/toolbar_tablet.dart';
+import 'phone/toolbar_phone.dart';
 
 class Toolbar extends StatelessWidget {
   const Toolbar({super.key});
@@ -12,7 +13,7 @@ class Toolbar extends StatelessWidget {
     return switch (detector.current) {
       DeviceType.tablet => const ToolbarTablet(),
       DeviceType.tv     => const ToolbarTablet(),
-      DeviceType.phone  => const SizedBox.shrink(),
+      DeviceType.phone  => const ToolbarPhone(),
     };
   }
 }

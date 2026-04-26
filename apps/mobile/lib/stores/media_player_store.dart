@@ -27,13 +27,28 @@ class MediaPlayerStore extends ChangeNotifier {
   /// Exposed so VideoController can be created against this player instance.
   Player get player => _player;
 
-  /// Called when tracks are loaded — use to apply preferred language selection.
-  /// Args: audioTracks, subtitleTracks
+  /// Called when tracks are loaded — use to apply preferred language / userData selection.
   void Function(List<p2p.VlcTrack> audio, List<p2p.VlcTrack> subtitle)?
       onTracksReady;
 
+  /// Called on pause / stop / close with current (time, duration).
+  void Function(double time, double duration)? onSaveProgress;
+
+  /// Called when the user manually changes audio or subtitle track.
+  void Function(int audioTrack, int subtitleTrack)? onSaveTrackSelection;
+
+  /// Called once on first play after open — use to seek to saved position.
+  void Function()? onFirstPlay;
+
   // --- State ---
   bool _isInitialized = false;
+
+  /// True while the system is auto-selecting tracks on open (onTracksReady).
+  /// Track changes during this window are NOT forwarded to onSaveTrackSelection.
+  bool _systemSettingTrack = false;
+
+  /// True until the first playing event fires after open — used for seek-to-saved-position.
+  bool _awaitingFirstPlay = false;
   String _playerState = PlayerState.idle;
   double _time = 0;
   double _duration = 0;
@@ -87,6 +102,10 @@ class MediaPlayerStore extends ChangeNotifier {
       _player.stream.playing.listen((playing) {
         _playerState = playing ? PlayerState.playing : PlayerState.paused;
         notifyListeners();
+        if (playing && _awaitingFirstPlay) {
+          _awaitingFirstPlay = false;
+          onFirstPlay?.call();
+        }
       }),
       _player.stream.buffering.listen((buffering) {
         if (buffering) {
@@ -131,13 +150,17 @@ class MediaPlayerStore extends ChangeNotifier {
             .where((t) => t.id >= 0)
             .toList();
         notifyListeners();
-        // Notify caller so preferred language selection can be applied
+        // Notify caller — after handler returns, system track selection window closes
         onTracksReady?.call(_audioTracks, _subtitleTracks);
+        _systemSettingTrack = false;
       }),
       _player.stream.track.listen((track) {
         _currentAudioTrack = int.tryParse(track.audio.id) ?? -1;
         _currentSubtitleTrack = int.tryParse(track.subtitle.id) ?? -1;
         notifyListeners();
+        if (!_systemSettingTrack) {
+          onSaveTrackSelection?.call(_currentAudioTrack, _currentSubtitleTrack);
+        }
       }),
       _player.stream.completed.listen((completed) {
         if (completed) {
@@ -170,6 +193,8 @@ class MediaPlayerStore extends ChangeNotifier {
     _currentUrl = url;
     _currentItem = item;
     _playerState = PlayerState.opening;
+    _systemSettingTrack = true;
+    _awaitingFirstPlay = true;
     notifyListeners();
 
     try {
@@ -178,14 +203,21 @@ class MediaPlayerStore extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       _playerState = PlayerState.error;
+      _systemSettingTrack = false;
       AppLogger.app('MediaPlayerStore.open error: $e', error: true);
       notifyListeners();
     }
   }
 
+  /// Called by onTracksReady handler after auto track selection is complete.
+  void finishSystemTrackSelection() {
+    _systemSettingTrack = false;
+  }
+
   /// Stop playback and clear current item — closes the player panel.
   Future<void> close() async {
     AppLogger.app('MediaPlayerStore.close');
+    onSaveProgress?.call(_time, _duration);
     await _player.stop();
     _playerState = PlayerState.stopped;
     _currentItem = null;
@@ -209,8 +241,10 @@ class MediaPlayerStore extends ChangeNotifier {
     if (action == 'play' || action == 'resume') {
       await _player.play();
     } else if (action == 'pause') {
+      onSaveProgress?.call(_time, _duration);
       await _player.pause();
     } else if (action == 'stop') {
+      onSaveProgress?.call(_time, _duration);
       await _player.stop();
       _playerState = PlayerState.stopped;
       _currentUrl = null;

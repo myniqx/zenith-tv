@@ -8,6 +8,7 @@ class WatchableObject extends ViewObject {
   String url = '';
   String group = '';
   int? year;
+  int? durationMs;
   UserItemData userData = UserItemData.empty;
   M3UCategory category = M3UCategory.liveStream;
 

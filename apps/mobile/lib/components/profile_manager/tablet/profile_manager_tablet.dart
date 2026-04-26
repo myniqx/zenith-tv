@@ -8,7 +8,9 @@ import '../shared/delete_dialog.dart';
 import '../shared/m3u_display.dart';
 
 class ProfileManagerTablet extends StatefulWidget {
-  const ProfileManagerTablet({super.key});
+  final VoidCallback? onLoaded;
+
+  const ProfileManagerTablet({super.key, this.onLoaded});
 
   @override
   State<ProfileManagerTablet> createState() => _ProfileManagerTabletState();
@@ -69,6 +71,7 @@ class _ProfileManagerTabletState extends State<ProfileManagerTablet> {
                       profileStore: profileStore,
                       contentStore: contentStore,
                       onDeleted: () => _onDeletedProfile(_selectedUsername!),
+                      onLoaded: widget.onLoaded,
                     )
                   : _EmptyRight(),
         ),
@@ -191,10 +194,12 @@ class _M3UPanel extends StatefulWidget {
   final ProfileStore profileStore;
   final ContentStore contentStore;
   final VoidCallback onDeleted;
+  final VoidCallback? onLoaded;
 
   const _M3UPanel({
     required this.username, required this.profileStore,
     required this.contentStore, required this.onDeleted,
+    this.onLoaded,
   });
 
   @override
@@ -218,6 +223,16 @@ class _M3UPanelState extends State<_M3UPanel> {
       _showAddM3U = false;
       _addM3UCtrl.clear();
     }
+  }
+
+  Future<void> _load(String uuid) async {
+    await widget.contentStore.setContent(widget.username, uuid);
+    if (mounted) widget.onLoaded?.call();
+  }
+
+  Future<void> _update(String uuid) async {
+    await widget.contentStore.setContent(widget.username, uuid);
+    if (mounted) await widget.contentStore.update();
   }
 
   Future<void> _addM3U() async {
@@ -303,11 +318,13 @@ class _M3UPanelState extends State<_M3UPanel> {
             final name = m3uDisplayName(widget.profileStore, uuid);
             return _TabletM3UTile(
               name: name,
-              uuid: uuid,
               isActiveSource: isActiveSource,
-              contentStore: widget.contentStore,
-              onActivate: () => context.read<ContentStore>()
-                  .setContent(widget.username, uuid),
+              isLoading: widget.contentStore.isLoading && isActiveSource,
+              channelCount: isActiveSource
+                  ? widget.contentStore.calculateStats().totalWatchables
+                  : null,
+              onLoad: () => _load(uuid),
+              onUpdate: () => _update(uuid),
               onRemove: () => _removeM3U(uuid),
             );
           }),
@@ -350,75 +367,97 @@ class _M3UPanelState extends State<_M3UPanel> {
 
 class _TabletM3UTile extends StatelessWidget {
   final String name;
-  final String uuid;
   final bool isActiveSource;
-  final ContentStore contentStore;
-  final VoidCallback onActivate;
+  final bool isLoading;
+  final int? channelCount;
+  final VoidCallback onLoad;
+  final VoidCallback onUpdate;
   final VoidCallback onRemove;
 
   const _TabletM3UTile({
-    required this.name, required this.uuid, required this.isActiveSource,
-    required this.contentStore, required this.onActivate, required this.onRemove,
+    required this.name,
+    required this.isActiveSource,
+    required this.isLoading,
+    required this.onLoad,
+    required this.onUpdate,
+    required this.onRemove,
+    this.channelCount,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: isActiveSource ? ZColors.accent : ZColors.secondary,
-        borderRadius: BorderRadius.circular(10),
-        border: isActiveSource
-            ? Border.all(color: ZColors.primary.withValues(alpha: 0.4))
-            : Border.all(color: ZColors.border.withValues(alpha: 0.15)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.playlist_play, color: ZColors.mutedForeground, size: 18),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: ZText.body(14, weight: FontWeight.w500)),
-                if (contentStore.isLoading && isActiveSource)
-                  Text('Loading…', style: ZText.body(11, color: ZColors.primary))
-                else if (isActiveSource)
-                  Text('${contentStore.calculateStats().totalWatchables} channels',
-                      style: ZText.bodySm),
-              ],
-            ),
-          ),
-          if (!isActiveSource)
-            TextButton(
-              onPressed: onActivate,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    return GestureDetector(
+      onTap: onLoad,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: isActiveSource ? ZColors.accent : ZColors.secondary,
+          borderRadius: BorderRadius.circular(10),
+          border: isActiveSource
+              ? Border.all(color: ZColors.primary.withValues(alpha: 0.4))
+              : Border.all(color: ZColors.border.withValues(alpha: 0.15)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Row(
+            children: [
+              // Active indicator bar
+              if (isActiveSource)
+                Container(width: 3, height: 56, color: ZColors.primary),
+
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: isActiveSource ? 12 : 14,
+                    right: 4,
+                    top: 12,
+                    bottom: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.playlist_play,
+                        color: isActiveSource ? ZColors.primary : ZColors.mutedForeground,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: ZText.body(14, weight: FontWeight.w500)),
+                            if (isLoading)
+                              Text('Loading…', style: ZText.body(11, color: ZColors.primary))
+                            else if (isActiveSource && channelCount != null)
+                              Text('$channelCount channels', style: ZText.bodySm),
+                          ],
+                        ),
+                      ),
+                      // Update button
+                      IconButton(
+                        onPressed: onUpdate,
+                        icon: const Icon(Icons.refresh, size: 16),
+                        color: ZColors.mutedForeground,
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Update',
+                      ),
+                      // Delete button
+                      IconButton(
+                        onPressed: onRemove,
+                        icon: const Icon(Icons.delete_outline, size: 16),
+                        color: ZColors.destructiveFg,
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Delete',
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              child: const Text('Activate'),
-            )
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: ZColors.primary.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text('Active',
-                  style: ZText.body(11, weight: FontWeight.w700, color: ZColors.primary)),
-            ),
-          const SizedBox(width: 4),
-          IconButton(
-            onPressed: onRemove,
-            icon: const Icon(Icons.close, size: 16),
-            color: ZColors.mutedForeground,
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

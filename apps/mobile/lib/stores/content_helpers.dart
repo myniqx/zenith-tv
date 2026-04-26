@@ -30,8 +30,30 @@ class ContentGroupData {
   });
 }
 
+class M3UItemData {
+  final int? addedAt;    // timestamp (ms) — when first seen in M3U
+  final int? durationMs; // total media duration in milliseconds
+
+  const M3UItemData({this.addedAt, this.durationMs});
+
+  factory M3UItemData.fromJson(Map<String, dynamic> json) => M3UItemData(
+        addedAt:    (json['addedAt']    as num?)?.toInt(),
+        durationMs: (json['durationMs'] as num?)?.toInt(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    if (addedAt    != null) 'addedAt':    addedAt,
+    if (durationMs != null) 'durationMs': durationMs,
+  };
+
+  M3UItemData copyWith({int? addedAt, int? durationMs}) => M3UItemData(
+    addedAt:    addedAt    ?? this.addedAt,
+    durationMs: durationMs ?? this.durationMs,
+  );
+}
+
 class M3UUpdateData {
-  final Map<String, int> items; // url → addedAt timestamp (ms)
+  final Map<String, M3UItemData> items; // url → item metadata
   final int createdAt;
   final int updatedAt;
 
@@ -48,14 +70,14 @@ class M3UUpdateData {
 
   factory M3UUpdateData.fromJson(Map<String, dynamic> json) => M3UUpdateData(
         items: (json['items'] as Map<String, dynamic>? ?? {}).map(
-          (k, v) => MapEntry(k, (v as num).toInt()),
+          (k, v) => MapEntry(k, M3UItemData.fromJson(v)),
         ),
         createdAt: (json['createdAt'] as num).toInt(),
         updatedAt: (json['updatedAt'] as num).toInt(),
       );
 
   Map<String, dynamic> toJson() => {
-        'items': items,
+        'items': items.map((k, v) => MapEntry(k, v.toJson())),
         'createdAt': createdAt,
         'updatedAt': updatedAt,
       };

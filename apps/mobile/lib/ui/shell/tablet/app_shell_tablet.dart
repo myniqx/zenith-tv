@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../stores/content_store.dart';
 import '../../../stores/media_player_store.dart';
+import '../../../stores/settings_store.dart';
 import '../../../stores/universal_player_store.dart';
 import '../../../components/category_browser/category_browser.dart';
 import '../../../components/content_grid/content_grid.dart';
@@ -15,6 +15,14 @@ import '../../../components/settings/shared/settings_panel.dart';
 import '../../../components/toolbar/toolbar.dart';
 import '../../../components/video_player/tablet/video_player_tablet.dart';
 
+// Divider hit area and visible thickness
+const double _dividerHitArea  = 12;
+const double _dividerVisible  = 3;
+const double _categoryMin     = 0;
+const double _categoryMax     = 480;
+const double _videoMin        = 0;
+const double _videoMax        = 600;
+
 class AppShellTablet extends StatefulWidget {
   const AppShellTablet({super.key});
 
@@ -23,21 +31,7 @@ class AppShellTablet extends StatefulWidget {
 }
 
 class _AppShellTabletState extends State<AppShellTablet> {
-  bool _categoryCollapsed = false;
   VideoController? _videoController;
-  late final ResizableController _resizableCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _resizableCtrl = ResizableController();
-  }
-
-  @override
-  void dispose() {
-    _resizableCtrl.dispose();
-    super.dispose();
-  }
 
   VideoController _getOrCreateController(MediaPlayerStore store) {
     return _videoController ??= VideoController(
@@ -48,27 +42,29 @@ class _AppShellTabletState extends State<AppShellTablet> {
     );
   }
 
-  void _toggleCategory() {
-    setState(() => _categoryCollapsed = !_categoryCollapsed);
-  }
-
   void _closePlayer() => context.read<UniversalPlayerStore>().close();
 
   @override
   Widget build(BuildContext context) {
-    final contentStore = context.watch<ContentStore>();
-    final playerStore = context.watch<UniversalPlayerStore>();
-    final mediaStore = context.read<MediaPlayerStore>();
-    final controller = _getOrCreateController(mediaStore);
-    final hasPlayer = playerStore.currentItem != null;
+    final contentStore  = context.watch<ContentStore>();
+    final playerStore   = context.watch<UniversalPlayerStore>();
+    final settings      = context.watch<SettingsStore>();
+    final mediaStore    = context.read<MediaPlayerStore>();
+    final controller    = _getOrCreateController(mediaStore);
+    final hasPlayer     = playerStore.currentItem != null;
 
     return Scaffold(
       backgroundColor: ZColors.background,
       body: Column(
         children: [
           _TabletHeader(
-            categoryCollapsed: _categoryCollapsed,
-            onToggleCategory: _toggleCategory,
+            categoryCollapsed: settings.categoryWidth == 0,
+            onToggleCategory: () {
+              final w = settings.categoryWidth == 0
+                  ? SettingsStore.defaultCategoryWidth
+                  : 0.0;
+              settings.setLayoutWidths(category: w, forceWrite: true);
+            },
           ),
           if (contentStore.isLoading)
             LinearProgressIndicator(
@@ -81,53 +77,120 @@ class _AppShellTabletState extends State<AppShellTablet> {
             ),
           const Toolbar(),
           Expanded(
-            child: ResizableContainer(
-              controller: _resizableCtrl,
-              direction: Axis.horizontal,
-              children: [
-                // Category panel
-                ResizableChild(
-                  size: ResizableSize.pixels(
-                    _categoryCollapsed ? 0 : 200,
-                    min: 0,
-                    max: 480,
-                  ),
-                  divider: ResizableDivider(
-                    thickness: 1,
-                    color: ZColors.border.withValues(alpha: 0.25),
-                    cursor: SystemMouseCursors.resizeColumn,
-                  ),
-                  child: const CategoryBrowser(),
-                ),
-
-                // Content grid
-                const ResizableChild(
-                  size: ResizableSize.expand(),
-                  child: ContentGrid(),
-                ),
-
-                // Video panel — always in tree, 0px when no player
-                ResizableChild(
-                  size: ResizableSize.pixels(
-                    hasPlayer ? 360 : 0,
-                    min: 0,
-                    max: 600,
-                  ),
-                  divider: ResizableDivider(
-                    thickness: 1,
-                    color: ZColors.border.withValues(alpha: 0.25),
-                    cursor: SystemMouseCursors.resizeColumn,
-                  ),
-                  child: VideoPlayerTablet(
-                    player: mediaStore.player,
-                    controller: controller,
-                    onClose: _closePlayer,
-                  ),
-                ),
-              ],
+            child: _ResizableLayout(
+              categoryWidth : settings.categoryWidth,
+              videoWidth    : hasPlayer ? settings.videoWidth : 0,
+              onCategoryResize: (w) => settings.setLayoutWidths(category: w),
+              onVideoResize   : (w) => settings.setLayoutWidths(video: w),
+              categoryChild : const CategoryBrowser(),
+              contentChild  : const ContentGrid(),
+              videoChild    : VideoPlayerTablet(
+                player    : mediaStore.player,
+                controller: controller,
+                onClose   : _closePlayer,
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Manual 3-column resizable layout ─────────────────────────────────────────
+//
+// Col-0 (category) | Divider-A | Col-1 (content, expands) | Divider-B | Col-2 (video)
+//
+// Dragging Divider-A: only col-0 width changes (col-1 absorbs the slack).
+// Dragging Divider-B: only col-2 width changes (col-1 absorbs the slack).
+
+class _ResizableLayout extends StatelessWidget {
+  final double categoryWidth;
+  final double videoWidth;
+  final ValueChanged<double> onCategoryResize;
+  final ValueChanged<double> onVideoResize;
+  final Widget categoryChild;
+  final Widget contentChild;
+  final Widget videoChild;
+
+  const _ResizableLayout({
+    required this.categoryWidth,
+    required this.videoWidth,
+    required this.onCategoryResize,
+    required this.onVideoResize,
+    required this.categoryChild,
+    required this.contentChild,
+    required this.videoChild,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        // Col-0: category
+        if (categoryWidth > 0)
+          SizedBox(width: categoryWidth, child: categoryChild),
+
+        // Divider-A (between category and content)
+        _Divider(
+          onDelta: (dx) {
+            final next = (categoryWidth + dx).clamp(_categoryMin, _categoryMax);
+            onCategoryResize(next);
+          },
+        ),
+
+        // Col-1: content (expands)
+        Expanded(child: contentChild),
+
+        // Divider-B (between content and video) — only shown when video is open
+        if (videoWidth > 0)
+          _Divider(
+            onDelta: (dx) {
+              final next = (videoWidth - dx).clamp(_videoMin, _videoMax);
+              onVideoResize(next);
+            },
+          ),
+
+        // Col-2: video
+        if (videoWidth > 0)
+          SizedBox(width: videoWidth, child: videoChild),
+      ],
+    );
+  }
+}
+
+class _Divider extends StatefulWidget {
+  final ValueChanged<double> onDelta;
+  const _Divider({required this.onDelta});
+
+  @override
+  State<_Divider> createState() => _DividerState();
+}
+
+class _DividerState extends State<_Divider> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit:  (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragUpdate: (d) => widget.onDelta(d.delta.dx),
+        child: SizedBox(
+          width: _dividerHitArea,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: _dividerVisible,
+              color: _hovered
+                  ? ZColors.primary.withValues(alpha: 0.6)
+                  : ZColors.border.withValues(alpha: 0.25),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -157,7 +220,6 @@ class _TabletHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
-          // Category toggle
           GestureDetector(
             onTap: onToggleCategory,
             child: Container(
@@ -177,8 +239,6 @@ class _TabletHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-
-          // Logo
           Text(
             'Zenith TV',
             style: GoogleFonts.spaceGrotesk(
@@ -189,11 +249,8 @@ class _TabletHeader extends StatelessWidget {
               color: ZColors.foreground,
             ),
           ),
-
           const Spacer(),
-
-          // Modal buttons
-          _HeaderCapsule(),
+          const _HeaderCapsule(),
         ],
       ),
     );
@@ -224,7 +281,7 @@ class _CapsuleButtonState extends State<_CapsuleButton> {
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.onTap,
@@ -237,22 +294,13 @@ class _CapsuleButtonState extends State<_CapsuleButton> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                widget.icon,
-                size: 16,
-                color: _hovered ? ZColors.foreground : ZColors.mutedForeground,
-              ),
+              Icon(widget.icon, size: 16,
+                  color: _hovered ? ZColors.foreground : ZColors.mutedForeground),
               const SizedBox(width: 6),
-              Text(
-                widget.label,
-                style: ZText.body(
-                  12,
-                  weight: FontWeight.w600,
-                  color: _hovered
-                      ? ZColors.foreground
-                      : ZColors.mutedForeground,
-                ),
-              ),
+              Text(widget.label,
+                  style: ZText.body(12,
+                      weight: FontWeight.w600,
+                      color: _hovered ? ZColors.foreground : ZColors.mutedForeground)),
             ],
           ),
         ),
@@ -266,12 +314,8 @@ class _CapsuleButtonState extends State<_CapsuleButton> {
 class _HeaderCapsule extends StatelessWidget {
   const _HeaderCapsule();
 
-  void _openDialog(
-    BuildContext context,
-    String title,
-    Widget child, {
-    double width = 600,
-  }) {
+  void _openDialog(BuildContext context, String title, Widget child,
+      {double width = 600}) {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -291,11 +335,8 @@ class _HeaderCapsule extends StatelessWidget {
                     const Spacer(),
                     GestureDetector(
                       onTap: () => Navigator.pop(ctx),
-                      child: const Icon(
-                        Icons.close,
-                        size: 20,
-                        color: ZColors.mutedForeground,
-                      ),
+                      child: const Icon(Icons.close,
+                          size: 20, color: ZColors.mutedForeground),
                     ),
                   ],
                 ),
@@ -312,31 +353,18 @@ class _HeaderCapsule extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final buttons = [
-      (
-        Icons.cell_tower_rounded,
-        'P2P',
-        () => _openDialog(
-          context,
-          'Remote Control',
-          const P2PPanel(),
-          width: 680,
-        ),
-      ),
-      (
-        Icons.settings_outlined,
-        'Settings',
-        () => _openDialog(context, 'Settings', const SettingsPanel()),
-      ),
-      (
-        Icons.person_outline,
-        'Profiles',
-        () => _openDialog(
-          context,
+      (Icons.cell_tower_rounded,  'P2P',      () => _openDialog(context, 'Remote Control', const P2PPanel(), width: 680)),
+      (Icons.settings_outlined,   'Settings', () => _openDialog(context, 'Settings',
+          const SingleChildScrollView(child: SettingsPanel()))),
+      (Icons.person_outline, 'Profiles', () {
+        final outerCtx = context;
+        _openDialog(
+          outerCtx,
           'Profiles',
-          const ProfileManager(),
+          ProfileManager(onLoaded: () => Navigator.of(outerCtx).pop()),
           width: 760,
-        ),
-      ),
+        );
+      }),
     ];
 
     return Container(
@@ -352,11 +380,8 @@ class _HeaderCapsule extends StatelessWidget {
           children: [
             for (int i = 0; i < buttons.length; i++) ...[
               if (i > 0)
-                Container(
-                  width: 1,
-                  height: 20,
-                  color: ZColors.border.withValues(alpha: 0.4),
-                ),
+                Container(width: 1, height: 20,
+                    color: ZColors.border.withValues(alpha: 0.4)),
               _CapsuleButton(
                 icon: buttons[i].$1,
                 label: buttons[i].$2,

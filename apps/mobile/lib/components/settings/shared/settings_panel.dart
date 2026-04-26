@@ -79,16 +79,12 @@ class _SettingsPanelState extends State<SettingsPanel> {
         ),
         const SizedBox(height: 20),
 
-        // Tab content
-        Expanded(
-          child: SingleChildScrollView(
-            child: switch (_tabIndex) {
-              0 => const GeneralSettings(),
-              1 => const VideoSettings(),
-              _ => const KeyboardShortcutsSettings(),
-            },
-          ),
-        ),
+        // Tab content — caller is responsible for scroll/expand context
+        switch (_tabIndex) {
+          0 => const GeneralSettings(),
+          1 => const VideoSettings(),
+          _ => const KeyboardShortcutsSettings(),
+        },
       ],
     );
   }

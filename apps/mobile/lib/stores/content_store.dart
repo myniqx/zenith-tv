@@ -8,7 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/index.dart';
 import '../p2p/models/profile_sync_payload.dart';
 import '../p2p/utils/merge_user_data.dart';
-import '../parser/m3u_parser_ffi.dart';
+import '../parser/m3u_parser.dart';
 import 'content_helpers.dart';
 import 'profile_store.dart';
 
@@ -121,17 +121,6 @@ class ContentStore extends ChangeNotifier {
         M3UUpdateData.fromJson,
       );
 
-      // Remove items older than 30 days from recent tracking
-      final thirtyDaysAgo =
-          DateTime.now().millisecondsSinceEpoch - 30 * 24 * 60 * 60 * 1000;
-      final keysToRemove = update.items.entries
-          .where((e) => e.value < thirtyDaysAgo)
-          .map((e) => e.key)
-          .toList();
-      for (final key in keysToRemove) {
-        update.items.remove(key);
-      }
-
       if (source == null) {
         // TODO: source null ve url file: ile basliyorsa bu m3u kaynagini silmeyi teklif et kullaniciya
         if (!fromUpdate) {
@@ -153,8 +142,7 @@ class ContentStore extends ChangeNotifier {
       );
       await _writeJson(getM3UStats(currentUUID!), stats.toJson());
 
-      // Write update file if newly created or items were pruned
-      if (update.items.isEmpty || keysToRemove.isNotEmpty) {
+      if (update.items.isEmpty) {
         await _writeJson(getM3UUpdate(currentUUID!), update.toJson());
       }
     } catch (e) {
@@ -246,7 +234,7 @@ class ContentStore extends ChangeNotifier {
         if (group.has(item)) return;
         final watchable = group.addGroup(item.group).add(item);
         watchable.addedDate = DateTime.fromMillisecondsSinceEpoch(now);
-        update.items[item.url] = now;
+        update.items[item.url] = M3UItemData(addedAt: now);
         if (!isFirstFetch) recentGroup.addWatchable(watchable);
       }
 
@@ -414,6 +402,28 @@ class ContentStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Saves total duration for a watchable into the update file (profile-independent).
+  /// No-op if duration is already known or item is a live stream.
+  Future<void> saveDuration(WatchableObject watchable, int durationMs) async {
+    if (currentUUID == null) return;
+    if (watchable.category == M3UCategory.liveStream) return;
+    if (watchable.durationMs != null) return;
+
+    watchable.durationMs = durationMs;
+    notifyListeners();
+
+    final update = await _readJsonOrDefault(
+      getM3UUpdate(currentUUID!),
+      M3UUpdateData.fresh(),
+      M3UUpdateData.fromJson,
+    );
+    final existing = update.items[watchable.url];
+    update.items[watchable.url] = existing != null
+        ? existing.copyWith(durationMs: durationMs)
+        : M3UItemData(durationMs: durationMs);
+    await _writeJson(getM3UUpdate(currentUUID!), update.toJson());
+  }
+
   // ---------------------------------------------------------------------------
   // Episode navigation
   // ---------------------------------------------------------------------------
@@ -532,6 +542,8 @@ class ContentStore extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   void _buildGroups(List<M3UObject> m3uList, M3UUpdateData update) {
+    final thirtyDaysAgo =
+        DateTime.now().millisecondsSinceEpoch - 30 * 24 * 60 * 60 * 1000;
     for (final item in m3uList) {
       WatchableObject watchable;
 
@@ -547,12 +559,14 @@ class ContentStore extends ChangeNotifier {
           break;
       }
 
-      final addedTs = update.items[item.url];
-      watchable.addedDate = addedTs != null
-          ? DateTime.fromMillisecondsSinceEpoch(addedTs)
-          : DateTime.fromMillisecondsSinceEpoch(update.createdAt);
+      final itemData = update.items[item.url];
+      final addedAt = itemData?.addedAt ?? update.createdAt;
+      watchable.addedDate = DateTime.fromMillisecondsSinceEpoch(addedAt);
+      watchable.durationMs = itemData?.durationMs;
 
-      if (addedTs != null) recentGroup.addWatchable(watchable);
+      if (itemData?.addedAt != null && addedAt > thirtyDaysAgo) {
+        recentGroup.addWatchable(watchable);
+      }
 
       final userItem = _userData.watchables[item.url];
       if (userItem != null) {

@@ -19,6 +19,8 @@ class ContentCardBase extends StatelessWidget {
         ? (progress.progress * 100).clamp(0.0, 100.0)
         : 0.0;
     final isWatched = progress?.watched != null;
+    final durationMs = item.durationMs;
+    final hasProgress = progressPercent > 0 && progressPercent < 95;
 
     return GestureDetector(
       onTap: () => context.read<UniversalPlayerStore>().play(item),
@@ -89,7 +91,7 @@ class ContentCardBase extends StatelessWidget {
                   // Year badge
                   if (item.year != null)
                     Positioned(
-                      bottom: progressPercent > 0 ? 6 : 4, left: 6,
+                      bottom: hasProgress ? 6 : 4, left: 6,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 4, vertical: 2),
@@ -102,10 +104,10 @@ class ContentCardBase extends StatelessWidget {
                       ),
                     ),
 
-                  // Watched checkmark
+                  // Bottom-right: watched checkmark OR duration
                   if (isWatched)
                     Positioned(
-                      bottom: progressPercent > 0 ? 6 : 4, right: 6,
+                      bottom: hasProgress ? 6 : 4, right: 6,
                       child: Container(
                         width: 20, height: 20,
                         decoration: const BoxDecoration(
@@ -114,10 +116,20 @@ class ContentCardBase extends StatelessWidget {
                         child: const Icon(Icons.check,
                             color: ZColors.success, size: 12),
                       ),
+                    )
+                  else if (durationMs != null)
+                    Positioned(
+                      bottom: hasProgress ? 6 : 4, right: 6,
+                      child: _DurationBadge(
+                        durationMs: durationMs,
+                        progressMs: hasProgress
+                            ? (progress!.progress * durationMs).round()
+                            : null,
+                      ),
                     ),
 
                   // Progress bar
-                  if (progressPercent > 0 && progressPercent < 95)
+                  if (hasProgress)
                     Positioned(
                       bottom: 0, left: 0, right: 0,
                       child: Container(
@@ -146,6 +158,40 @@ class ContentCardBase extends StatelessWidget {
                 style: ZText.bodySm),
         ],
       ),
+    );
+  }
+}
+
+class _DurationBadge extends StatelessWidget {
+  final int durationMs;
+  final int? progressMs;
+
+  const _DurationBadge({required this.durationMs, this.progressMs});
+
+  String _fmt(int ms) {
+    final total = ms ~/ 1000;
+    final h = total ~/ 3600;
+    final m = (total % 3600) ~/ 60;
+    final s = total % 60;
+    if (h > 0) {
+      return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = progressMs != null && progressMs! > 0
+        ? '${_fmt(progressMs!)} / ${_fmt(durationMs)}'
+        : _fmt(durationMs);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Text(label, style: ZText.body(9)),
     );
   }
 }

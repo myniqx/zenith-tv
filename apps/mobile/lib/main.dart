@@ -107,19 +107,91 @@ class _AppInitializerState extends State<_AppInitializer> {
     final universalPlayer = context.read<UniversalPlayerStore>();
 
     await settingsStore.init();
+    if (!settingsStore.rememberLayout) settingsStore.resetLayout();
     await profileStore.init();
+
+    // Auto-load last profile on startup (all platforms)
+    if (settingsStore.autoLoadLastProfile) {
+      final username = settingsStore.lastProfileUsername;
+      final uuid     = settingsStore.lastProfileUUID;
+      if (username != null && uuid != null &&
+          profileStore.getProfile(username) != null) {
+        await contentStore.setContent(username, uuid);
+      }
+    }
+
+    // Persist last profile whenever content changes (for autoLoadLastProfile)
+    contentStore.addListener(() {
+      final username = contentStore.currentUsername;
+      final uuid     = contentStore.currentUUID;
+      if (username != null && uuid != null) {
+        settingsStore.setLastProfile(username, uuid);
+      }
+    });
+
     await playerStore.init();
     await clientStore.init();
     await serverStore.loadTrustedClients();
 
-    // Wire preferred language auto-selection when tracks load
+    // Wire track auto-selection when tracks load:
+    // 1. userData.tracks (last manual selection) takes priority
+    // 2. preferred language from settings
+    // 3. first available track
     playerStore.onTracksReady = (audioTracks, subtitleTracks) {
-      _applyPreferredTracks(
-        playerStore: playerStore,
-        settingsStore: settingsStore,
-        audioTracks: audioTracks,
-        subtitleTracks: subtitleTracks,
-      );
+      final item = playerStore.currentItem;
+      final savedTracks = item?.userData.tracks;
+
+      if (savedTracks != null) {
+        // Restore previous manual track selection
+        if (savedTracks.audio != null) {
+          playerStore.audio(track: savedTracks.audio!);
+        }
+        if (savedTracks.subtitle != null) {
+          playerStore.subtitle(track: savedTracks.subtitle!);
+        }
+      } else {
+        _applyPreferredTracks(
+          playerStore: playerStore,
+          settingsStore: settingsStore,
+          audioTracks: audioTracks,
+          subtitleTracks: subtitleTracks,
+        );
+      }
+    };
+
+    // Seek to saved position on first play
+    playerStore.onFirstPlay = () {
+      final item = playerStore.currentItem;
+      if (item == null) return;
+
+      // Seek to saved position if available
+      final progress = item.userData.watchProgress?.progress;
+      if (progress != null && progress > 0 && progress < 0.95) {
+        final seekTime = progress * playerStore.duration;
+        if (seekTime > 0) playerStore.playback(time: seekTime);
+      }
+
+      // Save total duration if not yet known
+      final durationMs = (playerStore.duration * 1000).round();
+      if (durationMs > 0) contentStore.saveDuration(item, durationMs);
+    };
+
+    // Save watch progress on pause / stop / close
+    playerStore.onSaveProgress = (time, duration) {
+      final item = playerStore.currentItem;
+      if (item != null) contentStore.saveWatchProgress(item, time, duration);
+    };
+
+    // Save manual track selection
+    playerStore.onSaveTrackSelection = (audioTrack, subtitleTrack) {
+      final item = playerStore.currentItem;
+      if (item != null) {
+        contentStore.saveTrackSelection(
+          item,
+          audioTrack: audioTrack >= 0 ? audioTrack : null,
+          subtitleTrack: subtitleTrack >= 0 ? subtitleTrack : null,
+        );
+      }
     };
 
     _p2pManager = P2PManager(

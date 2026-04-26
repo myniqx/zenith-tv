@@ -1,20 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/device_type.dart';
 
 class SettingsSection extends StatelessWidget {
   final String title;
   final IconData icon;
   final List<Widget> children;
+  final List<DeviceType> hidePlatforms;
 
   const SettingsSection({
     super.key,
     required this.title,
     required this.icon,
     required this.children,
+    this.hidePlatforms = const [],
   });
 
   @override
   Widget build(BuildContext context) {
+    if (hidePlatforms.isNotEmpty) {
+      final current = context.read<DeviceTypeDetector>().current;
+      if (hidePlatforms.contains(current)) return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

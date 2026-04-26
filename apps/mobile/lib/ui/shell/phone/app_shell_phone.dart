@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../stores/content_store.dart';
+import '../../../stores/media_player_store.dart';
 import '../../p2p/p2p_screen.dart';
 import '../../profile/profile_screen.dart';
 import '../../content/content_screen.dart';
+import '../../../components/settings/shared/settings_panel.dart';
 import '../app_section.dart';
 
 class AppShellPhone extends StatefulWidget {
@@ -16,8 +19,7 @@ class AppShellPhone extends StatefulWidget {
 
 class _AppShellPhoneState extends State<AppShellPhone> {
   AppSection _section = AppSection.profile;
-
-  void _navigate(AppSection section) => setState(() => _section = section);
+  VideoController? _videoController;
 
   static const _tabs = [
     AppSection.content, AppSection.favorites,
@@ -26,19 +28,44 @@ class _AppShellPhoneState extends State<AppShellPhone> {
 
   int get _index => _tabs.indexOf(_section).clamp(0, _tabs.length - 1);
 
-  Widget _buildContent(ContentStore contentStore) {
+  VideoController _getOrCreateController(MediaPlayerStore store) {
+    return _videoController ??= VideoController(
+      store.player,
+      configuration: const VideoControllerConfiguration(
+        enableHardwareAcceleration: true,
+      ),
+    );
+  }
+
+  void _navigate(AppSection section) => setState(() => _section = section);
+
+  Widget _buildSection(ContentStore contentStore, VideoController controller) {
     switch (_section) {
-      case AppSection.content:   return const ContentScreen();
-      case AppSection.favorites: return const _Placeholder(label: 'Favorites');
-      case AppSection.p2p:       return const P2PScreen();
-      case AppSection.profile:   return const ProfileScreen();
-      case AppSection.settings:  return const _Placeholder(label: 'Settings');
+      case AppSection.content:
+        return ContentScreen(controller: controller);
+      case AppSection.favorites:
+        return const _Placeholder(label: 'Favorites');
+      case AppSection.p2p:
+        return const P2PScreen();
+      case AppSection.profile:
+        return const ProfileScreen();
+      case AppSection.settings:
+        return Scaffold(
+          backgroundColor: ZColors.background,
+          appBar: AppBar(title: const Text('Settings')),
+          body: const SingleChildScrollView(
+            padding: EdgeInsets.all(16),
+            child: SettingsPanel(),
+          ),
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final contentStore = context.watch<ContentStore>();
+    final mediaStore   = context.read<MediaPlayerStore>();
+    final controller   = _getOrCreateController(mediaStore);
 
     if (contentStore.justLoaded) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -49,18 +76,9 @@ class _AppShellPhoneState extends State<AppShellPhone> {
       });
     }
 
-    final loadingBanner = contentStore.isLoading
-        ? LinearProgressIndicator(
-            value: contentStore.loadProgress > 0 ? contentStore.loadProgress : null,
-            backgroundColor: ZColors.secondary,
-            valueColor: const AlwaysStoppedAnimation(ZColors.primary),
-            minHeight: 2,
-          )
-        : const SizedBox.shrink();
-
     return Scaffold(
       backgroundColor: ZColors.background,
-      body: Column(children: [loadingBanner, Expanded(child: _buildContent(contentStore))]),
+      body: _buildSection(contentStore, controller),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: ZColors.muted,
@@ -91,16 +109,21 @@ class _AppShellPhoneState extends State<AppShellPhone> {
           unselectedLabelStyle: ZText.body(11),
           items: [
             BottomNavigationBarItem(
-              icon: Icon(Icons.tv, color: !contentStore.isReady ? ZColors.border : null),
+              icon: Icon(Icons.tv,
+                  color: !contentStore.isReady ? ZColors.border : null),
               label: 'Content',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.star, color: !contentStore.isReady ? ZColors.border : null),
+              icon: Icon(Icons.star,
+                  color: !contentStore.isReady ? ZColors.border : null),
               label: 'Favorites',
             ),
-            const BottomNavigationBarItem(icon: Icon(Icons.cell_tower_rounded), label: 'P2P'),
-            const BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
-            const BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Settings'),
+            const BottomNavigationBarItem(
+                icon: Icon(Icons.cell_tower_rounded), label: 'P2P'),
+            const BottomNavigationBarItem(
+                icon: Icon(Icons.person_outline), label: 'Profile'),
+            const BottomNavigationBarItem(
+                icon: Icon(Icons.settings_outlined), label: 'Settings'),
           ],
         ),
       ),
