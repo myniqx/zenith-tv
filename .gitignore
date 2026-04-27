@@ -1,93 +1,57 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+pubspec.lock
+**/doc/api/
+**/ios/Flutter/.last_build_id
+app.*.symbols
+app.*.map.json
 
-# Testing
-coverage/
-*.lcov
+# Android
+/android/app/debug
+/android/app/profile
+/android/app/release
 
-# Production builds
-dist/
-build/
-out/
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Tizen
+_tizen/.sign/
+_tizen/author-signature.xml
+_tizen/certs/**
+_tizen/signature1.xml
+_tizen/workspace/**
+_tizen/Debug/**
 *.wgt
-*.apk
-*.exe
-*.dmg
-*.deb
-*.rpm
-
-# Misc
-.DS_Store
-*.pem
-.env
-.env.local
-.env.*.local
-
-# Debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
 # Editor
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
-.idea/
+!.vscode/launch.json
+
+# OS
+.DS_Store
+Thumbs.db
 *.swp
 *.swo
 *~
 
-# Rust
-target/
-Cargo.lock
-*.rs.bk
-
-# WASM
-pkg/
-wasm-pack.log
-
-# Electron
-apps/desktop/electron-builder.yml
-apps/desktop/release/
-
-# Tizen
-.tizen-cli/
-apps/tizen/.sign/
-
-# Flutter
-apps/mobile/.dart_tool/
-apps/mobile/.flutter-plugins
-apps/mobile/.flutter-plugins-dependencies
-apps/mobile/.packages
-apps/mobile/build/
-apps/mobile/pubspec.lock
-
-# OS
-Thumbs.db
-
-# VLC SDK binaries (downloaded at build time)
-core/vlc-player/lib/win32*/*.dll
-core/vlc-player/lib/win32*/plugins/
-core/vlc-player/lib/darwin/*.dylib
-core/vlc-player/lib/darwin/*.framework/
-core/vlc-player/build/
-
-# VLC SDK x64 (all ignored)
-core/vlc-player/lib/win32/sdk/
-
-# VLC SDK ARM64 (ignore all except .lib and .def)
-core/vlc-player/lib/win32-arm64/sdk/*
-!core/vlc-player/lib/win32-arm64/sdk/lib/
-core/vlc-player/lib/win32-arm64/sdk/lib/*
-!core/vlc-player/lib/win32-arm64/sdk/lib/*.lib
-!core/vlc-player/lib/win32-arm64/sdk/lib/*.def
-apps/tizen/author-signature.xml
-apps/tizen/certs/**
-apps/tizen/signature1.xml
-apps/tizen/workspace/**
-workspace/.metadata/.log
-apps/tizen/Debug/**
+# Misc
+*.log
+*.class
+*.pyc
+.env
+.env.local
+.history
+.svn/
+.atom/
+migrate_working_dir/
