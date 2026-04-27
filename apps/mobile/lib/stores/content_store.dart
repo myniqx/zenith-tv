@@ -48,16 +48,15 @@ class ContentStore extends ChangeNotifier {
   UserData get userData => _userData;
 
   // --- Status ---
-  bool isLoading = false;
-  String? error;
+  StatusMessage statusMessage = StatusMessage.idle;
+  Timer? _downloadProgressTimer;
+
+  bool get isLoading => statusMessage.isLoading;
+  String? get error => statusMessage.isError ? statusMessage.message : null;
+  double get loadProgress => statusMessage.percent ?? 0.0;
 
   /// True only after a user-triggered setContent() completes loading.
-  /// Shell uses this to auto-navigate to content browser once, then clears it.
   bool justLoaded = false;
-
-  // --- Load progress (0.0 → 1.0) ---
-  double loadProgress = 0.0;
-  Timer? _downloadProgressTimer;
 
   // --- Derived lists ---
   List<WatchableObject> get recentItems => recentGroup.watchables;
@@ -89,9 +88,9 @@ class ContentStore extends ChangeNotifier {
     await _loadUserData();
     await load();
     // If no cached source exists, fetch from network automatically
-    if (error != null) await update();
+    if (statusMessage.isError) await update();
     debugPrint(
-      '[ContentStore] setContent done — isReady=$isReady error=$error '
+      '[ContentStore] setContent done — isReady=$isReady status=${statusMessage.status} '
       'movies=${movieGroup.totalCount} tv=${tvShowGroup.totalCount} streams=${streamGroup.totalCount}',
     );
     if (isReady) {
@@ -104,16 +103,18 @@ class ContentStore extends ChangeNotifier {
   // load — mirrors desktop load()
   // ---------------------------------------------------------------------------
 
+  void _status(StatusMessage msg) {
+    statusMessage = msg;
+    notifyListeners();
+  }
+
   Future<void> load({bool fromUpdate = false}) async {
     if (currentUsername == null || currentUUID == null) return;
 
-    isLoading = true;
-    error = null;
-    notifyListeners();
+    _status(const StatusMessage(status: StatusKind.loading, message: 'Loading M3U...', percent: 0));
 
     try {
-      debugPrint('[ContentStore] Loading ${currentUsername!}/${currentUUID!}');
-
+      _status(const StatusMessage(status: StatusKind.loading, message: 'Reading file...', percent: 0.2));
       final source = await _readFile(getM3USource(currentUUID!));
       final update = await _readJsonOrDefault(
         getM3UUpdate(currentUUID!),
@@ -122,34 +123,42 @@ class ContentStore extends ChangeNotifier {
       );
 
       if (source == null) {
-        // TODO: source null ve url file: ile basliyorsa bu m3u kaynagini silmeyi teklif et kullaniciya
         if (!fromUpdate) {
-          debugPrint('[ContentStore] No source for ${currentUUID!}');
-          error = 'No source content found. Use refresh to download.';
+          _status(const StatusMessage(
+            status: StatusKind.error,
+            message: 'M3U not synced yet. Use the sync button to download.',
+          ));
         }
         return;
       }
 
+      _status(const StatusMessage(status: StatusKind.loading, message: 'Parsing M3U...', percent: 0.4));
+      final sw = Stopwatch()..start();
       final m3uList = await parseM3UAsync(source);
-      debugPrint('[ContentStore] Parsed ${m3uList.length} items');
+      _status(StatusMessage(
+        status: StatusKind.loading,
+        message: 'Parsed in ${sw.elapsedMilliseconds}ms — building content...',
+        percent: 0.55,
+      ));
 
       _buildGroups(m3uList, update);
 
       final stats = calculateStats();
-      debugPrint(
-        '[ContentStore] Stats: movies=${stats.movieCount} '
-        'tvShows=${stats.tvShowCount} live=${stats.liveStreamCount}',
-      );
       await _writeJson(getM3UStats(currentUUID!), stats.toJson());
-
       if (update.items.isEmpty) {
         await _writeJson(getM3UUpdate(currentUUID!), update.toJson());
       }
+
+      _status(StatusMessage(
+        status: StatusKind.ready,
+        message: 'Loaded in ${sw.elapsedMilliseconds}ms',
+        percent: 1.0,
+      ));
     } catch (e) {
-      error = 'Failed to load content: $e';
       debugPrint('[ContentStore] load error: $e');
+      _status(StatusMessage(status: StatusKind.error, message: 'Failed to load content: $e'));
     } finally {
-      isLoading = false;
+      _updateGroupedContent();
       notifyListeners();
     }
   }
@@ -162,63 +171,51 @@ class ContentStore extends ChangeNotifier {
   Future<void> update() async {
     if (currentUsername == null || currentUUID == null) return;
 
-    // Load existing content first so we can diff
     await load(fromUpdate: true);
 
     final url = currentM3UUrl ?? profileStore.getUrlFromUUID(currentUUID!);
     if (url == null) {
-      error = 'No URL found for this profile';
-      notifyListeners();
+      _status(const StatusMessage(status: StatusKind.error, message: 'No URL found for this profile'));
       return;
     }
 
-    if (url.startsWith('file:')) {
-      debugPrint(
-        '[ContentStore] Skipping update — source is a local file: $url',
-      );
-      return;
-    }
+    if (url.startsWith('file:')) return;
 
-    isLoading = true;
-    loadProgress = 0.0;
-    error = null;
-    notifyListeners();
+    final startedAt = DateTime.now();
 
     try {
-      // Phase 1: Download (0.0 → 0.70 indeterminate, timer-driven)
+      // Phase 1: Download — fake ramp to 0.35
       _startDownloadProgress();
-      debugPrint('[ContentStore] Fetching from $url');
-      final sw = Stopwatch()..start();
+      _status(const StatusMessage(status: StatusKind.loading, message: 'Fetching M3U...', percent: 0));
 
       final response = await HttpClient().getUrl(Uri.parse(url));
       final res = await response.close();
       final source = await res.transform(utf8.decoder).join();
 
       _stopDownloadProgress();
-      loadProgress = 0.70;
-      notifyListeners();
-      debugPrint(
-        '[ContentStore] Fetched ${source.length} chars in ${sw.elapsedMilliseconds}ms',
-      );
+      final fetchedKb = (source.length / 1024).toStringAsFixed(0);
+      _status(StatusMessage(
+        status: StatusKind.loading,
+        message: 'Fetched ${fetchedKb}KB — parsing...',
+        percent: 0.4,
+      ));
 
-      // Phase 2: Rust parse (0.70 → 0.80)
-      sw.reset();
+      // Phase 2: Parse
+      final sw = Stopwatch()..start();
       final m3uList = await parseM3UAsync(source);
-      loadProgress = 0.80;
-      notifyListeners();
-      debugPrint(
-        '[ContentStore] Parsed ${m3uList.length} items in ${sw.elapsedMilliseconds}ms (Rust FFI)',
-      );
+      _status(StatusMessage(
+        status: StatusKind.loading,
+        message: 'Parsed in ${sw.elapsedMilliseconds}ms — building content...',
+        percent: 0.55,
+      ));
 
       if (m3uList.isEmpty) {
-        error = 'Fetched empty playlist';
+        _status(const StatusMessage(status: StatusKind.error, message: 'Fetched empty playlist'));
         return;
       }
 
-      // Save source
       await _writeFile(getM3USource(currentUUID!), source);
 
-      // Load existing update data
       final update = await _readJsonOrDefault(
         getM3UUpdate(currentUUID!),
         M3UUpdateData.fresh(),
@@ -226,10 +223,8 @@ class ContentStore extends ChangeNotifier {
       );
 
       final now = DateTime.now().millisecondsSinceEpoch;
-      // On first fetch update.items is empty — don't flood recent
       final isFirstFetch = update.items.isEmpty;
 
-      // Add only new items
       void addIfNew(GroupObject group, M3UObject item) {
         if (group.has(item)) return;
         final watchable = group.addGroup(item.group).add(item);
@@ -238,25 +233,21 @@ class ContentStore extends ChangeNotifier {
         if (!isFirstFetch) recentGroup.addWatchable(watchable);
       }
 
-      // Phase 3: Tree build (0.80 → 1.0), tick every 10k items
-      sw.reset();
+      // Phase 3: Tree build
       final total = m3uList.length;
       for (var i = 0; i < total; i++) {
         final item = m3uList[i];
         switch (item.category) {
-          case M3UCategory.movie:
-            addIfNew(movieGroup, item);
-            break;
-          case M3UCategory.series:
-            addIfNew(tvShowGroup, item);
-            break;
-          case M3UCategory.liveStream:
-            addIfNew(streamGroup, item);
-            break;
+          case M3UCategory.movie:    addIfNew(movieGroup,   item); break;
+          case M3UCategory.series:   addIfNew(tvShowGroup,  item); break;
+          case M3UCategory.liveStream: addIfNew(streamGroup, item); break;
         }
         if (i % 10000 == 9999) {
-          loadProgress = 0.80 + 0.20 * ((i + 1) / total);
-          notifyListeners();
+          _status(StatusMessage(
+            status: StatusKind.loading,
+            message: 'Building content... (${i + 1}/$total)',
+            percent: 0.55 + 0.45 * ((i + 1) / total),
+          ));
         }
       }
 
@@ -264,20 +255,22 @@ class ContentStore extends ChangeNotifier {
       tvShowGroup.lastCheck();
       streamGroup.lastCheck();
       recentGroup.lastCheck();
-      debugPrint('[ContentStore] Tree built in ${sw.elapsedMilliseconds}ms');
 
       final stats = calculateStats();
       await _writeJson(getM3UUpdate(currentUUID!), update.toJson());
       await _writeJson(getM3UStats(currentUUID!), stats.toJson());
 
-      debugPrint('[ContentStore] Update complete');
+      final totalMs = DateTime.now().difference(startedAt).inMilliseconds;
+      _status(StatusMessage(
+        status: StatusKind.ready,
+        message: 'Updated in ${totalMs}ms',
+        percent: 1.0,
+      ));
     } catch (e) {
-      error = 'Failed to update: $e';
       debugPrint('[ContentStore] update error: $e');
+      _status(StatusMessage(status: StatusKind.error, message: 'Failed to update: $e'));
     } finally {
       _stopDownloadProgress();
-      loadProgress = 1.0;
-      isLoading = false;
       notifyListeners();
     }
   }
@@ -368,7 +361,12 @@ class ContentStore extends ChangeNotifier {
     final prevWatched = watchable.userData.watchProgress?.watched;
     final wasWatched = prevWatched != null;
 
-    if (wasWatched && progress == 0) return;
+    debugPrint('[WatchProgress] ${watchable.name} | pos=${position.toStringAsFixed(1)}s dur=${duration.toStringAsFixed(1)}s progress=${(progress * 100).toStringAsFixed(1)}% isWatched=$isWatched wasWatched=$wasWatched');
+
+    if (wasWatched && progress == 0) {
+      debugPrint('[WatchProgress] skip — already watched and progress=0');
+      return;
+    }
 
     watchable.userData = watchable.userData.copyWith(
       watchProgress: WatchProgressData(
@@ -377,6 +375,7 @@ class ContentStore extends ChangeNotifier {
         watched: wasWatched ? prevWatched : (isWatched ? now : null),
       ),
     );
+    debugPrint('[WatchProgress] saved → progress=${isWatched ? 0 : (progress * 100).toStringAsFixed(1)}%');
     _persistWatchable(watchable);
 
     if (isWatched && !wasWatched) {
@@ -519,6 +518,32 @@ class ContentStore extends ChangeNotifier {
     if (currentUUID == uuid) await load();
   }
 
+  /// Returns M3U files for the current profile so a P2P peer can request a full sync.
+  /// Returns null when no profile is active or source file does not exist yet.
+  Future<M3UDataSync?> getM3UDataForSync() async {
+    if (currentUUID == null || currentM3UUrl == null) return null;
+
+    final source = await _readFile(getM3USource(currentUUID!));
+    if (source == null) return null;
+
+    final update = await _readJsonOrDefault(
+      getM3UUpdate(currentUUID!),
+      M3UUpdateData.fresh(),
+      M3UUpdateData.fromJson,
+    );
+    final stats = await _readJsonOrDefault(
+      getM3UStats(currentUUID!),
+      <String, dynamic>{},
+      (j) => j,
+    );
+
+    return M3UDataSync(
+      source: currentM3UUrl!,
+      update: update.toJson(),
+      stats: stats,
+    );
+  }
+
   /// Payload sent to newly connected P2P client.
   /// Mirrors: desktop getWellComePayload()
   ProfileSyncPayload? getWelcomePayload() {
@@ -592,7 +617,17 @@ class ContentStore extends ChangeNotifier {
 
   void _updateGroupedContent() {
     if (currentGroup == null) {
-      groupedContent = [];
+      final rootGroups = [
+        movieGroup, tvShowGroup, streamGroup,
+        recentGroup, favoriteGroup, watchedGroup,
+      ].where((g) => g.totalCount > 0).toList();
+      groupedContent = rootGroups.isEmpty ? [] : [
+        ContentGroupData(
+          title: 'Browse',
+          items: rootGroups,
+          isGroups: true,
+        ),
+      ];
       return;
     }
 
@@ -719,16 +754,16 @@ class ContentStore extends ChangeNotifier {
   // Internal — reset
   // ---------------------------------------------------------------------------
 
-  // Slowly advances loadProgress from current value toward 0.60
-  // until _stopDownloadProgress() is called.
   void _startDownloadProgress() {
     _downloadProgressTimer?.cancel();
-    _downloadProgressTimer = Timer.periodic(const Duration(milliseconds: 300), (
-      _,
-    ) {
-      if (loadProgress < 0.60) {
-        loadProgress = (loadProgress + 0.02).clamp(0.0, 0.60);
-        notifyListeners();
+    _downloadProgressTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+      final current = statusMessage.percent ?? 0.0;
+      if (current < 0.35) {
+        _status(StatusMessage(
+          status: StatusKind.loading,
+          message: statusMessage.message,
+          percent: (current + 0.02).clamp(0.0, 0.35),
+        ));
       }
     });
   }
@@ -752,7 +787,7 @@ class ContentStore extends ChangeNotifier {
     currentUUID = null;
     currentM3UUrl = null;
     _userData = UserData.empty;
-    error = null;
+    statusMessage = StatusMessage.idle;
   }
 
   void reset() {

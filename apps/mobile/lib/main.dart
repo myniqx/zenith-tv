@@ -164,16 +164,28 @@ class _AppInitializerState extends State<_AppInitializer> {
       final item = playerStore.currentItem;
       if (item == null) return;
 
-      // Seek to saved position if available
       final progress = item.userData.watchProgress?.progress;
-      if (progress != null && progress > 0 && progress < 0.95) {
-        final seekTime = progress * playerStore.duration;
-        if (seekTime > 0) playerStore.playback(time: seekTime);
+
+      void trySeekAndSaveDuration() {
+        final dur = playerStore.duration;
+        if (dur <= 0) return;
+
+        if (progress != null && progress > 0 && progress < 0.95) {
+          final seekTime = progress * dur;
+          debugPrint('[onFirstPlay] seeking to ${seekTime.toStringAsFixed(1)}s (progress=$progress dur=$dur)');
+          playerStore.playback(time: seekTime);
+        }
+
+        contentStore.saveDuration(item, (dur * 1000).round());
+        playerStore.removeOnDurationReady();
       }
 
-      // Save total duration if not yet known
-      final durationMs = (playerStore.duration * 1000).round();
-      if (durationMs > 0) contentStore.saveDuration(item, durationMs);
+      if (playerStore.duration > 0) {
+        trySeekAndSaveDuration();
+      } else {
+        // duration not yet available — wait for first non-zero duration
+        playerStore.onDurationReady = trySeekAndSaveDuration;
+      }
     };
 
     // Save watch progress on pause / stop / close
@@ -327,15 +339,14 @@ class _AppInitializerState extends State<_AppInitializer> {
     required ProfileStore profileStore,
     required void Function(P2PMessage) reply,
   }) async {
-    // Server requested full M3U data
+    // Client requested full M3U data — read from cache and send back
     if (payload.request == 'full') {
-      final uuid = profileStore.m3uMap.values.firstOrNull;
-      if (uuid == null) return;
-      final url = profileStore.getUrlFromUUID(uuid);
-      if (url == null) return;
-      // M3U raw data would need to be read from cache — stub for now
-      // since file reading from path_provider is async and context-dependent.
-      // The content store syncM3UData path handles the reverse direction.
+      final m3uData = await contentStore.getM3UDataForSync();
+      if (m3uData == null) return;
+      reply(P2PMessage(
+        type: P2PMessageType.profileSync,
+        payload: ProfileSyncPayload(m3uData: m3uData).toJson(),
+      ));
       return;
     }
 
