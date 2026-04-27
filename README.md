@@ -1,5 +1,9 @@
 # Zenith TV
 
+> [!WARNING]
+> **This repository is no longer actively maintained.**
+> Development has moved to a private Flutter-based rewrite. The code here is kept public as a reference — feel free to explore or fork it.
+
 A modern cross-platform IPTV player with peer-to-peer remote control support.
 
 ## Platforms
