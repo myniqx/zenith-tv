@@ -40,6 +40,11 @@ class MediaPlayerStore extends ChangeNotifier {
   /// Called once on first play after open — use to seek to saved position.
   void Function()? onFirstPlay;
 
+  /// Called once when duration becomes non-zero after open — use when onFirstPlay fires before duration is known.
+  void Function()? onDurationReady;
+
+  void removeOnDurationReady() => onDurationReady = null;
+
   // --- State ---
   bool _isInitialized = false;
 
@@ -123,6 +128,11 @@ class MediaPlayerStore extends ChangeNotifier {
         _duration = dur.inMilliseconds / 1000.0;
         _isSeekable = _duration > 0;
         notifyListeners();
+        if (_duration > 0 && onDurationReady != null) {
+          final cb = onDurationReady!;
+          onDurationReady = null;
+          cb();
+        }
       }),
       _player.stream.volume.listen((vol) {
         _volume = vol;
@@ -195,6 +205,7 @@ class MediaPlayerStore extends ChangeNotifier {
     _playerState = PlayerState.opening;
     _systemSettingTrack = true;
     _awaitingFirstPlay = true;
+    onDurationReady = null;
     notifyListeners();
 
     try {

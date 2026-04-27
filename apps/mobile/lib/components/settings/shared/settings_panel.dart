@@ -3,8 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 import 'general_settings.dart';
-import 'video_settings.dart';
 import 'keyboard_shortcuts.dart';
+import 'subtitle_settings.dart';
+import 'video_settings.dart';
 
 class SettingsPanel extends StatefulWidget {
   const SettingsPanel({super.key});
@@ -24,6 +25,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
     final tabs = [
       (Icons.settings_outlined,    'General'),
       (Icons.play_circle_outline,  'Video'),
+      (Icons.subtitles_outlined,   'Subtitles'),
       if (_showShortcuts)
         (Icons.keyboard_outlined,  'Shortcuts'),
     ];
@@ -83,6 +85,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
         switch (_tabIndex) {
           0 => const GeneralSettings(),
           1 => const VideoSettings(),
+          2 => const SubtitleSettings(),
           _ => const KeyboardShortcutsSettings(),
         },
       ],

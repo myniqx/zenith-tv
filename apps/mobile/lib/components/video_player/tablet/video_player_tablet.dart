@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:provider/provider.dart';
+import '../../../stores/settings_store.dart';
+import '../shared/subtitle_config.dart';
 import '../shared/video_controls.dart';
 
 /// Inline video player panel — sits to the right of content_grid in tablet shell.
@@ -19,9 +22,11 @@ class VideoPlayerTablet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsStore>();
     return Video(
       controller: controller,
       controls: (state) => VideoControls(state: state, onClose: onClose),
+      subtitleViewConfiguration: buildSubtitleConfig(settings),
     );
   }
 }

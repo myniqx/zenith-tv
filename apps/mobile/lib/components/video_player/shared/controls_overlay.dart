@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
-import '../../../stores/universal_player_store.dart';
 import '../../../stores/media_player_store.dart';
+import '../../../stores/universal_player_store.dart';
+import '../../settings/shared/subtitle_settings.dart';
 
 class ControlsOverlay extends StatelessWidget {
   final VoidCallback onClose;
@@ -114,6 +115,48 @@ class ControlsOverlay extends StatelessWidget {
               _IconBtn(
                 icon: player.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
                 onTap: () => player.setFullscreen(!player.isFullscreen),
+              ),
+              const SizedBox(width: 8),
+
+              // Subtitle settings
+              _IconBtn(
+                icon: Icons.subtitles_outlined,
+                onTap: () => showModalBottomSheet(
+                  context: context,
+                  backgroundColor: ZColors.secondary,
+                  isScrollControlled: true,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  builder: (ctx) => DraggableScrollableSheet(
+                    expand: false,
+                    initialChildSize: 0.6,
+                    minChildSize: 0.4,
+                    maxChildSize: 0.9,
+                    builder: (ctx, scrollCtrl) => SingleChildScrollView(
+                      controller: scrollCtrl,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 36, height: 4,
+                              decoration: BoxDecoration(
+                                color: ZColors.border.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text('Subtitle Settings', style: ZText.headline(18)),
+                          const SizedBox(height: 16),
+                          const SubtitleSettings(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
 

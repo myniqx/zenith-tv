@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
+import '../../../stores/settings_store.dart';
 import '../../../stores/universal_player_store.dart';
 import 'controls_overlay.dart';
+import 'subtitle_config.dart';
 import 'track_panel.dart';
 
 enum _Panel { none, tracks }
@@ -99,7 +101,11 @@ class _MultiLayerPlayerState extends State<MultiLayerPlayer>
       child: Stack(
         children: [
           // Base video layer
-          Video(controller: widget.controller, controls: NoVideoControls),
+          Video(
+            controller: widget.controller,
+            controls: NoVideoControls,
+            subtitleViewConfiguration: buildSubtitleConfig(context.watch<SettingsStore>()),
+          ),
 
           // Controls overlay (bottom)
           AnimatedOpacity(

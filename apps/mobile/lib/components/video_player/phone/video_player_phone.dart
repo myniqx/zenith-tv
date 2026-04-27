@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:provider/provider.dart';
+import '../../../stores/settings_store.dart';
+import '../shared/subtitle_config.dart';
 import '../shared/video_controls.dart';
 
 /// Phone video player — same architecture as tablet.
@@ -21,6 +24,7 @@ class VideoPlayerPhone extends StatelessWidget {
       child: Video(
         controller: controller,
         controls: (state) => VideoControls(state: state, onClose: onClose),
+        subtitleViewConfiguration: buildSubtitleConfig(context.watch<SettingsStore>()),
       ),
     );
   }

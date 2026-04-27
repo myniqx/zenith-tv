@@ -17,6 +17,24 @@ const List<String> kAlphabeticGroups = [
 enum SortBy { name, date, recent }
 enum SortOrder { asc, desc }
 enum GroupBy { none, group, year, alphabetic }
+enum StatusKind { idle, loading, ready, error }
+
+class StatusMessage {
+  final StatusKind status;
+  final String? message;
+  final double? percent; // 0.0 – 1.0
+
+  const StatusMessage({required this.status, this.message, this.percent});
+
+  static const idle = StatusMessage(status: StatusKind.idle);
+}
+
+extension StatusMessageX on StatusMessage {
+  bool get isIdle    => status == StatusKind.idle;
+  bool get isLoading => status == StatusKind.loading;
+  bool get isReady   => status == StatusKind.ready;
+  bool get isError   => status == StatusKind.error;
+}
 
 class ContentGroupData {
   final String title;

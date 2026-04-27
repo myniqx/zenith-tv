@@ -62,6 +62,13 @@ class SettingsStore extends ChangeNotifier {
   List<String> preferredAudioLanguages = [];
   List<String> preferredSubtitleLanguages = [];
 
+  // Subtitle appearance
+  double subtitleFontSize = 24.0;
+  bool subtitleBold = false;
+  String subtitleTextAlign = 'center'; // left | center | right
+  int subtitleTextColor = 0xffffffff;
+  int subtitleBgColor = 0xaa000000;
+
   // Startup
   bool autoLoadLastProfile = false;
   bool rememberLayout = false;
@@ -99,6 +106,11 @@ class SettingsStore extends ChangeNotifier {
       autoPlayNext              = json['autoPlayNext'] as bool? ?? autoPlayNext;
       preferredAudioLanguages    = (json['preferredAudioLanguages'] as List?)?.cast<String>() ?? [];
       preferredSubtitleLanguages = (json['preferredSubtitleLanguages'] as List?)?.cast<String>() ?? [];
+      subtitleFontSize  = (json['subtitleFontSize']  as num?)?.toDouble() ?? subtitleFontSize;
+      subtitleBold      = json['subtitleBold']      as bool? ?? subtitleBold;
+      subtitleTextAlign = json['subtitleTextAlign'] as String? ?? subtitleTextAlign;
+      subtitleTextColor = (json['subtitleTextColor'] as num?)?.toInt() ?? subtitleTextColor;
+      subtitleBgColor   = (json['subtitleBgColor']   as num?)?.toInt() ?? subtitleBgColor;
       autoLoadLastProfile       = json['autoLoadLastProfile'] as bool? ?? autoLoadLastProfile;
       rememberLayout            = json['rememberLayout'] as bool? ?? rememberLayout;
       lastProfileUsername       = json['lastProfileUsername'] as String?;
@@ -142,6 +154,11 @@ class SettingsStore extends ChangeNotifier {
       'categoryWidth':             categoryWidth,
       'videoWidth':                videoWidth,
       'keyboardShortcuts':         shortcuts,
+      'subtitleFontSize':          subtitleFontSize,
+      'subtitleBold':              subtitleBold,
+      'subtitleTextAlign':         subtitleTextAlign,
+      'subtitleTextColor':         subtitleTextColor,
+      'subtitleBgColor':           subtitleBgColor,
     }));
   }
 
@@ -195,6 +212,12 @@ class SettingsStore extends ChangeNotifier {
     preferredSubtitleLanguages = list;
     _notify();
   }
+  void setSubtitleFontSize(double v)            { subtitleFontSize = v.clamp(12.0, 48.0); _notify(); }
+  void setSubtitleBold(bool v)                  { subtitleBold = v; _notify(); }
+  void setSubtitleTextAlign(String v)           { subtitleTextAlign = v; _notify(); }
+  void setSubtitleTextColor(int v)              { subtitleTextColor = v; _notify(); }
+  void setSubtitleBgColor(int v)                { subtitleBgColor = v; _notify(); }
+
   void setAutoLoadLastProfile(bool v)           { autoLoadLastProfile = v; _notify(); }
   void setRememberLayout(bool v)                { rememberLayout = v; _notify(); }
 
@@ -268,6 +291,11 @@ class SettingsStore extends ChangeNotifier {
     autoPlayNext              = true;
     preferredAudioLanguages    = [];
     preferredSubtitleLanguages = [];
+    subtitleFontSize  = 24.0;
+    subtitleBold      = false;
+    subtitleTextAlign = 'center';
+    subtitleTextColor = 0xffffffff;
+    subtitleBgColor   = 0xaa000000;
     autoLoadLastProfile       = false;
     rememberLayout            = false;
     keyboardShortcuts         = Map.from(defaultKeyboardShortcuts);
