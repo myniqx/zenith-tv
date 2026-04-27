@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/index.dart';
@@ -17,6 +18,8 @@ class P2PClientStore extends ChangeNotifier {
   final P2PClient _client = P2PClient();
   final HttpDiscoveryService _discovery = HttpDiscoveryService();
 
+  static const Duration _retryInterval = Duration(seconds: 30);
+
   // --- State ---
   P2PConnectionStatus _connectionStatus = P2PConnectionStatus.disconnected;
   TrustedServer? _currentServer;
@@ -26,6 +29,8 @@ class P2PClientStore extends ChangeNotifier {
   bool _autoConnect = true;
   Map<String, dynamic>? _lastReceivedMessage;
   String? _error;
+  String _deviceId = '';
+  Timer? _retryTimer;
 
   // --- Getters ---
   P2PConnectionStatus get connectionStatus => _connectionStatus;
@@ -38,6 +43,7 @@ class P2PClientStore extends ChangeNotifier {
   Map<String, dynamic>? get lastReceivedMessage => _lastReceivedMessage;
   String? get error => _error;
   bool get isConnected => _connectionStatus == P2PConnectionStatus.connected;
+  String get deviceId => _deviceId;
 
   /// Raw message stream — P2PManager listens to this.
   Stream<Map<String, dynamic>> get messageStream => _client.messageStream;
@@ -62,10 +68,28 @@ class P2PClientStore extends ChangeNotifier {
       _lastReceivedMessage = msg;
       notifyListeners();
     });
+  }
 
+  /// Called by P2PManager after init. Starts periodic scan if autoConnect is on.
+  void prepare() {
     if (_autoConnect) {
-      await scan();
+      _startPeriodicScan();
     }
+  }
+
+  // --- Periodic scan ---
+
+  void _startPeriodicScan() {
+    _retryTimer?.cancel();
+    scan(); // immediate first scan
+    _retryTimer = Timer.periodic(_retryInterval, (_) {
+      if (!isConnected) scan();
+    });
+  }
+
+  void _stopPeriodicScan() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
   }
 
   // --- Discovery ---
@@ -153,6 +177,11 @@ class P2PClientStore extends ChangeNotifier {
     _autoConnect = enabled;
     _saveToPrefs();
     notifyListeners();
+    if (enabled) {
+      _startPeriodicScan();
+    } else {
+      _stopPeriodicScan();
+    }
   }
 
   void updateTrustedServer(String deviceId, {bool? autoConnect}) {
@@ -175,27 +204,38 @@ class P2PClientStore extends ChangeNotifier {
   Future<void> _loadFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
-    if (raw == null) return;
-
-    try {
-      final data = jsonDecode(raw) as Map<String, dynamic>;
-      _autoConnect = (data['autoConnect'] as bool?) ?? true;
-      final servers = data['trustedServers'] as List<dynamic>? ?? [];
-      _trustedServers = servers
-          .map((e) => TrustedServer.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      // Corrupt prefs — start fresh
+    if (raw != null) {
+      try {
+        final data = jsonDecode(raw) as Map<String, dynamic>;
+        _deviceId = (data['deviceId'] as String?) ?? '';
+        _autoConnect = (data['autoConnect'] as bool?) ?? true;
+        final servers = data['trustedServers'] as List<dynamic>? ?? [];
+        _trustedServers = servers
+            .map((e) => TrustedServer.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } catch (_) {
+        // Corrupt prefs — start fresh
+      }
+    }
+    if (_deviceId.isEmpty) {
+      _deviceId = _generateId();
+      await _saveToPrefs();
     }
   }
 
   Future<void> _saveToPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    final data = {
+    await prefs.setString(_prefsKey, jsonEncode({
+      'deviceId': _deviceId,
       'autoConnect': _autoConnect,
       'trustedServers': _trustedServers.map((s) => s.toJson()).toList(),
-    };
-    await prefs.setString(_prefsKey, jsonEncode(data));
+    }));
+  }
+
+  static String _generateId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
   // --- Internal ---
@@ -221,6 +261,7 @@ class P2PClientStore extends ChangeNotifier {
 
   @override
   Future<void> dispose() async {
+    _stopPeriodicScan();
     await _client.dispose();
     super.dispose();
   }

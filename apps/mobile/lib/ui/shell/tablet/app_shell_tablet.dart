@@ -10,6 +10,7 @@ import '../../../stores/universal_player_store.dart';
 import '../../../components/category_browser/category_browser.dart';
 import '../../../components/content_grid/content_grid.dart';
 import '../../../components/p2p/p2p_panel.dart';
+import '../../../components/p2p/shared/p2p_button.dart';
 import '../../../components/profile_manager/profile_manager.dart';
 import '../../../components/settings/shared/settings_panel.dart';
 import '../../../components/toolbar/toolbar.dart';
@@ -352,20 +353,17 @@ class _HeaderCapsule extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final buttons = [
-      (Icons.cell_tower_rounded,  'P2P',      () => _openDialog(context, 'Remote Control', const P2PPanel(), width: 680)),
-      (Icons.settings_outlined,   'Settings', () => _openDialog(context, 'Settings',
-          const SingleChildScrollView(child: SettingsPanel()))),
-      (Icons.person_outline, 'Profiles', () {
-        final outerCtx = context;
-        _openDialog(
-          outerCtx,
-          'Profiles',
-          ProfileManager(onLoaded: () => Navigator.of(outerCtx).pop()),
-          width: 760,
-        );
-      }),
-    ];
+    final settingsButton = (Icons.settings_outlined, 'Settings', () => _openDialog(context, 'Settings',
+        const SingleChildScrollView(child: SettingsPanel())));
+    final profilesButton = (Icons.person_outline, 'Profiles', () {
+      final outerCtx = context;
+      _openDialog(
+        outerCtx,
+        'Profiles',
+        ProfileManager(onLoaded: () => Navigator.of(outerCtx).pop()),
+        width: 760,
+      );
+    });
 
     return Container(
       decoration: BoxDecoration(
@@ -378,16 +376,24 @@ class _HeaderCapsule extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (int i = 0; i < buttons.length; i++) ...[
-              if (i > 0)
-                Container(width: 1, height: 20,
-                    color: ZColors.border.withValues(alpha: 0.4)),
-              _CapsuleButton(
-                icon: buttons[i].$1,
-                label: buttons[i].$2,
-                onTap: buttons[i].$3,
-              ),
-            ],
+            P2PButton(
+              onOpenSettings: () => _openDialog(
+                context, 'Remote Control', const P2PPanel(), width: 680),
+            ),
+            Container(width: 1, height: 20,
+                color: ZColors.border.withValues(alpha: 0.4)),
+            _CapsuleButton(
+              icon: settingsButton.$1,
+              label: settingsButton.$2,
+              onTap: settingsButton.$3,
+            ),
+            Container(width: 1, height: 20,
+                color: ZColors.border.withValues(alpha: 0.4)),
+            _CapsuleButton(
+              icon: profilesButton.$1,
+              label: profilesButton.$2,
+              onTap: profilesButton.$3,
+            ),
           ],
         ),
       ),

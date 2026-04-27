@@ -3,21 +3,19 @@ import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../p2p/client/p2p_client_store.dart';
 import '../../../p2p/server/p2p_server_store.dart';
-import '../../../stores/zenith_store.dart';
+import '../../../stores/settings_store.dart';
 import '../shared/server_section.dart';
 import '../shared/client_section.dart';
 
-/// P2P panel — UI mode is stored in ZenithStore.p2pUIMode (not persisted).
-/// UniversalPlayerStore.mode is untouched here; it reflects active connections only.
 class P2PPanelTablet extends StatelessWidget {
   const P2PPanelTablet({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final clientStore  = context.watch<P2PClientStore>();
-    final serverStore  = context.watch<P2PServerStore>();
-    final zenithStore  = context.watch<ZenithStore>();
-    final mode         = zenithStore.p2pUIMode;
+    final clientStore   = context.watch<P2PClientStore>();
+    final serverStore   = context.watch<P2PServerStore>();
+    final settingsStore = context.watch<SettingsStore>();
+    final mode          = settingsStore.lastP2PMode;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -28,16 +26,16 @@ class P2PPanelTablet extends StatelessWidget {
             selected: mode,
             clientStore: clientStore,
             serverStore: serverStore,
-            zenithStore: zenithStore,
+            settingsStore: settingsStore,
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
           child: SingleChildScrollView(
             child: switch (mode) {
-              P2PUIMode.off    => const _OffState(),
-              P2PUIMode.server => const ServerSection(),
-              P2PUIMode.client => const ClientSection(),
+              LastP2PMode.off    => const _OffState(),
+              LastP2PMode.server => const ServerSection(),
+              LastP2PMode.client => const ClientSection(),
             },
           ),
         ),
@@ -49,32 +47,32 @@ class P2PPanelTablet extends StatelessWidget {
 // ── Mode selector ─────────────────────────────────────────────────────────────
 
 class _ModeSelector extends StatelessWidget {
-  final P2PUIMode selected;
+  final LastP2PMode selected;
   final P2PClientStore clientStore;
   final P2PServerStore serverStore;
-  final ZenithStore zenithStore;
+  final SettingsStore settingsStore;
 
   const _ModeSelector({
     required this.selected,
     required this.clientStore,
     required this.serverStore,
-    required this.zenithStore,
+    required this.settingsStore,
   });
 
   static const _modes = [
-    (P2PUIMode.off,    Icons.power_settings_new_outlined, 'Off'),
-    (P2PUIMode.server, Icons.wifi_tethering_outlined,     'Server'),
-    (P2PUIMode.client, Icons.monitor_outlined,            'Client'),
+    (LastP2PMode.off,    Icons.power_settings_new_outlined, 'Off'),
+    (LastP2PMode.server, Icons.wifi_tethering_outlined,     'Server'),
+    (LastP2PMode.client, Icons.monitor_outlined,            'Client'),
   ];
 
-  Future<void> _select(BuildContext context, P2PUIMode target) async {
+  Future<void> _select(BuildContext context, LastP2PMode target) async {
     if (target == selected) return;
 
     final clientActive = clientStore.isConnected;
     final serverActive = serverStore.isRunning;
 
     // --- Off ---
-    if (target == P2PUIMode.off) {
+    if (target == LastP2PMode.off) {
       if (clientActive) {
         bool ok = true;
         try { await clientStore.disconnect(); } catch (_) { ok = false; }
@@ -84,24 +82,23 @@ class _ModeSelector extends StatelessWidget {
         }
       }
       if (serverActive) await serverStore.stopServer();
-      zenithStore.setP2PUIMode(P2PUIMode.off);
+      settingsStore.setLastP2PMode(LastP2PMode.off);
       return;
     }
 
     // --- Client ---
-    if (target == P2PUIMode.client) {
+    if (target == LastP2PMode.client) {
       if (serverActive) {
         final confirm = await _confirm(context, 'Server is running. Stop it and switch to Client?');
         if (!confirm) return;
         await serverStore.stopServer();
       }
-      // Mode switches immediately — ClientSection handles actual connection
-      zenithStore.setP2PUIMode(P2PUIMode.client);
+      settingsStore.setLastP2PMode(LastP2PMode.client);
       return;
     }
 
     // --- Server ---
-    if (target == P2PUIMode.server) {
+    if (target == LastP2PMode.server) {
       if (clientActive) {
         final confirm = await _confirm(context, 'Client is connected. Disconnect and switch to Server?');
         if (!confirm) return;
@@ -112,8 +109,7 @@ class _ModeSelector extends StatelessWidget {
           return;
         }
       }
-      // Mode switches immediately — ServerSection handles server start/stop
-      zenithStore.setP2PUIMode(P2PUIMode.server);
+      settingsStore.setLastP2PMode(LastP2PMode.server);
     }
   }
 

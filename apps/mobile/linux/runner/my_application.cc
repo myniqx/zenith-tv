@@ -1,8 +1,10 @@
+#include <filesystem>
+using namespace std;
+using namespace std::filesystem;
+
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
-#include <unistd.h>
-#include <linux/limits.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -18,7 +20,20 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
-  gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+  GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(view));
+  gtk_widget_show(toplevel);
+
+  // Re-apply icon after window is mapped so _NET_WM_ICON hint is picked up by WM
+  path execDir = canonical(read_symlink("/proc/self/exe")).parent_path();
+  path iconPath = execDir / "data/flutter_assets/assets/icon.png";
+  GdkPixbuf* icon = gdk_pixbuf_new_from_file(iconPath.c_str(), nullptr);
+  if (icon) {
+    GList* icon_list = g_list_append(nullptr, icon);
+    gtk_window_set_icon_list(GTK_WINDOW(toplevel), icon_list);
+    g_list_free(icon_list);
+    g_object_unref(icon);
+    g_print("[icon] re-applied after first frame\n");
+  }
 }
 
 // Implements GApplication::activate.
@@ -26,6 +41,19 @@ static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+
+  // Set window icon immediately after window creation
+  {
+    path execDir = canonical(read_symlink("/proc/self/exe")).parent_path();
+    path iconPath = execDir / "data/flutter_assets/assets/icon.png";
+    g_print("[icon] path: %s | exists: %s\n", iconPath.c_str(), exists(iconPath) ? "yes" : "NO");
+    GdkPixbuf* icon = gdk_pixbuf_new_from_file(iconPath.c_str(), nullptr);
+    if (icon) {
+      gtk_window_set_icon(GTK_WINDOW(window), icon);
+      g_object_unref(icon);
+      g_print("[icon] set ok\n");
+    }
+  }
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
@@ -55,41 +83,6 @@ static void my_application_activate(GApplication* application) {
   }
 
   gtk_window_set_default_size(window, 1280, 720);
-
-  // Set window icon — try paths relative to executable, then fallback to source
-  {
-    gchar exe_path[PATH_MAX] = {};
-    readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-    gchar* exe_dir = g_path_get_dirname(exe_path);
-
-    const gchar* relative_candidates[] = {
-      "icon.png",
-      "data/flutter_assets/assets/icon.png",
-      nullptr,
-    };
-
-    bool found = false;
-    for (int i = 0; relative_candidates[i] != nullptr && !found; i++) {
-      gchar* p = g_build_filename(exe_dir, relative_candidates[i], nullptr);
-      if (g_file_test(p, G_FILE_TEST_EXISTS)) {
-        GError* icon_err = nullptr;
-        GdkPixbuf* icon = gdk_pixbuf_new_from_file(p, &icon_err);
-        if (icon_err) g_error_free(icon_err);
-        if (icon) { gtk_window_set_icon(window, icon); g_object_unref(icon); found = true; }
-      }
-      g_free(p);
-    }
-
-    // Fallback: absolute source path baked in at compile time
-    if (!found && g_file_test(FLUTTER_ICON_PATH, G_FILE_TEST_EXISTS)) {
-      GError* icon_err = nullptr;
-      GdkPixbuf* icon = gdk_pixbuf_new_from_file(FLUTTER_ICON_PATH, &icon_err);
-      if (icon_err) g_error_free(icon_err);
-      if (icon) { gtk_window_set_icon(window, icon); g_object_unref(icon); }
-    }
-
-    g_free(exe_dir);
-  }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(

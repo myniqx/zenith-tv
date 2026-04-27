@@ -141,6 +141,22 @@ class _ServerControlsState extends State<_ServerControls> {
             ),
           ),
           const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.power_settings_new_outlined, size: 14, color: ZColors.mutedForeground),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Auto-start on launch',
+                    style: ZText.body(13, color: ZColors.foreground)),
+              ),
+              Switch(
+                value: widget.server.autoStart,
+                onChanged: (v) => widget.server.setAutoStart(v),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: running

@@ -46,6 +46,8 @@ const defaultKeyboardShortcuts = <ShortcutAction, List<String>>{
 // SettingsStore
 // ---------------------------------------------------------------------------
 
+enum LastP2PMode { off, server, client }
+
 class SettingsStore extends ChangeNotifier {
   static const _prefsKey = 'zenith-settings';
 
@@ -54,6 +56,7 @@ class SettingsStore extends ChangeNotifier {
 
   // P2P
   String deviceName = 'Zenith Device';
+  LastP2PMode lastP2PMode = LastP2PMode.off;
 
   // Playback
   double defaultVolume = 0.7;
@@ -101,6 +104,10 @@ class SettingsStore extends ChangeNotifier {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       language                  = json['language'] as String? ?? language;
       deviceName                = json['deviceName'] as String? ?? deviceName;
+      lastP2PMode               = LastP2PMode.values.firstWhere(
+        (e) => e.name == (json['lastP2PMode'] as String?),
+        orElse: () => LastP2PMode.off,
+      );
       defaultVolume             = (json['defaultVolume'] as num?)?.toDouble() ?? defaultVolume;
       autoResume                = json['autoResume'] as bool? ?? autoResume;
       autoPlayNext              = json['autoPlayNext'] as bool? ?? autoPlayNext;
@@ -142,6 +149,7 @@ class SettingsStore extends ChangeNotifier {
     await prefs.setString(_prefsKey, jsonEncode({
       'language':                  language,
       'deviceName':                deviceName,
+      'lastP2PMode':               lastP2PMode.name,
       'defaultVolume':             defaultVolume,
       'autoResume':                autoResume,
       'autoPlayNext':              autoPlayNext,
@@ -168,6 +176,7 @@ class SettingsStore extends ChangeNotifier {
 
   void setLanguage(String v)                    { language = v; _notify(); }
   void setDeviceName(String v)                  { deviceName = v.trim().isEmpty ? 'Zenith Device' : v.trim(); _notify(); }
+  void setLastP2PMode(LastP2PMode v)            { if (lastP2PMode == v) return; lastP2PMode = v; _notify(); }
   void setDefaultVolume(double v)               { defaultVolume = v.clamp(0.0, 1.0); _notify(); }
   void setAutoResume(bool v)                    { autoResume = v; _notify(); }
   void setAutoPlayNext(bool v)                  { autoPlayNext = v; _notify(); }
@@ -286,6 +295,7 @@ class SettingsStore extends ChangeNotifier {
   void resetSettings() {
     language                  = 'en';
     deviceName                = 'Zenith Device';
+    lastP2PMode               = LastP2PMode.off;
     defaultVolume             = 0.7;
     autoResume                = true;
     autoPlayNext              = true;

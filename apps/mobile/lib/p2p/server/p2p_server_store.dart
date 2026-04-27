@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/index.dart';
@@ -32,25 +33,29 @@ class TrustedClient {
 /// High-level P2P server state manager.
 class P2PServerStore extends ChangeNotifier {
   static const int defaultPort = 8080;
-  static const String _prefsKey = 'zenith_p2p_trusted_clients';
+  static const String _prefsKey = 'zenith_p2p_server';
 
   P2PServer? _server;
 
   bool _isRunning = false;
+  bool _autoStart = false;
   int _port = defaultPort;
   final List<P2PConnection> _connections = [];
   String? _selectedDeviceId;
   String? _error;
   List<TrustedClient> _trustedClients = [];
+  String _deviceId = '';
 
   final _messageController =
       StreamController<({String connectionId, Map<String, dynamic> message})>.broadcast();
   final List<void Function(String connectionId)> _connectionListeners = [];
+  final List<void Function(String connectionId)> _disconnectionListeners = [];
 
   /// Called after a device is trusted — used by P2PManager to send welcome profile_sync.
   void Function(String connectionId)? onTrusted;
 
   bool get isRunning => _isRunning;
+  bool get autoStart => _autoStart;
   int get port => _port;
   List<P2PConnection> get connections => List.unmodifiable(_connections);
   String? get selectedDeviceId => _selectedDeviceId;
@@ -58,6 +63,7 @@ class P2PServerStore extends ChangeNotifier {
   int get connectionCount => _connections.length;
   P2PServer? get server => _server;
   List<TrustedClient> get trustedClients => List.unmodifiable(_trustedClients);
+  String get deviceId => _deviceId;
 
   Stream<({String connectionId, Map<String, dynamic> message})> get messageStream =>
       _messageController.stream;
@@ -71,25 +77,40 @@ class P2PServerStore extends ChangeNotifier {
   // Persistence
   // ---------------------------------------------------------------------------
 
-  Future<void> loadTrustedClients() async {
+  Future<void> loadFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
-    if (raw == null) return;
-    try {
-      final list = jsonDecode(raw) as List<dynamic>;
-      _trustedClients = list
-          .map((e) => TrustedClient.fromJson(e as Map<String, dynamic>))
-          .toList();
-      notifyListeners();
-    } catch (_) {}
+    if (raw != null) {
+      try {
+        final data = jsonDecode(raw) as Map<String, dynamic>;
+        _deviceId = (data['deviceId'] as String?) ?? '';
+        _autoStart = (data['autoStart'] as bool?) ?? false;
+        final list = data['trustedClients'] as List<dynamic>? ?? [];
+        _trustedClients = list
+            .map((e) => TrustedClient.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } catch (_) {}
+    }
+    if (_deviceId.isEmpty) {
+      _deviceId = _generateId(16);
+      await _saveToPrefs();
+    }
+    notifyListeners();
   }
 
-  Future<void> _saveTrustedClients() async {
+  Future<void> _saveToPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _prefsKey,
-      jsonEncode(_trustedClients.map((c) => c.toJson()).toList()),
-    );
+    await prefs.setString(_prefsKey, jsonEncode({
+      'deviceId': _deviceId,
+      'autoStart': _autoStart,
+      'trustedClients': _trustedClients.map((c) => c.toJson()).toList(),
+    }));
+  }
+
+  static String _generateId(int byteCount) {
+    final random = Random.secure();
+    final bytes = List<int>.generate(byteCount, (_) => random.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
   bool isTrusted(String deviceId) =>
@@ -105,7 +126,7 @@ class P2PServerStore extends ChangeNotifier {
         deviceName: conn.deviceName ?? 'Unknown Device',
         trustedAt: DateTime.now().millisecondsSinceEpoch,
       ));
-      await _saveTrustedClients();
+      await _saveToPrefs();
     }
 
     notifyListeners();
@@ -114,7 +135,14 @@ class P2PServerStore extends ChangeNotifier {
 
   Future<void> removeTrustedClient(String deviceId) async {
     _trustedClients.removeWhere((c) => c.deviceId == deviceId);
-    await _saveTrustedClients();
+    await _saveToPrefs();
+    notifyListeners();
+  }
+
+  Future<void> setAutoStart(bool value) async {
+    if (_autoStart == value) return;
+    _autoStart = value;
+    await _saveToPrefs();
     notifyListeners();
   }
 
@@ -122,13 +150,20 @@ class P2PServerStore extends ChangeNotifier {
   // Server lifecycle
   // ---------------------------------------------------------------------------
 
+  /// Called by P2PManager after init. Starts server automatically if autoStart is on.
+  Future<void> prepare({required String deviceName, int port = defaultPort}) async {
+    if (_autoStart) {
+      await startServer(deviceName: deviceName, port: port);
+    }
+  }
+
   Future<void> startServer({int port = defaultPort, required String deviceName}) async {
     if (_isRunning) return;
 
     _error = null;
     _port = port;
 
-    _server = P2PServer(deviceName: deviceName, port: port);
+    _server = P2PServer(deviceId: _deviceId, deviceName: deviceName, port: port);
 
     _server!.onConnection = (connectionId, ip) {
       _connections.add(P2PConnection(
@@ -151,6 +186,7 @@ class P2PServerStore extends ChangeNotifier {
       if (_selectedDeviceId == connectionId) {
         _selectedDeviceId = _connections.isNotEmpty ? _connections.first.id : null;
       }
+      for (final l in _disconnectionListeners) { l(connectionId); }
       notifyListeners();
     };
 
@@ -231,8 +267,14 @@ class P2PServerStore extends ChangeNotifier {
   void removeConnectionListener(void Function(String) listener) =>
       _connectionListeners.remove(listener);
 
-  void selectDevice(String connectionId) {
-    if (!_connections.any((c) => c.id == connectionId)) return;
+  void addDisconnectionListener(void Function(String) listener) =>
+      _disconnectionListeners.add(listener);
+
+  void removeDisconnectionListener(void Function(String) listener) =>
+      _disconnectionListeners.remove(listener);
+
+  void selectDevice(String? connectionId) {
+    if (connectionId != null && !_connections.any((c) => c.id == connectionId)) return;
     _selectedDeviceId = connectionId;
     notifyListeners();
   }
@@ -242,6 +284,7 @@ class P2PServerStore extends ChangeNotifier {
   @override
   Future<void> dispose() async {
     _connectionListeners.clear();
+    _disconnectionListeners.clear();
     await stopServer();
     await _messageController.close();
     super.dispose();

@@ -32,9 +32,10 @@ class P2PServer {
   DisconnectionCallback? onDisconnection;
 
   P2PServer({
+    required this.deviceId,
     required this.deviceName,
     this.port = 8080,
-  }) : deviceId = _generateDeviceId();
+  });
 
   bool get isRunning => _httpServer != null;
   int get clientCount => _clients.length;
@@ -171,12 +172,6 @@ class P2PServer {
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
-
-  static String _generateDeviceId() {
-    final random = Random.secure();
-    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  }
 
   static String _randomId() {
     final random = Random.secure();

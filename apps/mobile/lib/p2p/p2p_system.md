@@ -408,13 +408,9 @@ Temel problem: `ZenithStore.P2PUIMode` (UI navigasyonu) ile `UniversalPlayerStor
 
 ### Kritik (Server modu çalışmıyor)
 
-- [ ] **TODO-1:** `main.dart` içinde `P2PServerStore`'a listener ekle.  
-  `serverStore.isRunning == true` → `universalPlayer.setMode(P2PMode.server)`  
-  `serverStore.isRunning == false` → `universalPlayer.setMode(P2PMode.off)`  
-  *(Client modu için `setMode` gerekmez — client modda local player kullanımı zaten doğru.)*
+- [x] **TODO-1:** `main.dart` içinde `serverStore.addListener` ile `selectedDeviceId` değişince `universalPlayer.setMode(server/off)` çağrılıyor. `P2PManager` disconnect'te `serverStore.selectDevice(null)` çağırıyor.
 
-- [ ] **TODO-2:** `main.dart` içinde `universalPlayer.sendP2PCommand` callback'ini `serverStore.broadcast()` yerine `serverStore.sendToSelected()` kullanacak şekilde değiştir.  
-  Birden fazla client bağlı olduğunda komutlar seçili olana gitmeli, herkese değil.
+- [x] **TODO-2:** `universalPlayer.sendP2PCommand` → `serverStore.sendToSelected()` ile çözüldü. Seçili client yoksa sessizce yutulur.
 
 ### Orta (Önemli işlev eksikliği)
 
@@ -422,7 +418,7 @@ Temel problem: `ZenithStore.P2PUIMode` (UI navigasyonu) ile `UniversalPlayerStor
   `ContentStore` üzerinden M3U cache içeriğini oku, `M3UDataSync` olarak reply ile gönder.  
   Referans: `apps/desktop/src/components/P2P/P2PManager.tsx` L155–L199.
 
-- [ ] **TODO-4:** `P2PManager.dispose()` içine `clientStore?.removeListener(_onClientStatusChanged)` ekle. Listener sızıntısını engeller.
+- [x] **TODO-4:** `P2PManager.dispose()` içine `clientStore?.removeListener(_onClientStatusChanged)` ekle. Listener sızıntısını engeller.
 
 - [ ] **TODO-5 (YENİ):** `SettingsStore`'a `autoStartServer` (bool) flag'i ekle.  
   `main.dart` init'te: `settingsStore.autoStartServer == true` ise `serverStore.startServer()` çağır.  
@@ -435,7 +431,6 @@ Temel problem: `ZenithStore.P2PUIMode` (UI navigasyonu) ile `UniversalPlayerStor
 
 ### Düşük (Kalite / doğruluk)
 
-- [ ] **TODO-7:** `P2PServer.deviceId`'yi SharedPreferences'a kalıcı kaydet — her başlatmada yeniden üretilmesini engelle. Aksi hâlde client tarafında her yeniden başlatmada Trust akışı tekrar gerekiyor.
+- [x] **TODO-7:** `P2PServerStore` kendi `deviceId`'sini persist eder (`zenith_p2p_server` key). `P2PServer` constructor'ı dışarıdan alır, artık üretmez. `P2PClientStore` da kendi `deviceId`'sini aynı şekilde persist eder.
 
-- [ ] **TODO-8:** `p2p_manager.dart:103` handshake yanıtındaki `deviceId`'yi düzelt.  
-  Şu an `trustedServers.firstOrNull?.deviceId` kullanıyor — bu mobil cihazın kendi kimliği değil, bağlandığı sunucunun kimliği. Mobil cihaz kendi kalıcı `deviceId`'sini bildirmeli (TODO-7 ile birlikte çözülür: aynı kalıcı ID her iki taraf için de gerekli).
+- [x] **TODO-8:** `p2p_manager.dart` handshake yanıtı artık `clientStore.deviceId` kullanıyor — mobil cihazın kendi kalıcı kimliği doğru şekilde gönderiliyor.

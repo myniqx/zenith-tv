@@ -5,6 +5,7 @@ import 'models/index.dart';
 import 'utils/merge_user_data.dart' as merge_utils;
 
 /// Routes incoming P2P messages to the appropriate handler.
+/// Pure orchestrator — holds no UI state, is not a ChangeNotifier.
 ///
 /// Client mode (TV / tablet playing video, controlled by a remote):
 ///   - Routes open/playback/audio/video/subtitle/window/shortcut → player store
@@ -13,7 +14,7 @@ import 'utils/merge_user_data.dart' as merge_utils;
 ///   - Handles profile_sync flow (profile info → M3U request → userData merge)
 ///
 /// Server mode (phone/tablet acting as remote control):
-///   - Routes client_event from player device → remote player state store
+///   - Routes client_event from selected client → remote player state store
 ///   - Handles profile_sync responses from connected clients
 ///
 /// Mirrors: apps/tizen/src/components/P2P/P2PManager.tsx
@@ -24,21 +25,24 @@ class P2PManager {
   final P2PServerStore? serverStore;
 
   /// Called when an open/playback/audio/video/subtitle/window/shortcut command arrives.
-  final void Function(String type, Map<String, dynamic>? payload)? onPlayerCommand;
+  void Function(String type, Map<String, dynamic>? payload)? onPlayerCommand;
 
   /// Called to read current player state for client_event broadcast.
-  final Map<String, dynamic> Function()? getPlayerState;
+  Map<String, dynamic> Function()? getPlayerState;
 
   /// Called when a client_event arrives from a remote player (server mode).
-  final void Function(Map<String, dynamic> state)? onRemoteStateUpdate;
+  void Function(Map<String, dynamic> state)? onRemoteStateUpdate;
 
   /// Called when profile sync data arrives — host app handles persistence.
-  final Future<void> Function(ProfileSyncPayload payload, void Function(P2PMessage) reply)? onProfileSync;
+  Future<void> Function(ProfileSyncPayload payload, void Function(P2PMessage) reply)? onProfileSync;
 
   /// Called when a new client connects in server mode.
   /// Should return the welcome profile_sync payload to send to the client,
   /// or null if no active profile exists yet.
-  final ProfileSyncPayload? Function(String connectionId)? onClientConnected;
+  ProfileSyncPayload? Function(String connectionId)? onClientConnected;
+
+  /// Returns the display name of this device — used in handshake response.
+  String Function()? getDeviceName;
 
   StreamSubscription? _clientMessageSub;
   StreamSubscription? _serverMessageSub;
@@ -61,7 +65,30 @@ class P2PManager {
     _setupServerListeners();
   }
 
+  /// Called after init. Decides which side to auto-start based on available roles and lastP2PMode.
+  /// [lastP2PMode] should be the persisted value from SettingsStore ('server'|'client'|'off').
+  Future<void> prepare({required String deviceName, required String lastP2PMode}) async {
+    final hasServer = serverStore != null;
+    final hasClient = clientStore != null;
+
+    if (hasServer && hasClient) {
+      // Tablet: last user choice is authoritative
+      if (lastP2PMode == 'server') {
+        await serverStore!.prepare(deviceName: deviceName);
+      } else if (lastP2PMode == 'client') {
+        clientStore!.prepare();
+      }
+      // lastP2PMode == 'off' → do nothing
+    } else if (hasServer) {
+      await serverStore!.prepare(deviceName: deviceName);
+    } else if (hasClient) {
+      clientStore!.prepare();
+    }
+  }
+
   void dispose() {
+    clientStore?.removeListener(_onClientStatusChanged);
+    serverStore?.removeDisconnectionListener(_onServerDisconnection);
     _clientMessageSub?.cancel();
     _serverMessageSub?.cancel();
     _broadcastTimer?.cancel();
@@ -74,7 +101,6 @@ class P2PManager {
     if (client == null) return;
 
     _clientMessageSub = client.messageStream.listen(_handleClientMessage);
-
     client.addListener(_onClientStatusChanged);
   }
 
@@ -97,12 +123,11 @@ class P2PManager {
 
     switch (type) {
       case P2PMessageType.handshakeRequest:
-        // Server is asking who we are — respond with our identity
         clientStore?.sendMessage(P2PMessage(
           type: P2PMessageType.handshakeResponse,
           payload: {
-            'deviceId': clientStore?.trustedServers.firstOrNull?.deviceId ?? 'unknown',
-            'deviceName': 'Zenith TV Mobile',
+            'deviceId': clientStore?.deviceId ?? 'unknown',
+            'deviceName': getDeviceName?.call() ?? 'Zenith TV',
             'appVersion': '1.0.0',
           },
         ));
@@ -168,6 +193,19 @@ class P2PManager {
     _serverMessageSub = server.messageStream.listen((event) {
       _handleServerMessage(event.connectionId, event.message);
     });
+
+    server.addDisconnectionListener(_onServerDisconnection);
+  }
+
+  void _onServerDisconnection(String connectionId) {
+    // If the disconnected client was selected, fall back to next available
+    final server = serverStore;
+    if (server == null) return;
+    if (server.selectedDeviceId != connectionId) return;
+    final remaining = server.connections
+        .where((c) => c.id != connectionId)
+        .toList();
+    server.selectDevice(remaining.isNotEmpty ? remaining.first.id : null);
   }
 
   void _handleServerMessage(String connectionId, Map<String, dynamic> raw) {
@@ -185,11 +223,9 @@ class P2PManager {
         serverStore?.updateHandshake(connectionId,
             deviceId: deviceId, deviceName: deviceName);
 
-        // If already trusted → proceed with profile_sync immediately
         if (serverStore?.isTrusted(deviceId) ?? false) {
           _sendWelcome(connectionId);
         }
-        // Otherwise UI shows Trust button — profile_sync waits for user action
         break;
 
       case P2PMessageType.clientEvent:
@@ -231,7 +267,6 @@ class P2PManager {
   // ---------------------------------------------------------------------------
 
   /// Utility: merge two raw userData maps (timestamp-based).
-  /// Exposed so host app can call it without importing utils directly.
   static Map<String, dynamic> mergeUserData(
     Map<String, dynamic> local,
     Map<String, dynamic> remote,
