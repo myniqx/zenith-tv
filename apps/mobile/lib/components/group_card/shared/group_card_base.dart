@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
@@ -74,9 +75,12 @@ class _CoverCollage extends StatelessWidget {
       itemCount: 9,
       itemBuilder: (_, i) {
         if (i < covers.length && covers[i].logo.isNotEmpty) {
-          return Image.network(covers[i].logo,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stack) => const _CollageCell());
+          return CachedNetworkImage(
+            imageUrl: covers[i].logo,
+            fit: BoxFit.cover,
+            errorWidget: (ctx, url, e) => const _CollageCell(),
+            placeholder: (ctx, url) => const _CollageCell(),
+          );
         }
         return const _CollageCell();
       },

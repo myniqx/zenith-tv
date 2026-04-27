@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
@@ -35,10 +36,12 @@ class ContentCardBase extends StatelessWidget {
                 children: [
                   // Poster
                   item.logo.isNotEmpty
-                      ? Image.network(item.logo,
+                      ? CachedNetworkImage(
+                          imageUrl: item.logo,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stack) =>
-                              _Fallback(category: item.category))
+                          errorWidget: (ctx, url, e) => _Fallback(category: item.category),
+                          placeholder: (ctx, url) => _Fallback(category: item.category),
+                        )
                       : _Fallback(category: item.category),
 
                   // Gradient overlay

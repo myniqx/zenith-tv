@@ -100,6 +100,16 @@ class _AppShellPhoneState extends State<AppShellPhone> {
               );
               return;
             }
+            if (target == AppSection.favorites) {
+              context.read<ContentStore>().setGroup(
+                context.read<ContentStore>().favoriteGroup,
+              );
+              _navigate(AppSection.content);
+              return;
+            }
+            if (target == AppSection.content) {
+              context.read<ContentStore>().setGroup(null);
+            }
             _navigate(target);
           },
           selectedItemColor: ZColors.primary,

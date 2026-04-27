@@ -28,24 +28,6 @@ class ContentGrid extends StatelessWidget {
           );
         }
 
-        if (store.currentGroup == null) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.inbox_outlined,
-                    size: 64, color: ZColors.mutedForeground),
-                const SizedBox(height: 16),
-                Text('Select a category',
-                    style: ZText.headline(22)),
-                const SizedBox(height: 8),
-                Text('Choose a category from the sidebar to browse content',
-                    style: ZText.body(14, color: ZColors.mutedForeground)),
-              ],
-            ),
-          );
-        }
-
         if (store.groupedContent.isEmpty ||
             store.groupedContent.every((g) => g.items.isEmpty)) {
           return Center(
@@ -66,9 +48,7 @@ class ContentGrid extends StatelessWidget {
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            final crossAxisCount = detector.isPhone
-                ? 2
-                : _autoColumns(constraints.maxWidth);
+            final crossAxisCount = _autoColumns(constraints.maxWidth);
 
             return ListView.builder(
               key: ValueKey(store.currentGroup?.name),
@@ -86,8 +66,8 @@ class ContentGrid extends StatelessWidget {
 
   /// Mirrors desktop ResizeObserver logic: min card width 160px + 16px gap.
   int _autoColumns(double width) {
-    const minCardWidth = 160.0;
-    const gap = 16.0;
+    const minCardWidth = 180.0;
+    const gap = 12.0;
     return ((width + gap) / (minCardWidth + gap)).floor().clamp(2, 12);
   }
 }

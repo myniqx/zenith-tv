@@ -3,9 +3,10 @@ import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../stores/profile_store.dart';
 import '../../../stores/content_store.dart';
-import '../shared/profile_avatar.dart';
+import '../shared/content_status_bar.dart';
 import '../shared/delete_dialog.dart';
 import '../shared/m3u_display.dart';
+import '../shared/profile_avatar.dart';
 
 class ProfileManagerTablet extends StatefulWidget {
   final VoidCallback? onLoaded;
@@ -40,7 +41,12 @@ class _ProfileManagerTabletState extends State<ProfileManagerTablet> {
     final contentStore = context.watch<ContentStore>();
     final sorted = [...profileStore.profiles]..sort((a, b) => b.lastLogin.compareTo(a.lastLogin));
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const ContentStatusBar(),
+        const SizedBox(height: 4),
+        Expanded(child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Left: profile list
@@ -75,6 +81,8 @@ class _ProfileManagerTabletState extends State<ProfileManagerTablet> {
                     )
                   : _EmptyRight(),
         ),
+      ],
+    )),
       ],
     );
   }

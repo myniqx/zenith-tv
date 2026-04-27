@@ -3,9 +3,10 @@ import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../stores/profile_store.dart';
 import '../../../stores/content_store.dart';
-import '../shared/profile_avatar.dart';
+import '../shared/content_status_bar.dart';
 import '../shared/delete_dialog.dart';
 import '../shared/m3u_display.dart';
+import '../shared/profile_avatar.dart';
 
 class ProfileManagerPhone extends StatefulWidget {
   final VoidCallback? onLoaded;
@@ -107,6 +108,7 @@ class _ProfileManagerPhoneState extends State<ProfileManagerPhone> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const ContentStatusBar(),
           if (sorted.isEmpty && !_showAddProfile)
             _EmptyState(onAdd: () => setState(() => _showAddProfile = true)),
 
