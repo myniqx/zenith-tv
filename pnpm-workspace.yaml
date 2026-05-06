@@ -1,7 +1,8 @@
 packages:
-  - core/*
-  - shared/*
   - apps/*
+
+overrides:
+  "@navix/core": "file:/home/myniqx/Projects/navix/packages/core"
 
 onlyBuiltDependencies:
   - better-sqlite3

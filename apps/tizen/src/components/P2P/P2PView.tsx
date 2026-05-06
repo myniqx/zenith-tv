@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useP2PClientStore } from '../../stores/p2pClientStore';
 import { VerticalList, HorizontalList } from '@navix/react';
-import { NavButton } from '@zenith-tv/ui/nav-button';
-import { NavInput } from '@zenith-tv/ui/nav-input';
+import { NavButton } from '../ui/NavButton';
+import { NavInput } from '../ui/NavInput';
 import { RefreshCw, Wifi, WifiOff, X } from 'lucide-react';
-import { cn } from '@zenith-tv/ui/lib';
+import { cn } from '../../lib/cn';
 
 export function P2PView() {
   const {

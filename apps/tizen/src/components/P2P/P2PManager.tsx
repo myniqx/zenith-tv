@@ -11,8 +11,8 @@ import type {
   WindowOptions,
   OpenOptions,
   ShortcutOptions,
-} from '@zenith-tv/content';
-import { ProfileSyncPayload, mergeUserData } from '@zenith-tv/content';
+} from '../../lib/content';
+import { ProfileSyncPayload, mergeUserData } from '../../lib/content';
 
 // Tizen has no central player event stream (unlike VLC's event callback),
 // so we can't forward per-change events like the desktop client does.

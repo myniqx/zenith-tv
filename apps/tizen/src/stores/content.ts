@@ -1,4 +1,4 @@
-import { createContentStore, useToastStore } from '@zenith-tv/content'
+import { createContentStore, useToastStore } from '../lib/content'
 import { fileSystem } from '@/lib/filesystem'
 import { http } from '@/lib/http'
 import { parseM3U } from '@/services/m3u-parser'
@@ -23,4 +23,4 @@ export const useContentStore = createContentStore({
 })
 
 // Re-export types for convenience
-export type { ContentState, CategoryType, SortBy, SortOrder, GroupBy } from '@zenith-tv/content'
+export type { ContentState, CategoryType, SortBy, SortOrder, GroupBy } from '../lib/content'

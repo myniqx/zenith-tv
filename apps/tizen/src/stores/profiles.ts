@@ -1,4 +1,4 @@
-import { createProfilesStore } from '@zenith-tv/content'
+import { createProfilesStore } from '../lib/content'
 import { fileSystem } from '@/lib/filesystem'
 import { useContentStore } from './content'
 
@@ -18,4 +18,4 @@ export const useProfilesStore = createProfilesStore(
   'zenith-tizen-profiles'
 )
 
-export type { Profile } from '@zenith-tv/content'
+export type { Profile } from '../lib/content'

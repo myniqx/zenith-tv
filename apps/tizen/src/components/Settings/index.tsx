@@ -1,6 +1,6 @@
 import { useSettingsStore } from '../../stores/settings'
 import { Switch, Button, HorizontalList, VerticalList } from '@navix/react'
-import { cn } from '@zenith-tv/ui/lib'
+import { cn } from '../../lib/cn'
 import { Check } from 'lucide-react'
 
 interface LanguageRowProps {

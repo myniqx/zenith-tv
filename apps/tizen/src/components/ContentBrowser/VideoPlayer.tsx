@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { WatchableObject } from '@zenith-tv/content'
+import { WatchableObject } from '../../lib/content'
 
 interface VideoPlayerProps {
   watchable: WatchableObject

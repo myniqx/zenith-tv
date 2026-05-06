@@ -1,9 +1,9 @@
-import { WatchableObject } from '@zenith-tv/content'
+import { WatchableObject } from '../../lib/content'
 import { Expandable, Button, VerticalList } from '@navix/react'
 import { Radio, Tv, Film, Play, Heart, Info } from 'lucide-react'
 import { useContentBrowser } from './ContentBrowserProvider'
 import { MediaPlayer } from '../MediaPlayer'
-import { cn } from '@zenith-tv/ui/lib'
+import { cn } from '../../lib/cn'
 import { createPortal } from 'react-dom'
 
 interface WatchableCardProps {

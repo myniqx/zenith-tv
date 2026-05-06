@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useMemo, ReactNode } from 'react'
-import { GroupObject, WatchableObject } from '@zenith-tv/content'
+import { GroupObject, WatchableObject } from '../../lib/content'
 
 interface GridConfig {
   cols: number

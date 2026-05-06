@@ -1,6 +1,6 @@
-import { WatchableObject } from '@zenith-tv/content'
+import { WatchableObject } from '../../lib/content'
 import { Radio, Tv, Film, Calendar, Folder } from 'lucide-react'
-import { cn } from '@zenith-tv/ui/lib'
+import { cn } from '../../lib/cn'
 import type { MultiLayerPanelProps } from '@navix/react'
 
 interface MetaPanelProps extends MultiLayerPanelProps {

@@ -1,4 +1,4 @@
-import type { VlcTrack, VlcState } from '@zenith-tv/content'
+import type { VlcTrack, VlcState } from '../lib/content'
 
 export interface PlayerBackendCallbacks {
   onTimeUpdate: (time: number, duration: number) => void

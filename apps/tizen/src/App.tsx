@@ -8,7 +8,6 @@ import { ProfileManager } from './components/ProfileManager'
 import { ContentBrowser } from './components/ContentBrowser'
 import { useContentStore } from './stores/content'
 import { initDevEnvironment } from './utils/dev-helper'
-import { Toaster } from '@zenith-tv/ui/sonner'
 import { P2PManager } from './components/P2P/P2PManager'
 import { P2PView } from './components/P2P/P2PView'
 import { Settings } from './components/Settings'
@@ -82,7 +81,6 @@ function App() {
           <KeyboardHelper />
         </div>
       </FocusRoot>
-      <Toaster />
     </>
   )
 }

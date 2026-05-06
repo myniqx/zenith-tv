@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { httpDiscovery, DiscoveredController } from '@zenith-tv/content';
-import { P2PMessage } from '@zenith-tv/content';
+import { httpDiscovery, DiscoveredController } from '../lib/content';
+import { P2PMessage } from '../lib/content';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 

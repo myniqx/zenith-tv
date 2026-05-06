@@ -1,9 +1,9 @@
-import { GroupObject } from '@zenith-tv/content'
+import { GroupObject } from '../../lib/content'
 import { Button } from '@navix/react'
 import { Folder } from 'lucide-react'
 import { useContentBrowser } from './ContentBrowserProvider'
 import { useMemo } from 'react'
-import { cn } from '@zenith-tv/ui/lib'
+import { cn } from '../../lib/cn'
 
 interface GroupCardProps {
   fKey: string

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { MultiLayer } from '@navix/react'
-import { WatchableObject } from '@zenith-tv/content'
+import { WatchableObject } from '../../lib/content'
 import { useTizenPlayerStore } from '../../stores/tizenPlayer'
 import { VideoPlayerAVPlay } from './VideoPlayerAVPlay'
 import { VideoPlayerHTML5 } from './VideoPlayerHTML5'

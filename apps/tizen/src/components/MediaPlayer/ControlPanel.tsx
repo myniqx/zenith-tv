@@ -1,6 +1,6 @@
 import { Play, Pause, SkipBack, SkipForward, Square } from 'lucide-react'
 import { Button, HorizontalList, VerticalList } from '@navix/react'
-import { cn } from '@zenith-tv/ui/lib'
+import { cn } from '../../lib/cn'
 import type { MultiLayerPanelProps } from '@navix/react'
 import { useTizenPlayerStore } from '../../stores/tizenPlayer'
 

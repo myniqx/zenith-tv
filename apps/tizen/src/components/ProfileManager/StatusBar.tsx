@@ -1,5 +1,5 @@
 import { useContentStore } from '@/stores/content'
-import { cn } from '@zenith-tv/ui/lib'
+import { cn } from '../../lib/cn'
 
 export function StatusBar() {
   const { statusMessage } = useContentStore()

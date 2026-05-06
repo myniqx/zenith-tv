@@ -1,4 +1,4 @@
-import type { VlcTrack } from '@zenith-tv/content'
+import type { VlcTrack } from '../lib/content'
 import type { AVPlayTrackInfo } from '../types/tizen'
 import type { PlayerBackend, PlayerBackendCallbacks } from './playerBackend'
 

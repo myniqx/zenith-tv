@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { VerticalList, HorizontalList } from '@navix/react'
-import { NavButton } from '@zenith-tv/ui/nav-button'
-import { NavInput } from '@zenith-tv/ui/nav-input'
+import { NavButton } from '../ui/NavButton'
+import { NavInput } from '../ui/NavInput'
 import { useProfilesStore } from '@/stores/profiles'
 import { useContentStore } from '@/stores/content'
 

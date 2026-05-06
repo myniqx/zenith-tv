@@ -1,6 +1,6 @@
 import { Expandable, HorizontalList } from '@navix/react'
-import { NavButton } from '@zenith-tv/ui/nav-button'
-import { getNavButtonStyles } from '@zenith-tv/ui/nav-button-styles'
+import { NavButton } from '../ui/NavButton'
+import { getNavButtonStyles } from '../ui/navButtonStyles'
 import { AlertTriangle, Trash2 } from 'lucide-react'
 
 interface ConfirmButtonProps {

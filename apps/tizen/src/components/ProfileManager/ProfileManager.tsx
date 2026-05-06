@@ -5,7 +5,7 @@ import { ProfileCard } from './ProfileCard'
 import { AddProfileForm } from './AddProfileForm'
 import { StatusBar } from './StatusBar'
 import { VerticalList, Expandable } from '@navix/react'
-import { cn } from '@zenith-tv/ui/lib'
+import { cn } from '../../lib/cn'
 import { Plus } from 'lucide-react'
 import { useMemo } from 'react'
 

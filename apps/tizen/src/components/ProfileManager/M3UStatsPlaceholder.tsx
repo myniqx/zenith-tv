@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Film, Tv, Radio } from 'lucide-react'
 import { fileSystem } from '@/lib/filesystem'
-import type { M3UStats } from '@zenith-tv/content'
+import type { M3UStats } from '../../lib/content'
 
 interface M3UStatsPlaceholderProps {
   uuid: string

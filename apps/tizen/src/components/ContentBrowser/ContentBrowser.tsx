@@ -1,7 +1,7 @@
-import { GroupObject } from '@zenith-tv/content'
+import { GroupObject } from '../../lib/content'
 import { ContentBrowserProvider } from './ContentBrowserProvider'
 import { ContentGrid } from './ContentGrid'
-import { cn } from '@zenith-tv/ui/lib'
+import { cn } from '../../lib/cn'
 
 interface ContentBrowserProps {
   initialGroup: GroupObject

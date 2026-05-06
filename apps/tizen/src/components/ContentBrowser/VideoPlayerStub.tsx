@@ -1,4 +1,4 @@
-import { WatchableObject } from '@zenith-tv/content'
+import { WatchableObject } from '../../lib/content'
 
 interface VideoPlayerStubProps {
   watchable: WatchableObject

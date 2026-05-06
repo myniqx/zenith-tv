@@ -5,6 +5,7 @@ import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  assetsInclude: ['**/*.wasm'],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -14,7 +15,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           react: ['react', 'react-dom'],
-          parser: ['@zenith-tv/parser'],
         },
       },
     },

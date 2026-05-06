@@ -11,8 +11,8 @@ import type {
   WindowOptions,
   ShortcutOptions,
   ClientEventData,
-} from '@zenith-tv/content';
-import { WatchableObject } from '@zenith-tv/content';
+} from '../lib/content';
+import { WatchableObject } from '../lib/content';
 import { useContentStore } from './content';
 import { useSettingsStore } from './settings';
 import type { PlayerBackend, PlayerBackendCallbacks } from '../backends/playerBackend';

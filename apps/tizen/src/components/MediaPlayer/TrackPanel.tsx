@@ -1,8 +1,8 @@
 import { Volume2, Subtitles } from 'lucide-react'
 import { Button, VerticalList, HorizontalList } from '@navix/react'
-import { cn } from '@zenith-tv/ui/lib'
+import { cn } from '../../lib/cn'
 import type { MultiLayerPanelProps } from '@navix/react'
-import type { VlcTrack } from '@zenith-tv/content'
+import type { VlcTrack } from '../../lib/content'
 import { useTizenPlayerStore } from '../../stores/tizenPlayer'
 
 function TrackList({

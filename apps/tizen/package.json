@@ -12,14 +12,14 @@
 		"tsc": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@zenith-tv/parser": "workspace:*",
-		"@zenith-tv/content": "workspace:*",
-		"@zenith-tv/ui": "workspace:*",
+		"@navix/core": "file:/home/myniqx/Projects/navix/packages/core",
+		"@navix/react": "file:/home/myniqx/Projects/navix/packages/react",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",
 		"zustand": "^5.0.8",
 		"clsx": "^2.1.1",
 		"tailwind-merge": "^3.4.0",
+		"tailwindcss-animate": "^1.0.7",
 		"lucide-react": "^0.554.0"
 	},
 	"devDependencies": {

@@ -1,6 +1,7 @@
 import { Search, UserCircle, Settings } from 'lucide-react'
 import { HorizontalList, Button } from '@navix/react'
-import { cn } from '@zenith-tv/ui/lib'
+import { cn } from '@/lib/cn'
+
 
 export type MenuSection = 'favorites' | 'all' | 'p2p' | 'settings' | 'profile' | 'exit'
 

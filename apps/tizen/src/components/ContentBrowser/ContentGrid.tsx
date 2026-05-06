@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react'
-import { GroupObject, WatchableObject } from '@zenith-tv/content'
+import { GroupObject, WatchableObject } from '../../lib/content'
 import { useContentBrowser } from './ContentBrowserProvider'
 import { GroupCard } from './GroupCard'
 import { WatchableCard } from './WatchableCard'
